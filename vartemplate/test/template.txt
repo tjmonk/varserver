@@ -1,0 +1,17 @@
+------------------------------------------------------------------------------
+
+This is a test of the variable server templating system.
+
+It allows referencing of variables inside a template.
+
+The variables will be replaced with their values rendered by the
+variable server.
+
+The value of "/sys/test/a" is "${/sys/test/a}" and the value of "/sys/test/b"
+is "${/sys/test/b}".
+
+It can handle variables of all types.
+
+This one is a string: "${/sys/test/c}" and this one is a float: ${/sys/test/f}
+
+------------------------------------------------------------------------------
