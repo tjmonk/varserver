@@ -2431,6 +2431,9 @@ int VARLIST_GetNext( pid_t clientPID,
                         pVarStorage->formatspec,
                         MAX_FORMATSPEC_LEN );
 
+                /* store the last variable found */
+                ctx->hVar = hVar;
+
                 /* get the variable value */
                 pVarInfo->hVar = hVar;
                 result = VARLIST_GetByHandle( clientPID,
