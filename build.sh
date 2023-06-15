@@ -7,6 +7,7 @@ cmake ..
 make clean
 make
 sudo make install
+sudo ldconfig
 
 # now build everything else
 cd ../..
