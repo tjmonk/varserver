@@ -111,6 +111,7 @@ static const char *typeNames[] =
     "int64",
     "float",
     "str",
+    "blob",
     NULL
 };
 
