@@ -362,6 +362,8 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                         /* indicate that the print output will be piped
                         from another client */
                         result = ESTRPIPE;
+
+                        return result;
                     }
                 }
             }
