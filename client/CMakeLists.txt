@@ -37,7 +37,12 @@ set(VARSERVER_HEADERS
     inc/varquery.h
     inc/vartemplate.h)
 
-set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER "${VARSERVER_HEADERS}")
+set_target_properties(${PROJECT_NAME} 
+    PROPERTIES 
+    PUBLIC_HEADER "${VARSERVER_HEADERS}"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
 
 target_include_directories( ${PROJECT_NAME} PRIVATE . )
 

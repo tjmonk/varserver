@@ -137,6 +137,10 @@ static int str_to_var( char *str,
                        VarObject *pVarObject,
                        uint32_t options );
 
+static int blobstr_to_var( char *str,
+                           VarObject *pVarObject,
+                           uint32_t options );
+
 /*==============================================================================
         File scoped variables
 ==============================================================================*/
@@ -206,6 +210,13 @@ VarObjectHandler varHandlers[] =
     { VARTYPE_STR,
       "str",
       str_to_var, /* create a VarObject from a string */
+      NULL, /* create a string from a VarObject */
+      NULL, /* write VarObject to file descriptor */
+      NULL }, /* write VarObject to stream */
+
+    { VARTYPE_BLOB,
+      "blob",
+      blobstr_to_var, /* create a VarObject from a string */
       NULL, /* create a string from a VarObject */
       NULL, /* write VarObject to file descriptor */
       NULL }, /* write VarObject to stream */
@@ -521,6 +532,10 @@ int VAROBJECT_ToString( VarObject *pVarObject, char *buf, size_t len )
                 n = snprintf(buf, len, "%s", pVarObject->val.str );
                 break;
 
+            case VARTYPE_BLOB:
+                n = snprintf(buf, len, "%s", "<object>");
+                break;
+
             default:
                 result = ENOTSUP;
                 break;
@@ -630,6 +645,111 @@ static int str_to_var( char *str,
             {
                 /* store a reference to the specified string */
                 pVarObject->val.str = str;
+                result = EOK;
+            }
+        }
+        else
+        {
+            /* the specified string will not fit in the specified
+                buffer size */
+            result = E2BIG;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  blobstr_to_var                                                            */
+/*!
+    Convert a blob string variable into a VarObject
+
+    The blobstr_to_var function converts the specified string
+    into a VarObject depending on the conversion type requested.
+
+    The str_to_var function covers a number of use cases.  If the
+    VAR_OBJECT_OPTION_COPY option is specified, then memory will be
+    allocated to store the specified string and it will be copied into
+    the allocated buffer.
+
+    If the pVarObject->len field is set, then the memory will be allocated
+    to that specified length, otherwise the length of the string plus one
+    byte for the NUL terminator will be used instead.
+
+    @param[in]
+        str
+            pointer to a NUL terminated string containing the value to convert
+
+    @param[out]
+        pVarObject
+            pointer to the VarObject to contain the result
+
+    @param[in]
+        options
+            conversion options which may be OR'd together to
+            control the conversion behavior
+
+            VAROBJECT_OPTION_COPY - indicates the string should be copied
+                                    to a newly allocated buffer (in the case
+                                    of a VARTYPE_BLOB type)
+
+    @retval EOK - the variable was converted ok
+    @retval ENOMEM - memory allocation failed
+    @retval E2BIG - string does not fit in the variable
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+static int blobstr_to_var( char *str,
+                           VarObject *pVarObject,
+                           uint32_t options )
+{
+    int result = EINVAL;
+    size_t len;
+    size_t n;
+    unsigned long ul;
+    void *pBlobCopy;
+
+    if( ( str != NULL ) &&
+        ( pVarObject != NULL ) )
+    {
+        /* store the variable type */
+        pVarObject->type = VARTYPE_BLOB;
+
+        /* get the input string length */
+        n = strlen( str );
+
+        if( pVarObject->len == 0 )
+        {
+            /* length was not specified in the VarObject
+                to take the string length and add 1 for
+                a NUL terminator */
+            pVarObject->len = n + 1;
+        }
+
+        if( n < pVarObject->len )
+        {
+            if( options & VAROBJECT_OPTION_COPY )
+            {
+                /* allocate memory for the new string */
+                pBlobCopy = malloc( pVarObject->len );
+                if( pBlobCopy != NULL )
+                {
+                    /* copy the source data into the new string */
+                    strcpy( (char *)pBlobCopy, str );
+                    pVarObject->val.blob = pBlobCopy;
+                    result = EOK;
+                }
+                else
+                {
+                    pVarObject->val.blob = NULL;
+                    pVarObject->len = 0L;
+                    result = ENOMEM;
+                }
+            }
+            else
+            {
+                /* store a reference to the specified string */
+                pVarObject->val.blob = (void *)str;
                 result = EOK;
             }
         }

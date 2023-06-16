@@ -92,6 +92,9 @@ typedef enum _VarType
     /*! NUL terminated character string */
     VARTYPE_STR,
 
+    /*! Blob storage type */
+    VARTYPE_BLOB,
+
     /*! end marker for the type enumeration */
     VARTYPE_END_MARKER
 
@@ -124,6 +127,9 @@ typedef union _VarData
     /*! pointer to a NUL terminated string */
     char *str;
 
+    /*! void pointer to blob data */
+    void *blob;
+    
 } VarData;
 
 /*! A variable object */
