@@ -366,10 +366,16 @@ int VAROBJECT_ValueFromString( char *str,
     Copy one VarObject to another
 
     The VAROBJECT_Copy function is used to copy one VarObject to another.
+
     If the object type is a string, and the destination object already
     points to a string buffer, then that string buffer will be used.
     If the destination object does not have a string buffer, then one
     will be allocated for it.
+
+    If the object type is a blob, and the destination object already
+    points to a blob buffer, then that blob buffer will be used.
+    If the destination object does not have a blob buffer, then one will
+    be allocated for it.
 
     @param[in]
         pDst
@@ -394,70 +400,195 @@ int VAROBJECT_Copy( VarObject *pDst, VarObject *pSrc )
     if( ( pSrc != NULL ) &&
         ( pDst != NULL ) )
     {
-        /* get the source object length */
-        srclen = pSrc->len;
-
-        /* set the destination object type */
-        pDst->type = pSrc->type;
-
         if( pSrc->type == VARTYPE_STR )
         {
-            /* get the source string */
-            pSrcString = pSrc->val.str;
-            if( pSrcString != NULL )
-            {
-                if( pDst->val.str == NULL )
-                {
-                    /* allocate memory for the target string */
-                    pDst->val.str = calloc( 1, srclen );
-                    pDst->len = srclen;
-                }
-                else
-                {
-                    /* calculate the length of the source string */
-                    srclen = strlen( pSrcString ) + 1;
-                }
-
-                if( pDst->val.str != NULL )
-                {
-                    if( pDst->len >= srclen )
-                    {
-                        /* get source string  */
-                        strcpy( pDst->val.str,
-                                pSrc->val.str );
-
-                        result = EOK;
-                    }
-                    else
-                    {
-                        /* not enough space to store the string */
-                        result = E2BIG;
-                    }
-                }
-                else
-                {
-                    /* no memory available for the string result */
-                    result = ENOMEM;
-                }
-            }
-            else
-            {
-                /* should not see this.  The source object says it is a string
-                   but it does not have a string pointer */
-                result = ENOTSUP;
-            }
+            result = varobject_CopyString( pDst, pSrc );
+        }
+        else if ( pSrc->type == VARTYPE_BLOB )
+        {
+            result = varobject_CopyBlob( pDst, pSrc );
         }
         else
         {
             /* copy primitive type */
             pDst->val = pSrc->val;
-            pDst->len = srclen;
+            pDst->len = pSrc->len;
+            pDst->type = pSrc->type;
 
             result = EOK;
         }
     }
 
     return result;
+}
+
+/*============================================================================*/
+/*  varobject_CopyString                                                      */
+/*!
+    Copy one string VarObject to another
+
+    The varobject_CopyString function is used to copy one string
+    VarObject to another.
+
+    If the destination object already points to a string buffer,
+    then that string buffer will be used.
+    If the destination object does not have a string buffer, then one
+    will be allocated for it.
+
+    @param[in]
+        pDst
+            pointer to the destination VarObject
+
+    @param[in]
+        pSrc
+            pointer to the source VarObject
+
+    @retval EOK - the VarObject was copied ok
+    @retval ENOMEM - memory allocation failed
+    @retval E2BIG - the source object string will not fit in the target object
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+static int varobject_CopyString( VarObject *pDst, VarObject *pSrc )
+{
+    int result = EINVAL;
+    char *pSrcString;
+    size_t srclen;
+
+    /* get the source object length */
+    srclen = pSrc->len;
+
+    /* set the destination object type */
+    pDst->type = pSrc->type;
+
+    /* get the source string */
+    pSrcString = pSrc->val.str;
+    if( pSrcString != NULL )
+    {
+        if( pDst->val.str == NULL )
+        {
+            /* allocate memory for the target string */
+            pDst->val.str = calloc( 1, srclen );
+            pDst->len = srclen;
+        }
+        else
+        {
+            /* calculate the length of the source string */
+            srclen = strlen( pSrcString ) + 1;
+        }
+
+        if( pDst->val.str != NULL )
+        {
+            if( pDst->len >= srclen )
+            {
+                /* get source string  */
+                strcpy( pDst->val.str,
+                        pSrc->val.str );
+
+                result = EOK;
+            }
+            else
+            {
+                /* not enough space to store the string */
+                result = E2BIG;
+            }
+        }
+        else
+        {
+            /* no memory available for the string result */
+            result = ENOMEM;
+        }
+    }
+    else
+    {
+        /* should not see this.  The source object says it is a string
+            but it does not have a string pointer */
+        result = ENOTSUP;
+    }
+}
+
+/*============================================================================*/
+/*  varobject_CopyBlob                                                        */
+/*!
+    Copy one blob VarObject to another
+
+    The varobject_CopyBlob function is used to copy one blob
+    VarObject to another.
+
+    If the destination object already points to a blob buffer,
+    then that string buffer will be used.
+    If the destination object does not have a blob buffer, then one
+    will be allocated for it.
+
+    @param[in]
+        pDst
+            pointer to the destination VarObject
+
+    @param[in]
+        pSrc
+            pointer to the source VarObject
+
+    @retval EOK - the VarObject was copied ok
+    @retval ENOMEM - memory allocation failed
+    @retval E2BIG - the source object blob will not fit in the target object
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+static int varobject_CopyBlob( VarObject *pDst, VarObject *pSrc )
+{
+    int result = EINVAL;
+    char *pSrcData;
+    size_t srclen;
+
+    /* get the source object length */
+    srclen = pSrc->len;
+
+    /* set the destination object type */
+    pDst->type = pSrc->type;
+
+    /* get the source data */
+    pSrcData = pSrc->val.blob;
+    if( pSrcData != NULL )
+    {
+        if( pDst->val.blob == NULL )
+        {
+            /* allocate memory for the target blob */
+            pDst->val.blob = calloc( 1, srclen );
+            pDst->len = srclen;
+        }
+
+        if( pDst->val.blob != NULL )
+        {
+            if( pDst->len >= srclen )
+            {
+                /* get source blob  */
+                memcpy( pDst->val.blob,
+                        pSrc->val.blob,
+                        srclen );
+
+                /* set the destination blob size */
+                pDst->len = srclen;
+
+                result = EOK;
+            }
+            else
+            {
+                /* not enough space to store the blob */
+                result = E2BIG;
+            }
+        }
+        else
+        {
+            /* no memory available for the blob result */
+            result = ENOMEM;
+        }
+    }
+    else
+    {
+        /* should not see this.  The source object says it is a blob
+            but it does not have a blob pointer */
+        result = ENOTSUP;
+    }
 }
 
 /*============================================================================*/
@@ -650,7 +781,7 @@ static int str_to_var( char *str,
         }
         else
         {
-            /* the specified string will not fit in the specified
+            /* the specified string will not fqit in the specified
                 buffer size */
             result = E2BIG;
         }
