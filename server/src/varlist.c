@@ -2066,7 +2066,7 @@ static int varlist_SetBlob( VarStorage *pVarStorage, VarInfo *pVarInfo )
         {
             /* we have a blob, check its length */
             n = pVarInfo->var.len;
-            if( n < pVarStorage->var.len )
+            if( n <= pVarStorage->var.len )
             {
                 if ( memcmp( pVarStorage->var.val.blob,
                             pVarInfo->var.val.blob,
