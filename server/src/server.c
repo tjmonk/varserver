@@ -1,4 +1,4 @@
-/*============================================================================
+/*==============================================================================
 MIT License
 
 Copyright (c) 2023 Trevor Monk
@@ -20,7 +20,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-============================================================================*/
+==============================================================================*/
 
 /*!
  * @defgroup varserver varserver
@@ -28,7 +28,7 @@ SOFTWARE.
  * @{
  */
 
-/*==========================================================================*/
+/*============================================================================*/
 /*!
 @file server.c
 
@@ -40,11 +40,11 @@ SOFTWARE.
     for real-time use in embedded systems.
 
 */
-/*==========================================================================*/
+/*============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Includes
-============================================================================*/
+==============================================================================*/
 
 #include <unistd.h>
 #include <stdio.h>
@@ -66,16 +66,16 @@ SOFTWARE.
 #include "transaction.h"
 #include "server.h"
 
-/*============================================================================
+/*==============================================================================
         Private definitions
-============================================================================*/
+==============================================================================*/
 
 /*! Maximum number of clients */
 #define MAX_VAR_CLIENTS                 ( 256 )
 
-/*============================================================================
+/*==============================================================================
         Private types
-============================================================================*/
+==============================================================================*/
 
 /*! the RequestHandler object defines a request handler */
 typedef struct _RequestHandler
@@ -94,9 +94,9 @@ typedef struct _RequestHandler
 
 } RequestHandler;
 
-/*============================================================================
+/*==============================================================================
         Private function declarations
-============================================================================*/
+==============================================================================*/
 static int NewClient( pid_t pid );
 static int ProcessRequest( siginfo_t *pInfo );
 static int UnblockClient( VarClient *pVarClient );
@@ -124,9 +124,9 @@ static int ProcessVarRequestClosePrintSession( VarClient *pVarClient );
 static int ProcessVarRequestGetFirst( VarClient *pVarClient );
 static int ProcessVarRequestGetNext( VarClient *pVarClient );
 
-/*============================================================================
+/*==============================================================================
         Private file scoped variables
-============================================================================*/
+==============================================================================*/
 
 /*! variable clients */
 static VarClient *VarClients[MAX_VAR_CLIENTS] = {0};
@@ -188,12 +188,12 @@ static RequestHandler RequestHandlers[] =
     }
 };
 
-/*============================================================================
+/*==============================================================================
         Public function definitions
-============================================================================*/
+==============================================================================*/
 
-/*==========================================================================*/
-/*  main                                                                    */
+/*============================================================================*/
+/*  main                                                                      */
 /*!
     Main entry point for the variable server
 
@@ -211,7 +211,7 @@ static RequestHandler RequestHandlers[] =
 
     @return none
 
-============================================================================*/
+==============================================================================*/
 void main(int argc, char **argv)
 {
     sigset_t mask;
@@ -253,8 +253,8 @@ void main(int argc, char **argv)
     printf("SERVER: exiting!\n");
 }
 
-/*==========================================================================*/
-/*  InitServerInfo                                                          */
+/*============================================================================*/
+/*  InitServerInfo                                                            */
 /*!
     Construct the server information which is shared with clients
     via the /varserver shared memory object.
@@ -266,7 +266,7 @@ void main(int argc, char **argv)
     @retval pointer to the server information object
     @retval NULL if the server information object could not be created
 
-============================================================================*/
+==============================================================================*/
 static ServerInfo *InitServerInfo( void )
 {
     int fd;
@@ -277,12 +277,18 @@ static ServerInfo *InitServerInfo( void )
 	fd = shm_open(SERVER_SHAREDMEM, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
 	if (fd != -1)
 	{
-    	/* extend shared memory object as by default it's initialized with size 0 */
+    	/* extend shared memory object as it is initialized with size 0 */
 	    res = ftruncate(fd, sizeof(ServerInfo));
 	    if (res != -1)
 	    {
             /* map shared memory to process address space */
-            pServerInfo = mmap(NULL, sizeof(ServerInfo), PROT_WRITE, MAP_SHARED, fd, 0);
+            pServerInfo = mmap( NULL,
+                                sizeof(ServerInfo),
+                                PROT_WRITE,
+                                MAP_SHARED,
+                                fd,
+                                0);
+
             if( pServerInfo != NULL )
             {
                 pServerInfo->pid = getpid();
@@ -305,8 +311,8 @@ static ServerInfo *InitServerInfo( void )
     return pServerInfo;
 }
 
-/*==========================================================================*/
-/*  GetClientID                                                             */
+/*============================================================================*/
+/*  GetClientID                                                               */
 /*!
     Get an available client identifier
 
@@ -316,7 +322,7 @@ static ServerInfo *InitServerInfo( void )
     @retval an available client identifier
     @retval 0 if no client identifiers are available
 
-============================================================================*/
+==============================================================================*/
 static int GetClientID( void )
 {
     int i;
@@ -334,8 +340,8 @@ static int GetClientID( void )
     return clientId;
 }
 
-/*==========================================================================*/
-/*  ProcessRequest                                                          */
+/*============================================================================*/
+/*  ProcessRequest                                                            */
 /*!
 
     Process a request from a client
@@ -353,7 +359,7 @@ static int GetClientID( void )
             blocked until the request is complete
     @retval EINVAL invalid argument
 
-============================================================================*/
+==============================================================================*/
 static int ProcessRequest( siginfo_t *pInfo )
 {
     int result = EINVAL;
@@ -430,8 +436,8 @@ static int ProcessRequest( siginfo_t *pInfo )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestClose                                                  */
+/*============================================================================*/
+/*  ProcessVarRequestClose                                                    */
 /*!
     Terminate a client connection
 
@@ -447,7 +453,7 @@ static int ProcessRequest( siginfo_t *pInfo )
     @retval EINVAL invalid argument
     @retval errno error number returned by munmap
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestClose( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -491,8 +497,8 @@ static int ProcessVarRequestClose( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  UnblockClient                                                           */
+/*============================================================================*/
+/*  UnblockClient                                                             */
 /*!
     Unblock the client connection
 
@@ -506,7 +512,7 @@ static int ProcessVarRequestClose( VarClient *pVarClient )
     @retval EOK the client was closed successfully
     @retval EINVAL invalid argument
 
-============================================================================*/
+==============================================================================*/
 static int UnblockClient( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -528,8 +534,8 @@ static int UnblockClient( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  NewClient                                                               */
+/*============================================================================*/
+/*  NewClient                                                                 */
 /*!
     Registers a new client
 
@@ -545,7 +551,7 @@ static int UnblockClient( VarClient *pVarClient )
     @retval EOK the client was created and registered successfully
     @retval EINVAL the new client could not be created
 
-============================================================================*/
+==============================================================================*/
 static int NewClient( pid_t pid )
 {
     int fd;
@@ -561,7 +567,12 @@ static int NewClient( pid_t pid )
 	if (fd != -1)
 	{
         /* map shared memory to process address space */
-        pVarClient = (VarClient *)mmap(NULL, sizeof(VarClient), PROT_WRITE, MAP_SHARED, fd, 0);
+        pVarClient = (VarClient *)mmap( NULL,
+                                        sizeof(VarClient),
+                                        PROT_WRITE,
+                                        MAP_SHARED,
+                                        fd,
+                                        0);
         if (pVarClient != MAP_FAILED)
         {
             clientId=GetClientID();
@@ -587,8 +598,8 @@ static int NewClient( pid_t pid )
     return result;
 }
 
-/*==========================================================================*/
-/*  ValidateClient                                                          */
+/*============================================================================*/
+/*  ValidateClient                                                            */
 /*!
     Validate a client reference
 
@@ -603,7 +614,7 @@ static int NewClient( pid_t pid )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ValidateClient( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -624,8 +635,8 @@ static int ValidateClient( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestNew                                                    */
+/*============================================================================*/
+/*  ProcessVarRequestNew                                                      */
 /*!
     Process a NEW variable request from a client
 
@@ -641,7 +652,7 @@ static int ValidateClient( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestNew( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -659,6 +670,13 @@ static int ProcessVarRequestNew( VarClient *pVarClient )
             pVarClient->variableInfo.var.val.str = &pVarClient->workbuf;
         }
 
+        /* special handling for blob variables uses the client's
+           working buffer to pass the variable value */
+        if( pVarClient->variableInfo.var.type == VARTYPE_BLOB )
+        {
+            pVarClient->variableInfo.var.val.blob = &pVarClient->workbuf;
+        }
+
         /* add the new variable to the variable list */
         rc = VARLIST_AddNew( &pVarClient->variableInfo, &varhandle );
         if( rc == EOK )
@@ -671,8 +689,8 @@ static int ProcessVarRequestNew( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestFind                                                   */
+/*============================================================================*/
+/*  ProcessVarRequestFind                                                     */
 /*!
     Process a FIND variable request from a client
 
@@ -688,7 +706,7 @@ static int ProcessVarRequestNew( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestFind( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -707,8 +725,8 @@ static int ProcessVarRequestFind( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestEcho                                                   */
+/*============================================================================*/
+/*  ProcessVarRequestEcho                                                     */
 /*!
     Process an ECHO request from a client
 
@@ -722,7 +740,7 @@ static int ProcessVarRequestFind( VarClient *pVarClient )
     @retval EOK the request was successful
     @retval EINVAL the client is invalid
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestEcho( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -738,8 +756,8 @@ static int ProcessVarRequestEcho( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestInvalid                                                */
+/*============================================================================*/
+/*  ProcessVarRequestInvalid                                                  */
 /*!
     Handler for invalid requests from a client
 
@@ -753,7 +771,7 @@ static int ProcessVarRequestEcho( VarClient *pVarClient )
     @retval ENOTSUP the request is not supported
     @retval EINVAL the client is invalid
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestInvalid( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -771,8 +789,8 @@ static int ProcessVarRequestInvalid( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestPrint                                                  */
+/*============================================================================*/
+/*  ProcessVarRequestPrint                                                    */
 /*!
     Process a PRINT variable request from a client
 
@@ -789,7 +807,7 @@ static int ProcessVarRequestInvalid( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestPrint( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -831,8 +849,8 @@ static int ProcessVarRequestPrint( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestOpenPrintSession                                       */
+/*============================================================================*/
+/*  ProcessVarRequestOpenPrintSession                                         */
 /*!
     Handle a request to open a print session
 
@@ -850,7 +868,7 @@ static int ProcessVarRequestPrint( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestOpenPrintSession( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -889,8 +907,8 @@ static int ProcessVarRequestOpenPrintSession( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestClosePrintSession                                      */
+/*============================================================================*/
+/*  ProcessVarRequestClosePrintSession                                        */
 /*!
     Handle a request to close a print session
 
@@ -910,7 +928,7 @@ static int ProcessVarRequestOpenPrintSession( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestClosePrintSession( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -938,8 +956,8 @@ static int ProcessVarRequestClosePrintSession( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestSet                                                    */
+/*============================================================================*/
+/*  ProcessVarRequestSet                                                      */
 /*!
     Process a SET variable request from a client
 
@@ -956,7 +974,7 @@ static int ProcessVarRequestClosePrintSession( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestSet( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -970,6 +988,13 @@ static int ProcessVarRequestSet( VarClient *pVarClient )
         {
             /* for strings, the data is transferred via the working buffer */
             pVarClient->variableInfo.var.val.str = &pVarClient->workbuf;
+        }
+
+        /* check if we are dealing with a blob */
+        if( pVarClient->variableInfo.var.type == VARTYPE_BLOB )
+        {
+            /* for strings, the data is transferred via the working buffer */
+            pVarClient->variableInfo.var.val.blob = &pVarClient->workbuf;
         }
 
         /* set the variable value */
@@ -990,8 +1015,8 @@ static int ProcessVarRequestSet( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestType                                                   */
+/*============================================================================*/
+/*  ProcessVarRequestType                                                     */
 /*!
     Process a TYPE variable request from a client
 
@@ -1008,7 +1033,7 @@ static int ProcessVarRequestSet( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestType( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -1024,8 +1049,8 @@ static int ProcessVarRequestType( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestName                                                   */
+/*============================================================================*/
+/*  ProcessVarRequestName                                                     */
 /*!
     Process a NAME variable request from a client
 
@@ -1042,7 +1067,7 @@ static int ProcessVarRequestType( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestName( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -1058,8 +1083,8 @@ static int ProcessVarRequestName( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestLength                                                 */
+/*============================================================================*/
+/*  ProcessVarRequestLength                                                   */
 /*!
     Process a LENGTH variable request from a client
 
@@ -1077,7 +1102,7 @@ static int ProcessVarRequestName( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestLength( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -1093,8 +1118,8 @@ static int ProcessVarRequestLength( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestNotify                                                 */
+/*============================================================================*/
+/*  ProcessVarRequestNotify                                                   */
 /*!
     Process a NOTIFY variable request from a client
 
@@ -1122,7 +1147,7 @@ static int ProcessVarRequestLength( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestNotify( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -1139,8 +1164,8 @@ static int ProcessVarRequestNotify( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestGet                                                    */
+/*============================================================================*/
+/*  ProcessVarRequestGet                                                      */
 /*!
     Process a GET variable request from a client
 
@@ -1158,7 +1183,7 @@ static int ProcessVarRequestNotify( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestGet( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -1183,8 +1208,8 @@ static int ProcessVarRequestGet( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestGetFirst                                               */
+/*============================================================================*/
+/*  ProcessVarRequestGetFirst                                                 */
 /*!
     Process a GET_FIRST variable request from a client
 
@@ -1201,7 +1226,7 @@ static int ProcessVarRequestGet( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestGetFirst( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -1228,8 +1253,8 @@ static int ProcessVarRequestGetFirst( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessVarRequestGetNext                                                */
+/*============================================================================*/
+/*  ProcessVarRequestGetNext                                                  */
 /*!
     Process a GET_NEXT variable request from a client
 
@@ -1246,7 +1271,7 @@ static int ProcessVarRequestGetFirst( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessVarRequestGetNext( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -1273,8 +1298,8 @@ static int ProcessVarRequestGetNext( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessValidationRequest                                                */
+/*============================================================================*/
+/*  ProcessValidationRequest                                                  */
 /*!
     Process a Validation Request from a client
 
@@ -1296,7 +1321,7 @@ static int ProcessVarRequestGetNext( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessValidationRequest( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -1319,6 +1344,16 @@ static int ProcessValidationRequest( VarClient *pVarClient )
                 pVarClient->variableInfo.var.len = pVarClient->workbufsize;
             }
 
+            if( pSetClient->variableInfo.var.type == VARTYPE_BLOB )
+            {
+                /* blobs will be stored in the client's working buffer */
+                pVarClient->variableInfo.var.val.blob = &pVarClient->workbuf;
+
+
+                // TO DO : Need to pass blob size as well as blob!!!!
+                pVarClient->variableInfo.var.len = pVarClient->workbufsize;
+            }
+
             /* copy the variable handle from the setting client to the
                validating client */
             pVarClient->variableInfo.hVar = pSetClient->variableInfo.hVar;
@@ -1336,8 +1371,8 @@ static int ProcessValidationRequest( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessValidationResponse                                               */
+/*============================================================================*/
+/*  ProcessValidationResponse                                                 */
 /*!
     Process a Validation Response from a client
 
@@ -1355,7 +1390,7 @@ static int ProcessValidationRequest( VarClient *pVarClient )
     @retval EINVAL the client is invalid
     @retval ENOTSUP the client is the wrong version
 
-============================================================================*/
+==============================================================================*/
 static int ProcessValidationResponse( VarClient *pVarClient )
 {
     int result = EINVAL;

@@ -1,4 +1,4 @@
-/*============================================================================
+/*==============================================================================
 MIT License
 
 Copyright (c) 2023 Trevor Monk
@@ -20,7 +20,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-============================================================================*/
+==============================================================================*/
 
 /*!
  * @defgroup varprint varprint
@@ -28,7 +28,7 @@ SOFTWARE.
  * @{
  */
 
-/*==========================================================================*/
+/*============================================================================*/
 /*!
 @file varprint.c
 
@@ -48,12 +48,12 @@ SOFTWARE.
     has completed generating the string output to the requestor's stream.
 
 */
-/*==========================================================================*/
+/*============================================================================*/
 
 
-/*============================================================================
+/*==============================================================================
         Includes
-============================================================================*/
+==============================================================================*/
 
 #include <unistd.h>
 #include <stdio.h>
@@ -71,22 +71,22 @@ SOFTWARE.
 #include "var.h"
 #include "varprint.h"
 
-/*============================================================================
+/*==============================================================================
         Private function declarations
-============================================================================*/
+==============================================================================*/
 static int varprint_SendFd( int sock, int fd );
 static int varprint_ReceiveFd( int sock, int *fd );
 
-/*============================================================================
+/*==============================================================================
         File scoped variables
-============================================================================*/
+==============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Function definitions
-============================================================================*/
+==============================================================================*/
 
-/*==========================================================================*/
-/*  VARPRINT_GetFileDescriptor                                              */
+/*============================================================================*/
+/*  VARPRINT_GetFileDescriptor                                                */
 /*!
 
     Get the file descriptor from the requestor
@@ -106,7 +106,7 @@ static int varprint_ReceiveFd( int sock, int *fd );
 @retval EOK the file descriptor was successfully received
 @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VARPRINT_GetFileDescriptor( int requestorPID,
                                 int sock,
                                 int *fd )
@@ -150,8 +150,8 @@ int VARPRINT_GetFileDescriptor( int requestorPID,
     return result;
 }
 
-/*==========================================================================*/
-/*  varprint_ReceiveFd                                                      */
+/*============================================================================*/
+/*  varprint_ReceiveFd                                                        */
 /*!
 
     Receive a file descriptor over the specified socket
@@ -167,7 +167,7 @@ int VARPRINT_GetFileDescriptor( int requestorPID,
 @retval EOK the file descriptor was successfully received
 @retval other error result from recvmsg
 
-============================================================================*/
+==============================================================================*/
 static int varprint_ReceiveFd( int sock, int *fd )
 {
     int result = EINVAL;
@@ -217,8 +217,8 @@ static int varprint_ReceiveFd( int sock, int *fd )
     return result;
 }
 
-/*==========================================================================*/
-/*  VARPRINT_SendFileDescriptor                                             */
+/*============================================================================*/
+/*  VARPRINT_SendFileDescriptor                                               */
 /*!
     Send a file descriptor from the requestor to the responder
     The requestor is the client which is requesting the variable
@@ -239,7 +239,7 @@ static int varprint_ReceiveFd( int sock, int *fd )
 @retval EOK the file descriptor was sent to the responder
 @retval other indicates errno from socket, connect, or sendmsg
 
-============================================================================*/
+==============================================================================*/
 int VARPRINT_SendFileDescriptor( int responderPID, int fd )
 {
     int sock;
@@ -284,8 +284,8 @@ int VARPRINT_SendFileDescriptor( int responderPID, int fd )
     return result;
 }
 
-/*==========================================================================*/
-/*  VARPRINT_SetupListener                                                  */
+/*============================================================================*/
+/*  VARPRINT_SetupListener                                                    */
 /*!
     Set up a listening socket which will be used to send the
     file descriptor from the requestor (requesting the print operation)
@@ -303,7 +303,7 @@ int VARPRINT_SendFileDescriptor( int responderPID, int fd )
 @retval EOK the listener was successfully created
 @retval other indicates an errno
 
-============================================================================*/
+==============================================================================*/
 int VARPRINT_SetupListener( pid_t requestorPID, int *sock )
 {
     int result = EINVAL;
@@ -349,8 +349,8 @@ int VARPRINT_SetupListener( pid_t requestorPID, int *sock )
     return result;
 }
 
-/*==========================================================================*/
-/*  VARPRINT_ShutdownListener                                               */
+/*============================================================================*/
+/*  VARPRINT_ShutdownListener                                                 */
 /*!
     Shut down the listening socket which was used to transfer
     the file descriptor from the requestor (requesting the print operation)
@@ -368,7 +368,7 @@ int VARPRINT_SetupListener( pid_t requestorPID, int *sock )
 @retval EOK the listener was successfully shut down
 @retval other indicates an errno
 
-============================================================================*/
+==============================================================================*/
 int VARPRINT_ShutdownListener( pid_t requestorPID, int sock )
 {
     int result = EINVAL;
@@ -395,8 +395,8 @@ int VARPRINT_ShutdownListener( pid_t requestorPID, int sock )
     return result;
 }
 
-/*==========================================================================*/
-/*  varprint_SendFd                                                         */
+/*============================================================================*/
+/*  varprint_SendFd                                                           */
 /*!
     Send a file descriptor to the specified connection
 
@@ -413,7 +413,7 @@ int VARPRINT_ShutdownListener( pid_t requestorPID, int sock )
     fd
         file descriptor to send the credentials for
 
-============================================================================*/
+==============================================================================*/
 static int varprint_SendFd( int sock, int fd )
 {
     struct msghdr msg;

@@ -1,4 +1,4 @@
-/*============================================================================
+/*==============================================================================
 MIT License
 
 Copyright (c) 2023 Trevor Monk
@@ -20,7 +20,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-============================================================================*/
+==============================================================================*/
 
 /*!
  * @defgroup transaction transaction
@@ -28,7 +28,7 @@ SOFTWARE.
  * @{
  */
 
-/*==========================================================================*/
+/*============================================================================*/
 /*!
 @file transaction.c
 
@@ -38,11 +38,11 @@ SOFTWARE.
     between clients
 
 */
-/*==========================================================================*/
+/*============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Includes
-============================================================================*/
+==============================================================================*/
 
 #include <unistd.h>
 #include <stdio.h>
@@ -57,16 +57,16 @@ SOFTWARE.
 #include <string.h>
 #include "transaction.h"
 
-/*============================================================================
+/*==============================================================================
         Private definitions
-============================================================================*/
+==============================================================================*/
 #ifndef EOK
 #define EOK 0
 #endif
 
-/*============================================================================
+/*==============================================================================
         Private types
-============================================================================*/
+==============================================================================*/
 
 /*! the Transaction object tracks an inprogress transaction between clients */
 typedef struct _Transaction
@@ -88,13 +88,13 @@ typedef struct _Transaction
 
 } Transaction;
 
-/*============================================================================
+/*==============================================================================
         Private function declarations
-============================================================================*/
+==============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Private file scoped variables
-============================================================================*/
+==============================================================================*/
 
 /*! list of active transactions */
 static Transaction *transactionList = NULL;
@@ -105,12 +105,12 @@ static Transaction *freelist = NULL;
 /*! Transaction Counter used to generate unique transaction identifiers */
 static uint32_t TransactionCounter = 0L;
 
-/*============================================================================
+/*==============================================================================
         Public function definitions
-============================================================================*/
+==============================================================================*/
 
-/*==========================================================================*/
-/*  TRANSACTION_New                                                         */
+/*============================================================================*/
+/*  TRANSACTION_New                                                           */
 /*!
     Create a new transaction
 
@@ -134,7 +134,7 @@ static uint32_t TransactionCounter = 0L;
     @retval EINVAL invalid arguments
     @retval ENOMEM memory allocation problem
 
-============================================================================*/
+==============================================================================*/
 int TRANSACTION_New( pid_t clientPID,
                      void *pData,
                      uint32_t *pHandle )
@@ -182,8 +182,8 @@ int TRANSACTION_New( pid_t clientPID,
     return result;
 }
 
-/*==========================================================================*/
-/*  TRANSACTION_Get                                                         */
+/*============================================================================*/
+/*  TRANSACTION_Get                                                           */
 /*!
     Get a transaction given its transaction identifier
 
@@ -197,7 +197,7 @@ int TRANSACTION_New( pid_t clientPID,
     @retval pointer to the transaction information
     @retval NULL the transaction identifier was not found
 
-============================================================================*/
+==============================================================================*/
 void *TRANSACTION_Get( uint32_t transactionID )
 {
     int result = EINVAL;
@@ -220,8 +220,8 @@ void *TRANSACTION_Get( uint32_t transactionID )
     return pTransactionInfo;
 }
 
-/*==========================================================================*/
-/*  TRANSACTION_FindByRequestor                                             */
+/*============================================================================*/
+/*  TRANSACTION_FindByRequestor                                               */
 /*!
     Get a transaction given its requestor identifier
 
@@ -235,7 +235,7 @@ void *TRANSACTION_Get( uint32_t transactionID )
     @retval pointer to the transaction information
     @retval NULL the transaction was not found
 
-============================================================================*/
+==============================================================================*/
 void *TRANSACTION_FindByRequestor( pid_t requestor )
 {
     int result = EINVAL;
@@ -258,8 +258,8 @@ void *TRANSACTION_FindByRequestor( pid_t requestor )
     return pTransactionInfo;
 }
 
-/*==========================================================================*/
-/*  TRANSACTION_Remove                                                      */
+/*============================================================================*/
+/*  TRANSACTION_Remove                                                        */
 /*!
     Remove a transaction given its transaction identifier
 
@@ -274,7 +274,7 @@ void *TRANSACTION_FindByRequestor( pid_t requestor )
     @retval pointer to the transaction information
     @retval NULL the transaction identifier was not found
 
-============================================================================*/
+==============================================================================*/
 void *TRANSACTION_Remove( uint32_t transactionID )
 {
     Transaction *pTransaction = transactionList;

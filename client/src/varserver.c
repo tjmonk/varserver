@@ -1,4 +1,4 @@
-/*============================================================================
+/*==============================================================================
 MIT License
 
 Copyright (c) 2023 Trevor Monk
@@ -20,7 +20,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-============================================================================*/
+==============================================================================*/
 
 /*!
  * @defgroup varserver_api varserver_api
@@ -28,7 +28,7 @@ SOFTWARE.
  * @{
  */
 
-/*==========================================================================*/
+/*============================================================================*/
 /*!
 @file varserver.c
 
@@ -41,12 +41,12 @@ SOFTWARE.
     with the variable server.
 
 */
-/*==========================================================================*/
+/*============================================================================*/
 
 
-/*============================================================================
+/*==============================================================================
         Includes
-============================================================================*/
+==============================================================================*/
 
 #include <unistd.h>
 #include <stdio.h>
@@ -66,9 +66,9 @@ SOFTWARE.
 #include "varprint.h"
 #include "var.h"
 
-/*============================================================================
+/*==============================================================================
         Private function declarations
-============================================================================*/
+==============================================================================*/
 
 static int ClientRequest( VarClient *pVarClient, int signal );
 static VarClient *NewClient( size_t workbufsize );
@@ -79,10 +79,18 @@ static int InitServerInfo( VarClient *pVarClient );
 static VarClient *ValidateHandle( VARSERVER_HANDLE hVarServer );
 static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf );
 static int var_GetVarObject( VarClient *pVarClient, VarObject *pVarObject );
+static int var_GetBlobObjectFromWorkbuf( VarClient *pVarClient,
+                                         VarObject *pVarObject );
+static int var_GetStringObjectFromWorkbuf( VarClient *pVarClient,
+                                           VarObject *pVarObject );
+static int var_CopyStringVarObjectToWorkbuf( VarClient *pVarClient,
+                                             VarObject *pVarObject );
+static int var_CopyBlobVarObjectToWorkbuf( VarClient *pVarClient,
+                                        VarObject *pVarObject );
 
-/*============================================================================
+/*==============================================================================
         File scoped variables
-============================================================================*/
+==============================================================================*/
 static const char *flagNames[] =
 {
     "none",
@@ -106,9 +114,9 @@ static const char *typeNames[] =
     NULL
 };
 
-/*============================================================================
+/*==============================================================================
         Function definitions
-============================================================================*/
+==============================================================================*/
 
 void __attribute__ ((constructor)) initLibrary(void) {
  //
@@ -121,8 +129,8 @@ void __attribute__ ((destructor)) cleanUpLibrary(void) {
  //
 }
 
-/*==========================================================================*/
-/*  VARSERVER_Open                                                          */
+/*============================================================================*/
+/*  VARSERVER_Open                                                            */
 /*!
     Open a connection to the variable server
 
@@ -133,14 +141,14 @@ void __attribute__ ((destructor)) cleanUpLibrary(void) {
     @retval a handle to the variable server
     @retval NULL if the variable server could not be opened
 
-============================================================================*/
+==============================================================================*/
 VARSERVER_HANDLE VARSERVER_Open( void )
 {
     return VARSERVER_OpenExt( VARSERVER_DEFAULT_WORKBUF_SIZE );
 }
 
-/*==========================================================================*/
-/*  VARSERVER_OpenExt                                                       */
+/*============================================================================*/
+/*  VARSERVER_OpenExt                                                         */
 /*!
     Open a connection to the variable server
 
@@ -156,7 +164,7 @@ VARSERVER_HANDLE VARSERVER_Open( void )
     @retval a handle to the variable server
     @retval NULL if the variable server could not be opened
 
-============================================================================*/
+==============================================================================*/
 VARSERVER_HANDLE VARSERVER_OpenExt( size_t workbufsize )
 {
     int i;
@@ -198,8 +206,8 @@ VARSERVER_HANDLE VARSERVER_OpenExt( size_t workbufsize )
     return pVarClient;
 }
 
-/*==========================================================================*/
-/*  VARSERVER_Close                                                         */
+/*============================================================================*/
+/*  VARSERVER_Close                                                           */
 /*!
     Close the connection to the variable server
 
@@ -214,7 +222,7 @@ VARSERVER_HANDLE VARSERVER_OpenExt( size_t workbufsize )
     @retval EOK - the connection was successfully closed
     @retval EINVAL - an invalid variable server handle was specified
 
-============================================================================*/
+==============================================================================*/
 int VARSERVER_Close( VARSERVER_HANDLE hVarServer )
 {
     int result = EINVAL;
@@ -234,8 +242,8 @@ int VARSERVER_Close( VARSERVER_HANDLE hVarServer )
     return result;
 }
 
-/*==========================================================================*/
-/*  VARSERVER_GetWorkingBuffer                                              */
+/*============================================================================*/
+/*  VARSERVER_GetWorkingBuffer                                                */
 /*!
     Get a pointer to the working buffer for the varserver
 
@@ -258,7 +266,7 @@ int VARSERVER_Close( VARSERVER_HANDLE hVarServer )
     @retval EOK - the working buffer pointer was successfully retrieved
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VARSERVER_GetWorkingBuffer( VARSERVER_HANDLE hVarServer,
                                 char **pBuf,
                                 size_t *pLen )
@@ -279,8 +287,8 @@ int VARSERVER_GetWorkingBuffer( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  VARSERVER_Debug                                                         */
+/*============================================================================*/
+/*  VARSERVER_Debug                                                           */
 /*!
     Set the Var Server debugging verbosity level
 
@@ -299,7 +307,7 @@ int VARSERVER_GetWorkingBuffer( VARSERVER_HANDLE hVarServer,
 
     @return the previous debug verbosity level
 
-============================================================================*/
+==============================================================================*/
 int VARSERVER_Debug( VARSERVER_HANDLE hVarServer, int debug )
 {
     VarClient *pVarClient = ValidateHandle( hVarServer );
@@ -314,8 +322,8 @@ int VARSERVER_Debug( VARSERVER_HANDLE hVarServer, int debug )
     return olddebug;
 }
 
-/*==========================================================================*/
-/*  VARSERVER_CreateVar                                                     */
+/*============================================================================*/
+/*  VARSERVER_CreateVar                                                       */
 /*!
     Create a new variable
 
@@ -338,7 +346,7 @@ int VARSERVER_Debug( VARSERVER_HANDLE hVarServer, int debug )
     @retval EOK - the working buffer pointer was successfully retrieved
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,
                          VarInfo *pVarInfo )
 {
@@ -368,8 +376,8 @@ int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  VARSERVER_Test                                                          */
+/*============================================================================*/
+/*  VARSERVER_Test                                                            */
 /*!
     Test the connection to the variable server
 
@@ -384,7 +392,7 @@ int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,
     @retval EOK - the connection was successfully closed
     @retval EINVAL - an invalid variable server handle was specified
 
-============================================================================*/
+==============================================================================*/
 int VARSERVER_Test( VARSERVER_HANDLE hVarServer )
 {
     int result = EINVAL;
@@ -412,8 +420,8 @@ int VARSERVER_Test( VARSERVER_HANDLE hVarServer )
     return result;
 }
 
-/*==========================================================================*/
-/*  VARSERVER_WaitSignal                                                    */
+/*============================================================================*/
+/*  VARSERVER_WaitSignal                                                      */
 /*!
     Wait for a VARSERVER signal
 
@@ -433,7 +441,7 @@ int VARSERVER_Test( VARSERVER_HANDLE hVarServer )
 
     @return the signal which occurred
 
-============================================================================*/
+==============================================================================*/
 int VARSERVER_WaitSignal( int *sigval )
 {
     sigset_t mask;
@@ -466,8 +474,8 @@ int VARSERVER_WaitSignal( int *sigval )
     return sig;
 }
 
-/*==========================================================================*/
-/*  VARSERVER_ParsePermissionSpec                                           */
+/*============================================================================*/
+/*  VARSERVER_ParsePermissionSpec                                             */
 /*!
     Convert a comma separated list of UIDs to a UID array
 
@@ -492,7 +500,7 @@ int VARSERVER_WaitSignal( int *sigval )
     @retval EINVAL - invalid arguments
     @retval E2BIG - the specified permission list is too big
 
-============================================================================*/
+==============================================================================*/
 int VARSERVER_ParsePermissionSpec( char *permissionSpec,
                                    uint16_t *permissions,
                                    size_t len )
@@ -550,8 +558,8 @@ int VARSERVER_ParsePermissionSpec( char *permissionSpec,
     return result;
 }
 
-/*==========================================================================*/
-/*  VARSERVER_TypeNameToType                                                */
+/*============================================================================*/
+/*  VARSERVER_TypeNameToType                                                  */
 /*!
     Convert a type name to its corresponding type
 
@@ -570,7 +578,7 @@ int VARSERVER_ParsePermissionSpec( char *permissionSpec,
     @retval EINVAL - invalid arguments
     @retval ENOENT - the specified type name does not exist
 
-============================================================================*/
+==============================================================================*/
 int VARSERVER_TypeNameToType( char *typeName, VarType *type )
 {
     int i = 0;
@@ -600,8 +608,8 @@ int VARSERVER_TypeNameToType( char *typeName, VarType *type )
     return result;
 }
 
-/*==========================================================================*/
-/*  VARSERVER_TypeToTypeName                                                */
+/*============================================================================*/
+/*  VARSERVER_TypeToTypeName                                                  */
 /*!
     Get the name of a variable type
 
@@ -625,7 +633,7 @@ int VARSERVER_TypeNameToType( char *typeName, VarType *type )
     @retval ENOENT - the specified type name does not exist
     @retval E2BIG - the output buffer is not big enough for the type name
 
-============================================================================*/
+==============================================================================*/
 int VARSERVER_TypeToTypeName( VarType type, char *typeName, size_t len )
 {
     int result = EINVAL;
@@ -655,8 +663,8 @@ int VARSERVER_TypeToTypeName( VarType type, char *typeName, size_t len )
     return result;
 }
 
-/*==========================================================================*/
-/*  VARSERVER_StrToFlags                                                    */
+/*============================================================================*/
+/*  VARSERVER_StrToFlags                                                      */
 /*!
     Convert a comma separated list of flag names to a bitmap
 
@@ -677,7 +685,7 @@ int VARSERVER_TypeToTypeName( VarType type, char *typeName, size_t len )
     @retval E2BIG - the specified flagsString is too big
     @retval ENOENT - one or more flags were not valid
 
-============================================================================*/
+==============================================================================*/
 int VARSERVER_StrToFlags( char *flagsString,
                           uint32_t *flags )
 {
@@ -738,8 +746,8 @@ int VARSERVER_StrToFlags( char *flagsString,
     return result;
 }
 
-/*==========================================================================*/
-/*  VARSERVER_FlagsToStr                                                    */
+/*============================================================================*/
+/*  VARSERVER_FlagsToStr                                                      */
 /*!
     Convert a flags bitmap into a comma separated list of flag names
 
@@ -763,7 +771,7 @@ int VARSERVER_StrToFlags( char *flagsString,
     @retval EINVAL - invalid arguments
     @retval E2BIG - not enough space in the output buffer for the flag string
 
-============================================================================*/
+==============================================================================*/
 int VARSERVER_FlagsToStr( uint32_t flags,
                           char *flagsString,
                           size_t len )
@@ -828,8 +836,8 @@ int VARSERVER_FlagsToStr( uint32_t flags,
     return result;
 }
 
-/*==========================================================================*/
-/*  VARSERVER_ParseValueString                                              */
+/*============================================================================*/
+/*  VARSERVER_ParseValueString                                                */
 /*!
     Parse a value string and assign a value to the VarObject
 
@@ -852,7 +860,7 @@ int VARSERVER_FlagsToStr( uint32_t flags,
     @retval ERANGE - the specified value does not fit in the variable type
     @retval ENOTSUP - unsupported data type
 
-============================================================================*/
+==============================================================================*/
 int VARSERVER_ParseValueString( VarObject *var, char *valueString )
 {
     int result = EINVAL;
@@ -928,6 +936,26 @@ int VARSERVER_ParseValueString( VarObject *var, char *valueString )
 
                 break;
 
+            case VARTYPE_BLOB:
+                if( var->val.blob != NULL)
+                {
+                    len = strlen( valueString );
+                    if( len <= var->len )
+                    {
+                        memcpy( var->val.blob, valueString, len );
+                    }
+                    else
+                    {
+                        result = E2BIG;
+                    }
+                }
+                else
+                {
+                    result = ENOMEM;
+                }
+
+                break;
+
             default:
                 result = ENOTSUP;
                 break;
@@ -937,8 +965,8 @@ int VARSERVER_ParseValueString( VarObject *var, char *valueString )
     return result;
 }
 
-/*==========================================================================*/
-/*  VAR_FindByName                                                          */
+/*============================================================================*/
+/*  VAR_FindByName                                                            */
 /*!
     Find a variable given its name
 
@@ -956,7 +984,7 @@ int VARSERVER_ParseValueString( VarObject *var, char *valueString )
     @retval handle of the variable
     @retval VAR_INVALID if the variable cannot be found
 
-============================================================================*/
+==============================================================================*/
 VAR_HANDLE VAR_FindByName( VARSERVER_HANDLE hVarServer, char *pName )
 {
     VAR_HANDLE hVar = VAR_INVALID;
@@ -988,8 +1016,8 @@ VAR_HANDLE VAR_FindByName( VARSERVER_HANDLE hVarServer, char *pName )
     return hVar;
 }
 
-/*==========================================================================*/
-/*  VAR_Get                                                                 */
+/*============================================================================*/
+/*  VAR_Get                                                                   */
 /*!
     Get a variable value and store it in the specified var object
 
@@ -1011,7 +1039,7 @@ VAR_HANDLE VAR_FindByName( VARSERVER_HANDLE hVarServer, char *pName )
     @retval EOK - the variable was retrieved ok
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VAR_Get( VARSERVER_HANDLE hVarServer,
              VAR_HANDLE hVar,
              VarObject *pVarObject )
@@ -1036,8 +1064,8 @@ int VAR_Get( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  VAR_GetStrByName                                                        */
+/*============================================================================*/
+/*  VAR_GetStrByName                                                          */
 /*!
     Get a string variable value and store it in the specified buffer
 
@@ -1066,7 +1094,7 @@ int VAR_Get( VARSERVER_HANDLE hVarServer,
     @retval ENOENT - variable not found
     @retval other error as returned by VAR_Get
 
-============================================================================*/
+==============================================================================*/
 int VAR_GetStrByName( VARSERVER_HANDLE hVarServer,
                       char *name,
                       char *buf,
@@ -1108,8 +1136,80 @@ int VAR_GetStrByName( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  VAR_GetValidationRequest                                                */
+/*============================================================================*/
+/*  VAR_GetBlobByName                                                         */
+/*!
+    Get a blob variable value and store it in the specified buffer
+
+    The VAR_GetBlobByName function gets the value of the blob variable
+    specified by hVar and puts it into the specified buffer
+
+    @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[in]
+        name
+            name of the variable to be retrieved
+
+    @param[in,out]
+        buf
+            pointer to the buffer to store the blob
+
+    @param[in]
+        len
+            length of the provided buffer to store the result
+
+    @retval EOK - the variable was retrieved ok
+    @retval EINVAL - invalid arguments
+    @retval ENOTSUP - invalid variable type
+    @retval ENOENT - variable not found
+    @retval other error as returned by VAR_Get
+
+==============================================================================*/
+int VAR_GetBlobByName( VARSERVER_HANDLE hVarServer,
+                       char *name,
+                       void *buf,
+                       size_t len )
+{
+    int result = EINVAL;
+    VAR_HANDLE hVar;
+    VarObject obj;
+
+    if ( ( hVarServer != NULL ) &&
+         ( name != NULL ) &&
+         ( buf != NULL ) &&
+         ( len > 0 ) )
+    {
+        /* get a handle to the variable */
+        hVar = VAR_FindByName( hVarServer, name );
+        if ( hVar != VAR_INVALID )
+        {
+            /* specify the receive buffer and buffer length */
+            obj.val.str = buf;
+            obj.len = len;
+
+            /* get the (blob) value of the variable */
+            result = VAR_Get( hVarServer, hVar, &obj );
+            if ( result == EOK )
+            {
+                if( obj.type != VARTYPE_BLOB )
+                {
+                    result = ENOTSUP;
+                }
+            }
+        }
+        else
+        {
+            result = ENOENT;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VAR_GetValidationRequest                                                  */
 /*!
     Get a information about a validation request
 
@@ -1138,7 +1238,7 @@ int VAR_GetStrByName( VARSERVER_HANDLE hVarServer,
     @retval ENOMEM - cannot allocate memory for the string (string var only)
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VAR_GetValidationRequest( VARSERVER_HANDLE hVarServer,
                               uint32_t id,
                               VAR_HANDLE *hVar,
@@ -1169,8 +1269,8 @@ int VAR_GetValidationRequest( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  VAR_SendValidationResponse                                              */
+/*============================================================================*/
+/*  VAR_SendValidationResponse                                                */
 /*!
     Send a Validation response
 
@@ -1193,7 +1293,7 @@ int VAR_GetValidationRequest( VARSERVER_HANDLE hVarServer,
     @retval EOK - the validation request was retrieved ok
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VAR_SendValidationResponse( VARSERVER_HANDLE hVarServer,
                                 uint32_t id,
                                 int response  )
@@ -1213,12 +1313,83 @@ int VAR_SendValidationResponse( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  var_GetVarObject                                                        */
+/*============================================================================*/
+/*  var_GetVarObject                                                          */
 /*!
     Get a variable object from the variable client
 
     The var_GetVarObject function retrieves a copy of the client's
+    VarObject which is returned from the server.  If the object
+    type is a string, and the destination VarObject has an existing
+    string buffer, the string is copied into the VarObject's string buffer.
+    If the VarObject does not have a string buffer, one is automatically
+    allocated and is the responsibility of the caller to deallocate
+    the string buffer.
+
+    If the object type is a blob, and the destination VarObject has an
+    existing blob buffer, then the blob is copied into the VarObject's blob
+    buffer.  If the VarObject does not have a blob buffer, one is automatically
+    allocated and is the responsibility of the caller to deallocate
+    the blob buffer.
+
+    @param[in]
+        pVarClient
+            pointer to the Variable Client which contains the source VarObject
+
+    @param[in]
+        VarObject
+            pointer to the destination VarObject
+
+    @retval EOK - the validation request was retrieved ok
+    @retval ENOMEM - cannot allocate memory for the object (string/blob only)
+    @retval E23BIG - not enough space to store the string/blob variable
+    @retval ENOTSUP - incorrect type match
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+static int var_GetVarObject( VarClient *pVarClient, VarObject *pVarObject )
+{
+    int result = EINVAL;
+    size_t srclen;
+
+    if( ( pVarClient != NULL ) &&
+        ( pVarObject != NULL ) )
+    {
+        /* set the destination object type */
+        pVarObject->type = pVarClient->variableInfo.var.type;
+        if( pVarObject->type == VARTYPE_STR )
+        {
+            /* get the string from the work buffer */
+            result = var_GetStringObjectFromWorkbuf( pVarClient, pVarObject );
+        }
+        else if ( pVarObject->type == VARTYPE_BLOB )
+        {
+            /* get the blob from the work buffer */
+            result = var_GetBlobObjectFromWorkbuf( pVarClient, pVarObject );
+        }
+        else
+        {
+            /* copy primitive type */
+            pVarObject->val = pVarClient->variableInfo.var.val;
+
+            /* get the source object length */
+            srclen = pVarClient->variableInfo.var.len;
+
+            pVarObject->len = srclen;
+
+            result = EOK;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  var_GetStringObjectFromWorkbuf                                            */
+/*!
+    Get a string object from the variable client work buffer
+
+    The var_GetStringObjectFromWorkbuf function retrieves a copy of the client's
     VarObject which is returned from the server.  If the object
     type is a string, and the destination VarObject has an existing
     string buffer, the string is copied into the VarObject's string buffer.
@@ -1235,27 +1406,25 @@ int VAR_SendValidationResponse( VARSERVER_HANDLE hVarServer,
             pointer to the destination VarObject
 
     @retval EOK - the validation request was retrieved ok
-    @retval ENOMEM - cannot allocate memory for the string (string var only)
-    @retval E23BIG - not enough space to store the string variable
-    @retval ENOTSUP - string type without a string
+    @retval ENOMEM - cannot allocate memory for the object (string/blob only)
+    @retval E23BIG - not enough space to store the string/blob variable
+    @retval ENOTSUP - incorrect type match
     @retval EINVAL - invalid arguments
 
-============================================================================*/
-static int var_GetVarObject( VarClient *pVarClient, VarObject *pVarObject )
+==============================================================================*/
+static int var_GetStringObjectFromWorkbuf( VarClient *pVarClient,
+                                           VarObject *pVarObject )
 {
     int result = EINVAL;
     size_t srclen;
     char *pSrcString;
 
-    if( ( pVarClient != NULL ) &&
-        ( pVarObject != NULL ) )
+    if ( ( pVarClient != NULL ) &&
+         ( pVarObject != NULL ) )
     {
-        /* get the source object length */
-        srclen = pVarClient->variableInfo.var.len;
-
         /* set the destination object type */
         pVarObject->type = pVarClient->variableInfo.var.type;
-        if( pVarObject->type == VARTYPE_STR )
+        if ( pVarObject->type == VARTYPE_STR )
         {
             /* get the source string */
             pVarClient->variableInfo.var.val.str = &pVarClient->workbuf;
@@ -1263,6 +1432,9 @@ static int var_GetVarObject( VarClient *pVarClient, VarObject *pVarObject )
 
             if( pSrcString != NULL )
             {
+                /* get the source object length */
+                srclen = pVarClient->variableInfo.var.len;
+
                 if( pVarObject->val.str == NULL )
                 {
                     /* allocate memory for the target string */
@@ -1299,31 +1471,124 @@ static int var_GetVarObject( VarClient *pVarClient, VarObject *pVarObject )
             else
             {
                 /* should not see this.  The source object says it is a string
-                   but it does not have a string pointer */
+                    but it does not have a string pointer */
                 result = ENOTSUP;
             }
         }
         else
         {
-            /* copy primitive type */
-            pVarObject->val = pVarClient->variableInfo.var.val;
-            pVarObject->len = srclen;
-
-            result = EOK;
+            result = ENOTSUP;
         }
     }
 
     return result;
 }
 
-/*==========================================================================*/
-/*  VAR_GetLength                                                           */
+/*============================================================================*/
+/*  var_GetBlobObjectFromWorkbuf                                              */
+/*!
+    Get a blob object from the variable client work buffer
+
+    The var_GetBlobObjectFromWorkbuf function retrieves a copy of the client's
+    VarObject which is returned from the server.  If the object
+    type is a blob, and the destination VarObject has an existing
+    blob buffer, the blob is copied into the VarObject's blob buffer.
+    If the VarObject does not have a blob buffer, one is automatically
+    allocated and is the responsibility of the caller to deallocate
+    the blob buffer.
+
+    @param[in]
+        pVarClient
+            pointer to the Variable Client which contains the source VarObject
+
+    @param[in]
+        VarObject
+            pointer to the destination VarObject
+
+    @retval EOK - the validation request was retrieved ok
+    @retval ENOMEM - cannot allocate memory for the object (string/blob only)
+    @retval E23BIG - not enough space to store the string/blob variable
+    @retval ENOTSUP - incorrect type match
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+static int var_GetBlobObjectFromWorkbuf( VarClient *pVarClient,
+                                         VarObject *pVarObject )
+{
+    int result = EINVAL;
+    size_t srclen;
+    void *pSrcBlob;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pVarObject != NULL ) )
+    {
+        /* set the destination object type */
+        pVarObject->type = pVarClient->variableInfo.var.type;
+        if ( pVarObject->type == VARTYPE_BLOB )
+        {
+            /* get the source blob */
+            pVarClient->variableInfo.var.val.blob = &pVarClient->workbuf;
+            pSrcBlob = pVarClient->variableInfo.var.val.blob;
+
+            if( pSrcBlob != NULL )
+            {
+                /* get the source object length */
+                srclen = pVarClient->variableInfo.var.len;
+
+                if( pVarObject->val.blob == NULL )
+                {
+                    /* allocate memory for the target blob */
+                    pVarObject->val.blob = calloc( 1, srclen );
+                    pVarObject->len = srclen;
+                }
+
+                if( pVarObject->val.blob != NULL )
+                {
+                    if( pVarObject->len >= srclen )
+                    {
+                        /* get blob from the working buffer */
+                        memcpy( pVarObject->val.blob,
+                                &pVarClient->workbuf,
+                                srclen );
+                        result = EOK;
+                    }
+                    else
+                    {
+                        /* not enough space to store the blob */
+                        result = E2BIG;
+                    }
+                }
+                else
+                {
+                    /* no memory available for the blob result */
+                    result = ENOMEM;
+                }
+            }
+            else
+            {
+                /* should not see this.  The source object says it is a blob
+                    but it does not have a blob pointer */
+                result = ENOTSUP;
+            }
+        }
+        else
+        {
+            /* not a blob type */
+            result = ENOTSUP;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VAR_GetLength                                                             */
 /*!
     Get the length of the specified variable
 
     The VAR_GetLength function queries the variable server for the
     length of the specified variable.  Typically this is only useful
-    for strings because the lengths of the other data types could
+    for strings and blobs because the lengths of the other data types could
     easily be calculated directly.
 
     @param[in]
@@ -1341,7 +1606,7 @@ static int var_GetVarObject( VarClient *pVarClient, VarObject *pVarObject )
     @retval EOK - the length was retrieved ok
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VAR_GetLength( VARSERVER_HANDLE hVarServer,
                    VAR_HANDLE hVar,
                    size_t *len )
@@ -1363,8 +1628,8 @@ int VAR_GetLength( VARSERVER_HANDLE hVarServer,
     }
 }
 
-/*==========================================================================*/
-/*  VAR_GetType                                                             */
+/*============================================================================*/
+/*  VAR_GetType                                                               */
 /*!
     Get the variable data type
 
@@ -1386,7 +1651,7 @@ int VAR_GetLength( VARSERVER_HANDLE hVarServer,
     @retval EOK - the variable type was retrieved ok
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VAR_GetType( VARSERVER_HANDLE hVarServer,
                  VAR_HANDLE hVar,
                  VarType *pVarType )
@@ -1414,8 +1679,8 @@ int VAR_GetType( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  VAR_GetName                                                             */
+/*============================================================================*/
+/*  VAR_GetName                                                               */
 /*!
     Get the variable name given its handle
 
@@ -1442,7 +1707,7 @@ int VAR_GetType( VARSERVER_HANDLE hVarServer,
     @retval E2BIG - the variable name is too big for the specified buffer
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VAR_GetName( VARSERVER_HANDLE hVarServer,
                  VAR_HANDLE hVar,
                  char *buf,
@@ -1483,8 +1748,8 @@ int VAR_GetName( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  VAR_SetNameValue                                                        */
+/*============================================================================*/
+/*  VAR_SetNameValue                                                          */
 /*!
     Set a variable value
 
@@ -1509,7 +1774,7 @@ int VAR_GetName( VARSERVER_HANDLE hVarServer,
     @retval ERANGE - the variable is out of range for the specified type
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VAR_SetNameValue( VARSERVER_HANDLE hVarServer,
                       char *name,
                       char *value )
@@ -1540,8 +1805,8 @@ int VAR_SetNameValue( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  VAR_SetStr                                                              */
+/*============================================================================*/
+/*  VAR_SetStr                                                                */
 /*!
     Set a variable value
 
@@ -1565,7 +1830,7 @@ int VAR_SetNameValue( VARSERVER_HANDLE hVarServer,
     @retval ERANGE - the variable is out of range for the specified type
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VAR_SetStr( VARSERVER_HANDLE hVarServer,
                 VAR_HANDLE hVar,
                 VarType type,
@@ -1591,8 +1856,8 @@ int VAR_SetStr( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  VAR_Set                                                                 */
+/*============================================================================*/
+/*  VAR_Set                                                                   */
 /*!
     Set a variable value in the specified var object
 
@@ -1614,7 +1879,7 @@ int VAR_SetStr( VARSERVER_HANDLE hVarServer,
     @retval EOK - the variable was set ok
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VAR_Set( VARSERVER_HANDLE hVarServer,
              VAR_HANDLE hVar,
              VarObject *pVarObject )
@@ -1637,18 +1902,12 @@ int VAR_Set( VARSERVER_HANDLE hVarServer,
         /* strings have to be transferred via the working buffer */
         if( pVarObject->type == VARTYPE_STR )
         {
-            /* get the string length */
-            len = pVarObject->len;
-            if( ( len > 0 ) &&
-                ( len < pVarClient->workbufsize ) )
-            {
-                /* copy the string into the working buffer */
-                p = &pVarClient->workbuf;
-                memcpy( p, pVarObject->val.str, len );
+            var_CopyStringVarObjectToWorkbuf( pVarClient, pVarObject );
+        }
 
-                /* NUL terminate the string */
-                p[len] = 0;
-            }
+        if ( pVarObject->type == VARTYPE_BLOB )
+        {
+            var_CopyBlobVarObjectToWorkbuf( pVarClient, pVarObject );
         }
 
         /* send the request to the server */
@@ -1662,8 +1921,120 @@ int VAR_Set( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  VAR_GetFirst                                                            */
+/*============================================================================*/
+/*  var_CopyStringVarObjectToWorkbuf                                          */
+/*!
+    Copy a string object to the working buffer
+
+    The var_CopyStringVarObjectToWorkbuf function copies the string
+    object into the client's working buffer for transfer to the server.
+
+    @param[in]
+        pVarClient
+            pointer to the VarClient object containing the working buffer
+
+    @param[in]
+        pVarObject
+            pointer to the VarObject containing the string to copy
+
+    @retval EOK - the string was copied successfully
+    @retval EINVAL - invalid arguments
+    @retval ENOTSUP - not a string object
+
+==============================================================================*/
+static int var_CopyStringVarObjectToWorkbuf( VarClient *pVarClient,
+                                             VarObject *pVarObject )
+{
+    int result = EINVAL;
+    size_t len;
+    char *p;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pVarObject != NULL ) )
+    {
+        if ( pVarObject->type == VARTYPE_STR )
+        {
+            /* get the string length */
+            len = pVarObject->len;
+            if( ( len > 0 ) &&
+                ( len < pVarClient->workbufsize ) )
+            {
+                /* copy the string into the working buffer */
+                p = &pVarClient->workbuf;
+                memcpy( p, pVarObject->val.str, len );
+
+                /* NUL terminate the string */
+                p[len] = 0;
+
+                result = EOK;
+            }
+        }
+        else
+        {
+            result = ENOTSUP;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  var_CopyBlobVarObjectToWorkbuf                                            */
+/*!
+    Copy a blob object to the working buffer
+
+    The var_CopyBlobVarObjectToWorkbuf function copies the blob
+    object into the client's working buffer for transfer to the server.
+
+    @param[in]
+        pVarClient
+            pointer to the VarClient object containing the working buffer
+
+    @param[in]
+        pVarObject
+            pointer to the VarObject containing the blob to copy
+
+    @retval EOK - the blob was copied successfully
+    @retval EINVAL - invalid arguments
+    @retval ENOTSUP - not a string object
+
+==============================================================================*/
+static int var_CopyBlobVarObjectToWorkbuf( VarClient *pVarClient,
+                                           VarObject *pVarObject )
+{
+    int result = EINVAL;
+    size_t len;
+    char *p;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pVarObject != NULL ) )
+    {
+        if ( pVarObject->type == VARTYPE_BLOB )
+        {
+            /* get the blob length */
+            len = pVarObject->len;
+            if( ( len > 0 ) &&
+                ( len < pVarClient->workbufsize ) )
+            {
+                /* copy the blob into the working buffer */
+                p = &pVarClient->workbuf;
+                memcpy( p, pVarObject->val.blob, len );
+
+                result = EOK;
+            }
+        }
+        else
+        {
+            result = ENOTSUP;
+        }
+    }
+
+    return result;
+}
+
+
+/*============================================================================*/
+/*  VAR_GetFirst                                                              */
 /*
     Start a variable query
 
@@ -1693,7 +2064,7 @@ int VAR_Set( VARSERVER_HANDLE hVarServer,
     @retval EINVAL - invalid arguments
     @retval ENOENT - no matching variable was found
 
-============================================================================*/
+==============================================================================*/
 int VAR_GetFirst( VARSERVER_HANDLE hVarServer,
                   VarQuery *query,
                   VarObject *obj )
@@ -1756,8 +2127,8 @@ int VAR_GetFirst( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  VAR_GetNext                                                             */
+/*============================================================================*/
+/*  VAR_GetNext                                                               */
 /*
     Continue a variable query
 
@@ -1783,7 +2154,7 @@ int VAR_GetFirst( VARSERVER_HANDLE hVarServer,
     @retval EINVAL - invalid arguments
     @retval ENOENT - no matching variable was found. Search is terminated.
 
-============================================================================*/
+==============================================================================*/
 int VAR_GetNext( VARSERVER_HANDLE hVarServer,
                  VarQuery *query,
                  VarObject *obj )
@@ -1827,8 +2198,8 @@ int VAR_GetNext( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  VAR_Notify                                                              */
+/*============================================================================*/
+/*  VAR_Notify                                                                */
 /*!
     Register a notification for a specific variable
 
@@ -1851,7 +2222,7 @@ int VAR_GetNext( VARSERVER_HANDLE hVarServer,
     @retval EOK - the notification request was registered successfully
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VAR_Notify( VARSERVER_HANDLE hVarServer,
                 VAR_HANDLE hVar,
                 NotificationType notificationType )
@@ -1872,8 +2243,8 @@ int VAR_Notify( VARSERVER_HANDLE hVarServer,
 }
 
 
-/*==========================================================================*/
-/*  VAR_Print                                                               */
+/*============================================================================*/
+/*  VAR_Print                                                                 */
 /*!
     Print a variable value to the specified output stream
 
@@ -1896,7 +2267,7 @@ int VAR_Notify( VARSERVER_HANDLE hVarServer,
     @retval ENOTSUP - the variable data type is not supported for printing
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VAR_Print( VARSERVER_HANDLE hVarServer,
                VAR_HANDLE hVar,
                int fd )
@@ -1938,8 +2309,8 @@ int VAR_Print( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  VAR_OpenPrintSession                                                    */
+/*============================================================================*/
+/*  VAR_OpenPrintSession                                                      */
 /*!
     Open a new print session
 
@@ -1967,7 +2338,7 @@ int VAR_Print( VARSERVER_HANDLE hVarServer,
     @retval EOK - the print session was successfully created
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VAR_OpenPrintSession( VARSERVER_HANDLE hVarServer,
                          uint32_t id,
                          VAR_HANDLE *hVar,
@@ -2010,8 +2381,8 @@ int VAR_OpenPrintSession( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  VAR_ClosePrintSession                                                   */
+/*============================================================================*/
+/*  VAR_ClosePrintSession                                                     */
 /*!
     Conclude a print session
 
@@ -2033,7 +2404,7 @@ int VAR_OpenPrintSession( VARSERVER_HANDLE hVarServer,
     @retval EOK - the print session was successfully completed
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VAR_ClosePrintSession( VARSERVER_HANDLE hVarServer,
                            uint32_t id,
                            int fd )
@@ -2056,8 +2427,8 @@ int VAR_ClosePrintSession( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  var_PrintValue                                                          */
+/*============================================================================*/
+/*  var_PrintValue                                                            */
 /*!
     Print a variable value to the specified output stream
 
@@ -2085,7 +2456,7 @@ int VAR_ClosePrintSession( VARSERVER_HANDLE hVarServer,
     @retval ENOTSUP - the variable data type is not supported for printing
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf )
 {
     char *fmt;
@@ -2102,6 +2473,10 @@ static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf )
                                                     : pInfo->formatspec;
                 dprintf(fd, fmt, pInfo->var.val.f );
                 result = EOK;
+                break;
+
+            case VARTYPE_BLOB:
+                dprintf(fd, "%s", "<object>");
                 break;
 
             case VARTYPE_STR:
@@ -2163,8 +2538,8 @@ static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf )
     return result;
 }
 
-/*==========================================================================*/
-/*  ValidateHandle                                                          */
+/*============================================================================*/
+/*  ValidateHandle                                                            */
 /*!
     Validate a variable server handle
 
@@ -2179,7 +2554,7 @@ static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf )
     @retval pointer to a VarClient object
     @retval NULL - an invalid variable server handle was specified
 
-============================================================================*/
+==============================================================================*/
 static VarClient *ValidateHandle( VARSERVER_HANDLE hVarServer )
 {
     VarClient *pVarClient;
@@ -2201,8 +2576,8 @@ static VarClient *ValidateHandle( VARSERVER_HANDLE hVarServer )
     return pVarClient;
 }
 
-/*==========================================================================*/
-/*  InitServerInfo                                                          */
+/*============================================================================*/
+/*  InitServerInfo                                                            */
 /*!
     Initialize the VarServer information
 
@@ -2215,7 +2590,7 @@ static VarClient *ValidateHandle( VARSERVER_HANDLE hVarServer )
     @retval pointer to the Variable Server's ServerInfo object
     @retval NULL - the Variable Server's ServerInfo object could not be read
 
-============================================================================*/
+==============================================================================*/
 static int InitServerInfo( VarClient *pVarClient )
 {
     int fd;
@@ -2259,8 +2634,8 @@ static int InitServerInfo( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ClientRequest                                                           */
+/*============================================================================*/
+/*  ClientRequest                                                             */
 /*!
     Send a request from the client to the server
 
@@ -2283,7 +2658,7 @@ static int InitServerInfo( VarClient *pVarClient )
     @retval EINVAL - an invalid client was specified
     @retval other - error code returned by sigqueue, or sem_wait
 
-============================================================================*/
+==============================================================================*/
 static int ClientRequest( VarClient *pVarClient, int signal )
 {
     int result = EINVAL;
@@ -2344,8 +2719,8 @@ static int ClientRequest( VarClient *pVarClient, int signal )
     return result;
 }
 
-/*==========================================================================*/
-/*  NewClient                                                               */
+/*============================================================================*/
+/*  NewClient                                                                 */
 /*!
     Create a new Variable Server client
 
@@ -2367,7 +2742,7 @@ static int ClientRequest( VarClient *pVarClient, int signal )
     @retval pointer to the newly created VarClient object
     @retval NULL if the VarClient object could not be created
 
-============================================================================*/
+==============================================================================*/
 static VarClient *NewClient( size_t workbufsize )
 {
     int res;
@@ -2438,8 +2813,8 @@ static VarClient *NewClient( size_t workbufsize )
     return pVarClient;
 }
 
-/*==========================================================================*/
-/*  NewClientSemaphore                                                      */
+/*============================================================================*/
+/*  NewClientSemaphore                                                        */
 /*!
     Initialize a new Variable Client semaphore
 
@@ -2452,7 +2827,7 @@ static VarClient *NewClient( size_t workbufsize )
     @retval EOK the new client semaphore was successfully initialized
     @retval EINVAL an invalid variable client was specified
 
-============================================================================*/
+==============================================================================*/
 static int NewClientSemaphore( VarClient *pVarClient )
 {
     char semname[BUFSIZ];
@@ -2467,8 +2842,8 @@ static int NewClientSemaphore( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  DeleteClientSemaphore                                                   */
+/*============================================================================*/
+/*  DeleteClientSemaphore                                                     */
 /*!
     Delete the Variable Client semaphore
 
@@ -2479,7 +2854,7 @@ static int NewClientSemaphore( VarClient *pVarClient )
     @retval EINVAL an invalid variable client was specified
     @retval other error response returned from sem_destroy
 
-============================================================================*/
+==============================================================================*/
 static int DeleteClientSemaphore( VarClient *pVarClient )
 {
     int result = EINVAL;
@@ -2503,8 +2878,8 @@ static int DeleteClientSemaphore( VarClient *pVarClient )
     return result;
 }
 
-/*==========================================================================*/
-/*  ClientCleanup                                                           */
+/*============================================================================*/
+/*  ClientCleanup                                                             */
 /*!
     Clean up the Variable Client when it is no longer needed
 
@@ -2516,7 +2891,7 @@ static int DeleteClientSemaphore( VarClient *pVarClient )
     @retval EOK the client was successfully shut down
     @retval EINVAL an invalid variable client was specified
 
-============================================================================*/
+==============================================================================*/
 static int ClientCleanup( VarClient *pVarClient )
 {
     char clientname[BUFSIZ];

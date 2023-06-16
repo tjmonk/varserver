@@ -1,4 +1,4 @@
-/*============================================================================
+/*==============================================================================
 MIT License
 
 Copyright (c) 2023 Trevor Monk
@@ -20,7 +20,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-============================================================================*/
+==============================================================================*/
 
 /*!
  * @defgroup taglist taglist
@@ -28,7 +28,7 @@ SOFTWARE.
  * @{
  */
 
-/*==========================================================================*/
+/*============================================================================*/
 /*!
 @file taglist.c
 
@@ -41,11 +41,11 @@ SOFTWARE.
         - get a tag name by its number
 
 */
-/*==========================================================================*/
+/*============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Includes
-============================================================================*/
+==============================================================================*/
 
 #include <unistd.h>
 #include <stdio.h>
@@ -61,13 +61,13 @@ SOFTWARE.
 #include "varserver.h"
 #include "taglist.h"
 
-/*============================================================================
+/*==============================================================================
         Private definitions
-============================================================================*/
+==============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Private file scoped variables
-============================================================================*/
+==============================================================================*/
 
 /*! counts the number of variables in the list */
 static uint16_t tagcount = 0;
@@ -75,19 +75,19 @@ static uint16_t tagcount = 0;
 /*! variable storage */
 static char *TagStorage[ VARSERVER_MAX_TAGS + 1 ] = {NULL};
 
-/*============================================================================
+/*==============================================================================
         Private function declarations
-============================================================================*/
+==============================================================================*/
 
 static int taglist_Find( char *pTagName, uint16_t *pTagNumber );
 static int taglist_Add( char *pTagName, uint16_t *pTagNumber );
 
-/*============================================================================
+/*==============================================================================
         Public function definitions
-============================================================================*/
+==============================================================================*/
 
-/*==========================================================================*/
-/*  TAGLIST_AddNew                                                          */
+/*============================================================================*/
+/*  TAGLIST_AddNew                                                            */
 /*!
     Add a new tag to the tag list
 
@@ -109,7 +109,7 @@ static int taglist_Add( char *pTagName, uint16_t *pTagNumber );
     @retval ENOSPC the tag database is full
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int TAGLIST_AddNew( char *pTagName, uint16_t *pTagNumber )
 {
     int result = EINVAL;
@@ -131,8 +131,8 @@ int TAGLIST_AddNew( char *pTagName, uint16_t *pTagNumber )
     return result;
 }
 
-/*==========================================================================*/
-/*  TAGLIST_Parse                                                           */
+/*============================================================================*/
+/*  TAGLIST_Parse                                                             */
 /*!
     Parse a comma separated tag name string into a tag number array
 
@@ -158,7 +158,7 @@ int TAGLIST_AddNew( char *pTagName, uint16_t *pTagNumber )
     @retval ENOMEM memory allocation failure
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int TAGLIST_Parse( char *pTagspec, uint16_t *pTags, size_t len )
 {
     int result = EINVAL;
@@ -222,8 +222,8 @@ int TAGLIST_Parse( char *pTagspec, uint16_t *pTags, size_t len )
     return result;
 }
 
-/*==========================================================================*/
-/*  TAGLIST_TagsToString                                                    */
+/*============================================================================*/
+/*  TAGLIST_TagsToString                                                      */
 /*!
     Convert a tag number array into a string of tag names
 
@@ -251,7 +251,7 @@ int TAGLIST_Parse( char *pTagspec, uint16_t *pTags, size_t len )
     @retval ENOENT one of the specified tags does not exist
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int TAGLIST_TagsToString( uint16_t *pTags, size_t len, char *pBuf, size_t n )
 {
     int i;
@@ -326,8 +326,8 @@ int TAGLIST_TagsToString( uint16_t *pTags, size_t len, char *pBuf, size_t n )
     return result;
 }
 
-/*==========================================================================*/
-/*  TAGLIST_GetTagNumber                                                    */
+/*============================================================================*/
+/*  TAGLIST_GetTagNumber                                                      */
 /*!
     Get the tag number given its name
 
@@ -346,14 +346,14 @@ int TAGLIST_TagsToString( uint16_t *pTags, size_t len, char *pBuf, size_t n )
     @retval ENOENT the tag was not found
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int TAGLIST_GetTagNumber( char *pTagName, uint16_t *pTagNumber )
 {
     return taglist_Find( pTagName, pTagNumber );
 }
 
-/*==========================================================================*/
-/*  TAGLIST_GetTagName                                                      */
+/*============================================================================*/
+/*  TAGLIST_GetTagName                                                        */
 /*!
     Get a TagName given its tag number
 
@@ -377,7 +377,7 @@ int TAGLIST_GetTagNumber( char *pTagName, uint16_t *pTagNumber )
     @retval E2BIG the tag name will not fit in the buffer provided
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int TAGLIST_GetTagName( uint16_t tagNumber, char *pTagName, size_t size )
 {
     int result = EINVAL;
@@ -418,12 +418,12 @@ int TAGLIST_GetTagName( uint16_t tagNumber, char *pTagName, size_t size )
     return result;
 }
 
-/*============================================================================
+/*==============================================================================
         Private function definitions
-============================================================================*/
+==============================================================================*/
 
-/*==========================================================================*/
-/*  taglist_Find                                                            */
+/*============================================================================*/
+/*  taglist_Find                                                              */
 /*!
     Find a tag number given its name
 
@@ -442,7 +442,7 @@ int TAGLIST_GetTagName( uint16_t tagNumber, char *pTagName, size_t size )
     @retval ENOENT the tag was not found
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 static int taglist_Find( char *pTagName, uint16_t *pTagNumber )
 {
     int result = EINVAL;
@@ -473,8 +473,8 @@ static int taglist_Find( char *pTagName, uint16_t *pTagNumber )
     return result;
 }
 
-/*==========================================================================*/
-/*  taglist_Add                                                             */
+/*============================================================================*/
+/*  taglist_Add                                                               */
 /*!
     Add a tag at the end of the list
 
@@ -493,7 +493,7 @@ static int taglist_Find( char *pTagName, uint16_t *pTagNumber )
     @retval ENOMEM memory allocation failure
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 static int taglist_Add( char *pTagName, uint16_t *pTagNumber )
 {
     int result = EINVAL;

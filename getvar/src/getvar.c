@@ -1,4 +1,4 @@
-/*============================================================================
+/*==============================================================================
 MIT License
 
 Copyright (c) 2023 Trevor Monk
@@ -20,7 +20,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-============================================================================*/
+==============================================================================*/
 
 /*!
  * @defgroup getvar getvar
@@ -28,7 +28,7 @@ SOFTWARE.
  * @{
  */
 
-/*==========================================================================*/
+/*============================================================================*/
 /*!
 @file getvar.c
 
@@ -38,11 +38,11 @@ SOFTWARE.
     variable from the variable server
 
 */
-/*==========================================================================*/
+/*============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Includes
-============================================================================*/
+==============================================================================*/
 
 #include <stdio.h>
 #include <string.h>
@@ -54,9 +54,9 @@ SOFTWARE.
 #include <unistd.h>
 #include "varserver.h"
 
-/*============================================================================
+/*==============================================================================
         Private definitions
-============================================================================*/
+==============================================================================*/
 
 /*! GetVar state object used to customize the behavior of the application */
 typedef struct _get_var_state
@@ -95,13 +95,13 @@ typedef struct _get_var_state
 
 } GetVarState;
 
-/*============================================================================
+/*==============================================================================
         Private file scoped variables
-============================================================================*/
+==============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Private function declarations
-============================================================================*/
+==============================================================================*/
 
 int main( int argc, char **argv );
 static int ProcessOptions( int argc, char **argv, GetVarState *pState );
@@ -111,12 +111,12 @@ static int ProcessQuery( GetVarState *pState );
 static int PrintVar( GetVarState *pState, VAR_HANDLE hVar, int fd );
 static int TimingTest( GetVarState *pState, VAR_HANDLE hVar );
 
-/*============================================================================
+/*==============================================================================
         Function definitions
-============================================================================*/
+==============================================================================*/
 
-/*==========================================================================*/
-/*  main                                                                    */
+/*============================================================================*/
+/*  main                                                                      */
 /*!
     Main entry point for the getvar application
 
@@ -133,7 +133,7 @@ static int TimingTest( GetVarState *pState, VAR_HANDLE hVar );
 
     @return none
 
-============================================================================*/
+==============================================================================*/
 int main(int argc, char **argv)
 {
     VARSERVER_HANDLE hVarServer = NULL;
@@ -170,8 +170,8 @@ int main(int argc, char **argv)
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessOptions                                                          */
+/*============================================================================*/
+/*  ProcessOptions                                                            */
 /*!
     Process command line options
 
@@ -207,7 +207,7 @@ int main(int argc, char **argv)
     @retval EOK options processed successfully
     @retval EINVAL an error occurred
 
-============================================================================*/
+==============================================================================*/
 static int ProcessOptions( int argc, char **argv, GetVarState *pState )
 {
     const char *options = "hvo:n:w:rcNt";
@@ -297,8 +297,8 @@ static int ProcessOptions( int argc, char **argv, GetVarState *pState )
     return ( errcount == 0 ) ? EOK : EINVAL;
 }
 
-/*==========================================================================*/
-/*  usage                                                                   */
+/*============================================================================*/
+/*  usage                                                                     */
 /*!
     Display the usage information
 
@@ -309,7 +309,7 @@ static int ProcessOptions( int argc, char **argv, GetVarState *pState )
         name
             pointer to the application name
 
-============================================================================*/
+==============================================================================*/
 static void usage( char *name )
 {
     if( name != NULL )
@@ -328,8 +328,8 @@ static void usage( char *name )
     }
 }
 
-/*==========================================================================*/
-/*  GetOutputFileDescriptor                                                 */
+/*============================================================================*/
+/*  GetOutputFileDescriptor                                                   */
 /*!
     Get the output file descriptor for the query output
 
@@ -347,7 +347,7 @@ static void usage( char *name )
     @retval STDOUT_FILENO if no output file was specified
     @retval -1 if the specified GetVarState object is invalid
 
-============================================================================*/
+==============================================================================*/
 static int GetOutputFileDescriptor( GetVarState *pState )
 {
     int fd = -1;
@@ -372,8 +372,8 @@ static int GetOutputFileDescriptor( GetVarState *pState )
     return fd;
 }
 
-/*==========================================================================*/
-/*  ProcessQuery                                                            */
+/*============================================================================*/
+/*  ProcessQuery                                                              */
 /*!
     Process the variable query request
 
@@ -395,7 +395,7 @@ static int GetOutputFileDescriptor( GetVarState *pState )
     @retval EOK output was successful
     @retval ENOENT variable not found
 
-============================================================================*/
+==============================================================================*/
 static int ProcessQuery( GetVarState *pState )
 {
     int result = EINVAL;
@@ -446,8 +446,8 @@ static int ProcessQuery( GetVarState *pState )
     return result;
 }
 
-/*==========================================================================*/
-/*  PrintVar                                                                */
+/*============================================================================*/
+/*  PrintVar                                                                  */
 /*!
     Query and output the variable N times
 
@@ -478,7 +478,7 @@ static int ProcessQuery( GetVarState *pState )
     @retval EAGAIN output count not reached, invoke function again
     @retval ENOENT variable not found
 
-============================================================================*/
+==============================================================================*/
 static int PrintVar( GetVarState *pState, VAR_HANDLE hVar, int fd )
 {
     int result = EINVAL;
@@ -526,8 +526,8 @@ static int PrintVar( GetVarState *pState, VAR_HANDLE hVar, int fd )
 
 }
 
-/*==========================================================================*/
-/*  TimingTest                                                              */
+/*============================================================================*/
+/*  TimingTest                                                                */
 /*!
     Query the variable N times for a timing test
 
@@ -553,7 +553,7 @@ static int PrintVar( GetVarState *pState, VAR_HANDLE hVar, int fd )
     @retval EAGAIN query count not reached, invoke function again
     @retval ENOENT variable not found
 
-============================================================================*/
+==============================================================================*/
 static int TimingTest( GetVarState *pState, VAR_HANDLE hVar )
 {
     int result = EINVAL;

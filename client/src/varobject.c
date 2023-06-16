@@ -141,6 +141,10 @@ static int blobstr_to_var( char *str,
                            VarObject *pVarObject,
                            uint32_t options );
 
+static int varobject_CopyString( VarObject *pDst, VarObject *pSrc );
+
+static int varobject_CopyBlob( VarObject *pDst, VarObject *pSrc );
+
 /*==============================================================================
         File scoped variables
 ==============================================================================*/

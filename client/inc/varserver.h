@@ -108,6 +108,11 @@ int VAR_GetStrByName( VARSERVER_HANDLE hVarServer,
                       char *buf,
                       size_t len );
 
+int VAR_GetBlobByName( VARSERVER_HANDLE hVarServer,
+                       char *name,
+                       void *buf,
+                       size_t len );
+
 int VAR_GetType( VARSERVER_HANDLE hVarServer,
                  VAR_HANDLE hVar,
                  VarType *pVarType );

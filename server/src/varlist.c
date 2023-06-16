@@ -1,4 +1,4 @@
-/*============================================================================
+/*==============================================================================
 MIT License
 
 Copyright (c) 2023 Trevor Monk
@@ -20,7 +20,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-============================================================================*/
+==============================================================================*/
 
 /*!
  * @defgroup varlist varlist
@@ -28,7 +28,7 @@ SOFTWARE.
  * @{
  */
 
-/*==========================================================================*/
+/*============================================================================*/
 /*!
 @file varlist.c
 
@@ -37,11 +37,11 @@ SOFTWARE.
     The Variable List maintains a searchable list of varserver variables.
 
 */
-/*==========================================================================*/
+/*============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Includes
-============================================================================*/
+==============================================================================*/
 
 #define _GNU_SOURCE
 #include <unistd.h>
@@ -54,10 +54,10 @@ SOFTWARE.
 #include <fcntl.h>
 #include <semaphore.h>
 #include <string.h>
-#include <varserver/varclient.h>
-#include <varserver/varserver.h>
-#include <varserver/varobject.h>
-#include <varserver/var.h>
+#include "varclient.h"
+#include "varserver.h"
+#include "varobject.h"
+#include "var.h"
 #include "server.h"
 #include "varstorage.h"
 #include "varlist.h"
@@ -66,18 +66,18 @@ SOFTWARE.
 #include "blocklist.h"
 #include "transaction.h"
 
-/*============================================================================
+/*==============================================================================
         Private definitions
-============================================================================*/
+==============================================================================*/
 
 /*! Maximum number of clients */
 #ifndef VARSERVER_MAX_VARIABLES
 #define VARSERVER_MAX_VARIABLES                 ( 65535 )
 #endif
 
-/*============================================================================
+/*==============================================================================
         Type definitions
-============================================================================*/
+==============================================================================*/
 
 /*! search context */
 typedef struct _searchContext
@@ -101,9 +101,9 @@ typedef struct _searchContext
     struct _searchContext *pNext;
 } SearchContext;
 
-/*============================================================================
+/*==============================================================================
         Private file scoped variables
-============================================================================*/
+==============================================================================*/
 
 /*! counts the number of variables in the list */
 static int varcount = 0;
@@ -117,9 +117,9 @@ static SearchContext *pSearchContexts = NULL;
 /*! unique context identifier */
 static int contextIdent = 0;
 
-/*============================================================================
+/*==============================================================================
         Private function declarations
-============================================================================*/
+==============================================================================*/
 
 static int AssignVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int varlist_Set16( VarStorage *pVarStorage, VarInfo *pVarInfo );
@@ -130,6 +130,7 @@ static int varlist_Set64( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int varlist_Set64s( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int varlist_SetFloat( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int varlist_SetStr( VarStorage *pVarStorage, VarInfo *pVarInfo );
+static int varlist_SetBlob( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int varlist_Calc( VarClient *pVarClient, void *arg );
 
 static SearchContext *varlist_NewSearchContext( pid_t clientPID,
@@ -142,12 +143,20 @@ static SearchContext *varlist_FindSearchContext( pid_t clientPID,
 
 static int varlist_Match( VAR_HANDLE hVar, SearchContext *ctx );
 
-/*============================================================================
-        Public function definitions
-============================================================================*/
+static int assign_BlobVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo );
+static int assign_StringVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo );
 
-/*==========================================================================*/
-/*  VARLIST_AddNew                                                          */
+static int varlist_CopyVarInfoBlobToClient( VarClient *pVarClient,
+                                            VarInfo *pVarInfo );
+static int varlist_CopyVarInfoStringToClient( VarClient *pVarClient,
+                                              VarInfo *pVarInfo );
+
+/*==============================================================================
+        Public function definitions
+==============================================================================*/
+
+/*============================================================================*/
+/*  VARLIST_AddNew                                                            */
 /*!
     Add a new variable to the variable list
 
@@ -166,7 +175,7 @@ static int varlist_Match( VAR_HANDLE hVar, SearchContext *ctx );
     @retval ENOMEM memory allocation failure
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle )
 {
     int result = EINVAL;
@@ -211,8 +220,8 @@ int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle )
     return result;
 }
 
-/*==========================================================================*/
-/*  VARLIST_Find                                                            */
+/*============================================================================*/
+/*  VARLIST_Find                                                              */
 /*!
     Find a variable in the variable list by its name
 
@@ -233,7 +242,7 @@ int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle )
     @retval ENOENT the variable was not found
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle )
 {
     int result = EINVAL;
@@ -265,8 +274,8 @@ int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle )
     return result;
 }
 
-/*==========================================================================*/
-/*  VARLIST_PrintByHandle                                                   */
+/*============================================================================*/
+/*  VARLIST_PrintByHandle                                                     */
 /*!
     Handle a print request from a client
 
@@ -306,7 +315,7 @@ int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle )
     @retval EOK the variable print request was handled
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VARLIST_PrintByHandle( pid_t clientPID,
                            VarInfo *pVarInfo,
                            char *workbuf,
@@ -412,6 +421,21 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                     }
                 }
 
+                if( pVarInfo->var.type == VARTYPE_BLOB )
+                {
+                    /* blobs are passed back via the working buffer */
+                    n = pVarStorage->var.len;
+                    if( n <= workbufsize )
+                    {
+                        /* copy the string */
+                        memcpy( workbuf, pVarStorage->var.val.blob, n );
+                    }
+                    else
+                    {
+                        result = E2BIG;
+                    }
+                }
+
                 result = EOK;
             }
         }
@@ -425,8 +449,8 @@ int VARLIST_PrintByHandle( pid_t clientPID,
     return result;
 }
 
-/*==========================================================================*/
-/*  VARLIST_GetByHandle                                                     */
+/*============================================================================*/
+/*  VARLIST_GetByHandle                                                       */
 /*!
     Handle a get request from a client
 
@@ -452,7 +476,7 @@ int VARLIST_PrintByHandle( pid_t clientPID,
     @retval EOK the variable get request was handled
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VARLIST_GetByHandle( pid_t clientPID,
                          VarInfo *pVarInfo,
                          char *buf,
@@ -526,6 +550,21 @@ int VARLIST_GetByHandle( pid_t clientPID,
                         result = E2BIG;
                     }
                 }
+
+                if( pVarInfo->var.type == VARTYPE_BLOB )
+                {
+                    /* blobs are passed back via the working buffer */
+                    n = pVarStorage->var.len;
+                    if( n <= bufsize )
+                    {
+                        /* copy the blob */
+                        memcpy( buf, pVarStorage->var.val.blob, n );
+                    }
+                    else
+                    {
+                        result = E2BIG;
+                    }
+                }
             }
         }
         else
@@ -538,8 +577,8 @@ int VARLIST_GetByHandle( pid_t clientPID,
     return result;
 }
 
-/*==========================================================================*/
-/*  VARLIST_Set                                                             */
+/*============================================================================*/
+/*  VARLIST_Set                                                               */
 /*!
     Handle a SET request from a client
 
@@ -560,7 +599,7 @@ int VARLIST_GetByHandle( pid_t clientPID,
     @retval E2BIG the string variable is too big
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VARLIST_Set( pid_t clientPID,
                  VarInfo *pVarInfo,
                  bool *validationInProgress,
@@ -627,6 +666,10 @@ int VARLIST_Set( pid_t clientPID,
 
                 switch( pVarStorage->var.type )
                 {
+                    case VARTYPE_BLOB:
+                        result = varlist_SetBlob( pVarStorage, pVarInfo );
+                        break;
+
                     case VARTYPE_STR:
                         result = varlist_SetStr( pVarStorage, pVarInfo );
                         break;
@@ -707,12 +750,12 @@ int VARLIST_Set( pid_t clientPID,
     return result;
 }
 
-/*============================================================================
+/*==============================================================================
         Private function definitions
-============================================================================*/
+==============================================================================*/
 
-/*==========================================================================*/
-/*  varlist_Calc                                                            */
+/*============================================================================*/
+/*  varlist_Calc                                                              */
 /*!
     Function to be applied while unblocking CALC blocked clients
 
@@ -731,11 +774,11 @@ int VARLIST_Set( pid_t clientPID,
 
     @retval EOK the variable was successfully copied
     @retval EINVAL invalid arguments
-    @retval ENOSTR no string specified in the source VarObject
+    @retval ENOENT no data available in the source VarObject
     @retval E2BIG the string in the source VarObject will not fit in the
             client's working buffer
 
-============================================================================*/
+==============================================================================*/
 static int varlist_Calc( VarClient *pVarClient, void *arg )
 {
     int result = EINVAL;
@@ -754,45 +797,25 @@ static int varlist_Calc( VarClient *pVarClient, void *arg )
                 varstore[hVar].formatspec,
                 MAX_FORMATSPEC_LEN );
 
+        /* copy the variable type from the varstore */
         varType = varstore[hVar].var.type;
+        pVarClient->variableInfo.var.type = varType;
+
+        /* copy the variable length from the varstore */
         len = varstore[hVar].var.len;
+        pVarClient->variableInfo.var.len = len;
 
         if( varType == VARTYPE_STR )
         {
-            /* copy the variable type */
-            pVarClient->variableInfo.var.type = varType;
-
-            if( ( pVarInfo->var.len <= len ) &&
-                ( len < pVarClient->workbufsize ) )
-            {
-                /* copy the variable value into the client's working buffer */
-                if( pVarInfo->var.val.str != NULL )
-                {
-                    /* copy the variable length */
-                    pVarClient->variableInfo.var.len = len;
-
-                    strcpy( &pVarClient->workbuf, pVarInfo->var.val.str );
-
-                    result = EOK;
-
-                }
-                else
-                {
-                    /* no source string to copy */
-                    result = ENOSTR;
-                }
-            }
-            else
-            {
-                /* source string is too big to fit in the client's buffer */
-                result = E2BIG;
-            }
+            result = varlist_CopyVarInfoStringToClient( pVarClient, pVarInfo );
+        }
+        else if ( varType == VARTYPE_BLOB )
+        {
+            result = varlist_CopyVarInfoBlobToClient( pVarClient, pVarInfo );
         }
         else
         {
             /* copy the source VarObject to the VarClient */
-            pVarClient->variableInfo.var.type = varType;
-            pVarClient->variableInfo.var.len = len;
             pVarClient->variableInfo.var.val = pVarInfo->var.val;
 
             result = EOK;
@@ -802,8 +825,143 @@ static int varlist_Calc( VarClient *pVarClient, void *arg )
     return result;
 }
 
-/*==========================================================================*/
-/*  varlist_Set16                                                           */
+/*============================================================================*/
+/*  varlist_CopyVarInfoBlobToClient                                           */
+/*!
+    Copy a VarInfo blob into the client's working buffer
+
+    The varlist_CopyVarInfoBlobToClient function copies the VarInfo object
+    pointed to by the pVarInfo argument into the working buffer of the
+    client pointed to by pVarClient
+
+    Blobs are copied directly into the client's working buffer
+
+    @param[in,out]
+        pVarClient
+            Pointer to the VarClient containing the working buffer to receive
+            the blob data
+
+    @param[in]
+        pVarInfo
+            pointer to the VarInfo object containing the blob to copy
+
+    @retval EOK the blob was successfully copied
+    @retval EINVAL invalid arguments
+    @retval ENOENT no blob data contained in the source VarInfo object
+    @retval E2BIG the blob in the source VarObject will not fit in the
+            client's working buffer
+
+==============================================================================*/
+static int varlist_CopyVarInfoBlobToClient( VarClient *pVarClient,
+                                            VarInfo *pVarInfo )
+{
+    int result = EINVAL;
+    size_t destlen;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pVarInfo != NULL ) )
+    {
+        /* get the destination blob size */
+        destlen = pVarClient->variableInfo.var.len;
+
+        /* check that the blob will fit */
+        if( ( pVarInfo->var.len <= destlen ) &&
+            ( destlen <= pVarClient->workbufsize ) )
+        {
+            if( pVarInfo->var.val.blob != NULL )
+            {
+                /* copy the blob value into the client's working buffer */
+                memcpy( &pVarClient->workbuf,
+                        pVarInfo->var.val.blob,
+                        pVarInfo->var.len );
+
+                result = EOK;
+            }
+            else
+            {
+                /* no source blob to copy */
+                result = ENOENT;
+            }
+        }
+        else
+        {
+            /* source blob is too big to fit in the client's buffer */
+            result = E2BIG;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  varlist_CopyVarInfoStringToClient                                         */
+/*!
+    Copy a VarInfo string into the client's working buffer
+
+    The varlist_CopyVarInfoStringToClient function copies the VarInfo object
+    pointed to by the pVarInfo argument into the working buffer of the
+    client pointed to by pVarClient
+
+    Strings are copied directly into the client's working buffer
+
+    @param[in,out]
+        pVarClient
+            Pointer to the VarClient containing the working buffer to receive
+            the string data
+
+    @param[in]
+        pVarInfo
+            pointer to the VarInfo object containing the string to copy
+
+    @retval EOK the string was successfully copied
+    @retval EINVAL invalid arguments
+    @retval ENOENT no string data contained in the source VarInfo object
+    @retval E2BIG the string in the source VarObject will not fit in the
+            client's working buffer
+
+==============================================================================*/
+static int varlist_CopyVarInfoStringToClient( VarClient *pVarClient,
+                                              VarInfo *pVarInfo )
+{
+    int result = EINVAL;
+    size_t destlen;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pVarInfo != NULL ) )
+    {
+        /* get the destination blob size */
+        destlen = pVarClient->variableInfo.var.len;
+
+        /* check that the blob will fit */
+        if( ( pVarInfo->var.len <= destlen ) &&
+            ( destlen <= pVarClient->workbufsize ) )
+        {
+            if( pVarInfo->var.val.str != NULL )
+            {
+                /* copy the variable value into the client's working buffer */
+                strcpy( &pVarClient->workbuf, pVarInfo->var.val.str );
+
+                result = EOK;
+
+            }
+            else
+            {
+                /* no source string to copy */
+                result = ENOENT;
+            }
+        }
+        else
+        {
+            /* source string is too big to fit in the client's buffer */
+            result = E2BIG;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  varlist_Set16                                                             */
 /*!
     Store a value into a VARTYPE_UINT16 variable
 
@@ -825,7 +983,7 @@ static int varlist_Calc( VarClient *pVarClient, void *arg )
     @retval EINVAL invalid arguments
     @retval EALREADY the value is already set to the requested value
 
-============================================================================*/
+==============================================================================*/
 static int varlist_Set16( VarStorage *pVarStorage, VarInfo *pVarInfo )
 {
     int result = EINVAL;
@@ -970,8 +1128,8 @@ static int varlist_Set16( VarStorage *pVarStorage, VarInfo *pVarInfo )
     return result;
 }
 
-/*==========================================================================*/
-/*  varlist_Set16s                                                          */
+/*============================================================================*/
+/*  varlist_Set16s                                                            */
 /*!
     Store a value into a VARTYPE_INT16 variable
 
@@ -993,7 +1151,7 @@ static int varlist_Set16( VarStorage *pVarStorage, VarInfo *pVarInfo )
     @retval EINVAL invalid arguments
     @retval EALREADY the value is already set to the requested value
 
-============================================================================*/
+==============================================================================*/
 static int varlist_Set16s( VarStorage *pVarStorage, VarInfo *pVarInfo )
 {
     int result = EINVAL;
@@ -1140,8 +1298,8 @@ static int varlist_Set16s( VarStorage *pVarStorage, VarInfo *pVarInfo )
     return result;
 }
 
-/*==========================================================================*/
-/*  varlist_Set32                                                           */
+/*============================================================================*/
+/*  varlist_Set32                                                             */
 /*!
     Store a value into a VARTYPE_UINT32 variable
 
@@ -1161,7 +1319,7 @@ static int varlist_Set16s( VarStorage *pVarStorage, VarInfo *pVarInfo )
     @retval EINVAL invalid arguments
     @retval EALREADY the value is already set to the requested value
 
-============================================================================*/
+==============================================================================*/
 static int varlist_Set32( VarStorage *pVarStorage, VarInfo *pVarInfo )
 {
     int result = EINVAL;
@@ -1288,8 +1446,8 @@ static int varlist_Set32( VarStorage *pVarStorage, VarInfo *pVarInfo )
     return result;
 }
 
-/*==========================================================================*/
-/*  varlist_Set32s                                                          */
+/*============================================================================*/
+/*  varlist_Set32s                                                            */
 /*!
     Store a value into a VARTYPE_INT32 variable
 
@@ -1309,7 +1467,7 @@ static int varlist_Set32( VarStorage *pVarStorage, VarInfo *pVarInfo )
     @retval EINVAL invalid arguments
     @retval EALREADY the value is already set to the requested value
 
-============================================================================*/
+==============================================================================*/
 static int varlist_Set32s( VarStorage *pVarStorage, VarInfo *pVarInfo )
 {
     int result = EINVAL;
@@ -1430,8 +1588,8 @@ static int varlist_Set32s( VarStorage *pVarStorage, VarInfo *pVarInfo )
     return result;
 }
 
-/*==========================================================================*/
-/*  varlist_Set64                                                           */
+/*============================================================================*/
+/*  varlist_Set64                                                             */
 /*!
     Store a value into a VARTYPE_UINT64 variable
 
@@ -1451,7 +1609,7 @@ static int varlist_Set32s( VarStorage *pVarStorage, VarInfo *pVarInfo )
     @retval EINVAL invalid arguments
     @retval EALREADY the value is already set to the requested value
 
-============================================================================*/
+==============================================================================*/
 static int varlist_Set64( VarStorage *pVarStorage, VarInfo *pVarInfo )
 {
     int result = EINVAL;
@@ -1570,8 +1728,8 @@ static int varlist_Set64( VarStorage *pVarStorage, VarInfo *pVarInfo )
     return result;
 }
 
-/*==========================================================================*/
-/*  varlist_Set64s                                                          */
+/*============================================================================*/
+/*  varlist_Set64s                                                            */
 /*!
     Store a value into a VARTYPE_INT64 variable
 
@@ -1591,7 +1749,7 @@ static int varlist_Set64( VarStorage *pVarStorage, VarInfo *pVarInfo )
     @retval EINVAL invalid arguments
     @retval EALREADY the value is already set to the requested value
 
-============================================================================*/
+==============================================================================*/
 static int varlist_Set64s( VarStorage *pVarStorage, VarInfo *pVarInfo )
 {
     int result = EINVAL;
@@ -1697,8 +1855,8 @@ static int varlist_Set64s( VarStorage *pVarStorage, VarInfo *pVarInfo )
     return result;
 }
 
-/*==========================================================================*/
-/*  varlist_SetFloat                                                        */
+/*============================================================================*/
+/*  varlist_SetFloat                                                          */
 /*!
     Store a value into a VARTYPE_FLOAT variable
 
@@ -1718,7 +1876,7 @@ static int varlist_Set64s( VarStorage *pVarStorage, VarInfo *pVarInfo )
     @retval EINVAL invalid arguments
     @retval EALREADY the value is already set to the requested value
 
-============================================================================*/
+==============================================================================*/
 static int varlist_SetFloat( VarStorage *pVarStorage, VarInfo *pVarInfo )
 {
     int result = EINVAL;
@@ -1804,8 +1962,8 @@ static int varlist_SetFloat( VarStorage *pVarStorage, VarInfo *pVarInfo )
     return result;
 }
 
-/*==========================================================================*/
-/*  varlist_SetStr                                                          */
+/*============================================================================*/
+/*  varlist_SetStr                                                            */
 /*!
     Store a value into a VARTYPE_STR variable
 
@@ -1826,7 +1984,7 @@ static int varlist_SetFloat( VarStorage *pVarStorage, VarInfo *pVarInfo )
     @retval EINVAL invalid arguments
     @retval EALREADY the value is already set to the requested value
 
-============================================================================*/
+==============================================================================*/
 static int varlist_SetStr( VarStorage *pVarStorage, VarInfo *pVarInfo )
 {
     int result = EINVAL;
@@ -1874,8 +2032,76 @@ static int varlist_SetStr( VarStorage *pVarStorage, VarInfo *pVarInfo )
     return result;
 }
 
-/*==========================================================================*/
-/*  VARLIST_GetType                                                         */
+/*============================================================================*/
+/*  varlist_SetBlob                                                           */
+/*!
+    Store a value into a VARTYPE_BLOB variable
+
+    The varlist_SetBlob function stores a value into a VARTYPE_BLOB variable
+
+    @param[in]
+        pVarStorage
+            pointer to the storage object for the target variable
+
+    @param[in]
+        pVarInfo
+            pointer to the variable info object containing the value to set
+
+    @retval EOK the variable was successfully set
+    @retval ENOTSUP the source variable is not supported for this operation
+    @retval E2BIG not enough space to store the source variable
+    @retval EINVAL invalid arguments
+    @retval EALREADY the value is already set to the requested value
+
+==============================================================================*/
+static int varlist_SetBlob( VarStorage *pVarStorage, VarInfo *pVarInfo )
+{
+    int result = EINVAL;
+    size_t n;
+
+    if( ( pVarStorage != NULL ) &&
+        ( pVarInfo != NULL ) )
+    {
+        if( pVarInfo->var.type == VARTYPE_BLOB )
+        {
+            /* we have a blob, check its length */
+            n = pVarInfo->var.len;
+            if( n < pVarStorage->var.len )
+            {
+                if ( memcmp( pVarStorage->var.val.blob,
+                            pVarInfo->var.val.blob,
+                            n ) == 0 )
+                {
+                    result = EALREADY;
+                }
+                else
+                {
+                    /* copy the blob */
+                    memcpy( pVarStorage->var.val.blob,
+                            pVarInfo->var.val.blob,
+                            n );
+
+                    /* blob copied successfully */
+                    result = EOK;
+                }
+            }
+            else
+            {
+                /* the blob doesn't fit */
+                result = E2BIG;
+            }
+        }
+        else
+        {
+            result = ENOTSUP;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VARLIST_GetType                                                           */
 /*!
     Handle a TYPE request from a client
 
@@ -1891,7 +2117,7 @@ static int varlist_SetStr( VarStorage *pVarStorage, VarInfo *pVarInfo )
     @retval ENOENT the variable does not exist
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VARLIST_GetType( VarInfo *pVarInfo )
 {
     int result = EINVAL;
@@ -1923,8 +2149,8 @@ int VARLIST_GetType( VarInfo *pVarInfo )
     return result;
 }
 
-/*==========================================================================*/
-/*  VARLIST_GetName                                                         */
+/*============================================================================*/
+/*  VARLIST_GetName                                                           */
 /*!
     Handle a NAME request from a client
 
@@ -1940,7 +2166,7 @@ int VARLIST_GetType( VarInfo *pVarInfo )
     @retval ENOENT the variable does not exist
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VARLIST_GetName( VarInfo *pVarInfo )
 {
     int result = EINVAL;
@@ -1970,8 +2196,8 @@ int VARLIST_GetName( VarInfo *pVarInfo )
     return result;
 }
 
-/*==========================================================================*/
-/*  VARLIST_GetLength                                                       */
+/*============================================================================*/
+/*  VARLIST_GetLength                                                         */
 /*!
     Handle a LENGTH request from a client
 
@@ -1987,7 +2213,7 @@ int VARLIST_GetName( VarInfo *pVarInfo )
     @retval ENOENT the variable does not exist
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VARLIST_GetLength( VarInfo *pVarInfo )
 {
     int result = EINVAL;
@@ -2018,8 +2244,8 @@ int VARLIST_GetLength( VarInfo *pVarInfo )
     return result;
 }
 
-/*==========================================================================*/
-/*  VARLIST_RequestNotify                                                   */
+/*============================================================================*/
+/*  VARLIST_RequestNotify                                                     */
 /*!
     Handle a notification registration request from a client
 
@@ -2041,7 +2267,7 @@ int VARLIST_GetLength( VarInfo *pVarInfo )
     @retval ENOTSUP the notification type is not supported
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
 {
     int result = EINVAL;
@@ -2114,8 +2340,8 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
 }
 
 
-/*==========================================================================*/
-/*  AssignVarInfo                                                           */
+/*============================================================================*/
+/*  AssignVarInfo                                                             */
 /*!
     Copy the variable info from the VarInfo object to the VarStorage object
 
@@ -2124,7 +2350,7 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
 
     VarStorage <- VarInfo
 
-    It allocates memory for string type variables
+    It allocates memory for string and blob type variables
 
     @param[in]
         pVarStorage
@@ -2139,7 +2365,7 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
     @retval ENOTSUP zero length string specified
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 static int AssignVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo )
 {
     int result = EINVAL;
@@ -2153,27 +2379,11 @@ static int AssignVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo )
 
         if( pVarInfo->var.type == VARTYPE_STR )
         {
-            if( pVarInfo->var.len != 0 )
-            {
-                pVarStorage->var.val.str = calloc( 1, pVarInfo->var.len );
-                if( pVarStorage->var.val.str != NULL )
-                {
-                    /* copy the string */
-                    strncpy( pVarStorage->var.val.str,
-                             pVarInfo->var.val.str,
-                             pVarInfo->var.len );
-
-                    pVarStorage->var.val.str[ pVarInfo->var.len-1 ] = 0;
-                }
-                else
-                {
-                    result = ENOMEM;
-                }
-            }
-            else
-            {
-                result = ENOTSUP;
-            }
+            result = assign_StringVarInfo( pVarStorage, pVarInfo );
+        }
+        else if ( pVarInfo->var.type == VARTYPE_BLOB )
+        {
+            result = assign_BlobVarInfo( pVarStorage, pVarInfo );
         }
 
         if( result == EOK )
@@ -2207,7 +2417,8 @@ static int AssignVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo )
             pVarStorage->permissions = pVarInfo->permissions;
 
             /* copy the variable value */
-            if( pVarInfo->var.type != VARTYPE_STR )
+            if( ( pVarInfo->var.type != VARTYPE_STR ) &&
+                ( pVarInfo->var.type != VARTYPE_BLOB ) )
             {
                 pVarStorage->var.val  = pVarInfo->var.val;
             }
@@ -2223,8 +2434,144 @@ static int AssignVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo )
 
 }
 
-/*==========================================================================*/
-/*  VARLIST_GetFirst                                                        */
+/*============================================================================*/
+/*  assign_BlobVarInfo                                                        */
+/*!
+    Copy the blob variable info from the VarInfo object to the VarStorage object
+
+    The assign_BlobVarInfo function copies the blob variable information from
+    the specified VarInfo object into the specified VarStorage object.
+
+    VarStorage <- VarInfo
+
+    It allocates memory for the blob data
+
+    @param[in]
+        pVarStorage
+            Pointer to the destination VarStorage object
+
+    @param[in]
+        pVarInfo
+            Pointer to the source VarInfo object
+
+    @retval EOK the variable information was successfully assigned
+    @retval ENOMEM memory allocation failure
+    @retval ENOTSUP zero length blob specified or invalid type specified
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+static int assign_BlobVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo )
+{
+    int result = EINVAL;
+
+    if ( ( pVarStorage != NULL ) &&
+         ( pVarInfo != NULL ) )
+    {
+        if ( pVarInfo->var.type == VARTYPE_BLOB )
+        {
+            if( pVarInfo->var.len != 0 )
+            {
+                pVarStorage->var.val.blob = calloc( 1, pVarInfo->var.len );
+                if( pVarStorage->var.val.blob != NULL )
+                {
+                    /* copy the blob */
+                    memcpy( pVarStorage->var.val.blob,
+                             pVarInfo->var.val.blob,
+                             pVarInfo->var.len );
+
+                    result = EOK;
+                }
+                else
+                {
+                    result = ENOMEM;
+                }
+            }
+            else
+            {
+                result = ENOTSUP;
+            }
+
+        }
+        else
+        {
+            result = ENOTSUP;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  assign_StringVarInfo                                                      */
+/*!
+    Copy the string var info from the VarInfo object to the VarStorage object
+
+    The assign_StringVarInfo function copies the string variable information
+    from the specified VarInfo object into the specified VarStorage object.
+
+    VarStorage <- VarInfo
+
+    It allocates memory for the string
+
+    @param[in]
+        pVarStorage
+            Pointer to the destination VarStorage object
+
+    @param[in]
+        pVarInfo
+            Pointer to the source VarInfo object
+
+    @retval EOK the variable information was successfully assigned
+    @retval ENOMEM memory allocation failure
+    @retval ENOTSUP zero length string specified or invalid type specified
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+static int assign_StringVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo )
+{
+    int result = EINVAL;
+
+    if ( ( pVarStorage != NULL ) &&
+         ( pVarInfo != NULL ) )
+    {
+        if ( pVarInfo->var.type == VARTYPE_STR )
+        {
+            if( pVarInfo->var.len != 0 )
+            {
+                /* allocate memroy for the string */
+                pVarStorage->var.val.str = calloc( 1, pVarInfo->var.len );
+                if( pVarStorage->var.val.str != NULL )
+                {
+                    /* copy the string */
+                    strncpy( pVarStorage->var.val.str,
+                             pVarInfo->var.val.str,
+                             pVarInfo->var.len );
+
+                    pVarStorage->var.val.str[ pVarInfo->var.len-1 ] = 0;
+
+                    result = EOK;
+                }
+                else
+                {
+                    result = ENOMEM;
+                }
+            }
+            else
+            {
+                result = ENOTSUP;
+            }
+        }
+        else
+        {
+            result = ENOTSUP;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VARLIST_GetFirst                                                          */
 /*!
     Handle a get_first request from a client
 
@@ -2268,7 +2615,7 @@ static int AssignVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo )
     @retval ENOENT no variable matching the search criteria was found
     @retval ENOMEM no search contexts available
 
-============================================================================*/
+==============================================================================*/
 int VARLIST_GetFirst( pid_t clientPID,
                       int searchType,
                       VarInfo *pVarInfo,
@@ -2348,8 +2695,8 @@ int VARLIST_GetFirst( pid_t clientPID,
     return result;
 }
 
-/*==========================================================================*/
-/*  VARLIST_GetNext                                                         */
+/*============================================================================*/
+/*  VARLIST_GetNext                                                           */
 /*!
     Handle a get_next request from a client
 
@@ -2389,7 +2736,7 @@ int VARLIST_GetFirst( pid_t clientPID,
     @retval ENOENT no variable matching the search criteria was found
     @retval ENOMEM no search contexts available
 
-============================================================================*/
+==============================================================================*/
 int VARLIST_GetNext( pid_t clientPID,
                      int context,
                      VarInfo *pVarInfo,
@@ -2468,8 +2815,8 @@ int VARLIST_GetNext( pid_t clientPID,
     return result;
 }
 
-/*==========================================================================*/
-/*  varlist_NewSearchContext                                                */
+/*============================================================================*/
+/*  varlist_NewSearchContext                                                  */
 /*!
     Create a new search context for a client
 
@@ -2504,7 +2851,7 @@ int VARLIST_GetNext( pid_t clientPID,
     @retval pointer to the created search context
     @retval NULL if the requested search context does not exist
 
-============================================================================*/
+==============================================================================*/
 static SearchContext *varlist_NewSearchContext( pid_t clientPID,
                                                 int searchType,
                                                 VarInfo *pVarInfo,
@@ -2547,8 +2894,8 @@ static SearchContext *varlist_NewSearchContext( pid_t clientPID,
     return p;
 }
 
-/*==========================================================================*/
-/*  varlist_DeleteSearchContext                                             */
+/*============================================================================*/
+/*  varlist_DeleteSearchContext                                               */
 /*!
     Delete a search context which is no longer needed
 
@@ -2563,7 +2910,7 @@ static SearchContext *varlist_NewSearchContext( pid_t clientPID,
     @retval EOK search context deleted
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 static int varlist_DeleteSearchContext( SearchContext *ctx )
 {
     int result = EINVAL;
@@ -2588,8 +2935,8 @@ static int varlist_DeleteSearchContext( SearchContext *ctx )
     return result;
 }
 
-/*==========================================================================*/
-/*  varlist_FindSearchContext                                               */
+/*============================================================================*/
+/*  varlist_FindSearchContext                                                 */
 /*!
     Find the specified search context for the client
 
@@ -2608,7 +2955,7 @@ static int varlist_DeleteSearchContext( SearchContext *ctx )
     @retval pointer to the requested search context
     @retval NULL if the requested search context does not exist
 
-============================================================================*/
+==============================================================================*/
 static SearchContext *varlist_FindSearchContext( pid_t clientPID,
                                                  int context )
 {
@@ -2629,8 +2976,8 @@ static SearchContext *varlist_FindSearchContext( pid_t clientPID,
     return p;
 }
 
-/*==========================================================================*/
-/*  varlist_Match                                                           */
+/*============================================================================*/
+/*  varlist_Match                                                             */
 /*!
     Match a variable against query parameters
 
@@ -2649,7 +2996,7 @@ static SearchContext *varlist_FindSearchContext( pid_t clientPID,
     @retval EINVAL invalid arguments
     @retval ENOENT the variable did not match the search context
 
-============================================================================*/
+==============================================================================*/
 static int varlist_Match( VAR_HANDLE hVar, SearchContext *ctx )
 {
     int result = EINVAL;

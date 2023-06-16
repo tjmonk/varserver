@@ -1,4 +1,4 @@
-/*============================================================================
+/*==============================================================================
 MIT License
 
 Copyright (c) 2023 Trevor Monk
@@ -20,7 +20,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-============================================================================*/
+==============================================================================*/
 
 /*!
  * @defgroup mkvar mkvar
@@ -28,7 +28,7 @@ SOFTWARE.
  * @{
  */
 
-/*==========================================================================*/
+/*============================================================================*/
 /*!
 @file mkvar.c
 
@@ -38,11 +38,11 @@ SOFTWARE.
     server
 
 */
-/*==========================================================================*/
+/*============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Includes
-============================================================================*/
+==============================================================================*/
 
 #include <stdio.h>
 #include <string.h>
@@ -54,9 +54,9 @@ SOFTWARE.
 #include <unistd.h>
 #include "varserver.h"
 
-/*============================================================================
+/*==============================================================================
         Private definitions
-============================================================================*/
+==============================================================================*/
 
 /*! MakeVarState object used to customize the behavior of the application */
 typedef struct _make_var_state
@@ -75,13 +75,13 @@ typedef struct _make_var_state
 
 } MakeVarState;
 
-/*============================================================================
+/*==============================================================================
         Private file scoped variables
-============================================================================*/
+==============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Private function declarations
-============================================================================*/
+==============================================================================*/
 
 int main( int argc, char **argv );
 static int ProcessOptions( int argc, char **argv, MakeVarState *pState );
@@ -89,12 +89,12 @@ static void usage( char *name );
 static int ProcessQuery( MakeVarState *pState );
 static int MakeVar( MakeVarState *pState );
 
-/*============================================================================
+/*==============================================================================
         Function definitions
-============================================================================*/
+==============================================================================*/
 
-/*==========================================================================*/
-/*  main                                                                    */
+/*============================================================================*/
+/*  main                                                                      */
 /*!
     Main entry point for the mkvar application
 
@@ -111,7 +111,7 @@ static int MakeVar( MakeVarState *pState );
 
     @return none
 
-============================================================================*/
+==============================================================================*/
 int main(int argc, char **argv)
 {
     VARSERVER_HANDLE hVarServer = NULL;
@@ -144,8 +144,8 @@ int main(int argc, char **argv)
     return result;
 }
 
-/*==========================================================================*/
-/*  ProcessOptions                                                          */
+/*============================================================================*/
+/*  ProcessOptions                                                            */
 /*!
     Process command line options
 
@@ -181,7 +181,7 @@ int main(int argc, char **argv)
     @retval EOK options processed successfully
     @retval EINVAL an error occurred
 
-============================================================================*/
+==============================================================================*/
 static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
 {
     const char *options = "n:i:v:g:f:F:t:T:l:";
@@ -229,12 +229,14 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                         break;
 
                     case 'i':
-                        pState->variableInfo.instanceID = strtol( optarg, NULL, 0 );
+                        pState->variableInfo.instanceID = strtol( optarg,
+                                                                  NULL,
+                                                                  0 );
                         break;
 
                     case 'f':
                         rc = VARSERVER_StrToFlags( optarg,
-                                                   &pState->variableInfo.flags );
+                                                   &pState->variableInfo.flags);
                         if ( rc != EOK )
                         {
                             fprintf( stderr, "error converting flags string\n");
@@ -345,8 +347,8 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
     return ( errcount == 0 ) ? EOK : EINVAL;
 }
 
-/*==========================================================================*/
-/*  usage                                                                   */
+/*============================================================================*/
+/*  usage                                                                     */
 /*!
     Display the usage information
 
@@ -357,7 +359,7 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
         name
             pointer to the application name
 
-============================================================================*/
+==============================================================================*/
 static void usage( char *name )
 {
     if( name != NULL )
@@ -376,8 +378,8 @@ static void usage( char *name )
     }
 }
 
-/*==========================================================================*/
-/*  MakeVar                                                                 */
+/*============================================================================*/
+/*  MakeVar                                                                   */
 /*!
     Process the make variable request
 
@@ -391,7 +393,7 @@ static void usage( char *name )
     @retval EINVAL invalid arguments
     @retval EOK variable creation was successful
 
-============================================================================*/
+==============================================================================*/
 static int MakeVar( MakeVarState *pState )
 {
     int result = EINVAL;
@@ -399,12 +401,12 @@ static int MakeVar( MakeVarState *pState )
     if( pState != NULL )
     {
         /*! request the variable server to create the variable */
-        result = VARSERVER_CreateVar( pState->hVarServer, &(pState->variableInfo) );
+        result = VARSERVER_CreateVar( pState->hVarServer,
+                                      &(pState->variableInfo) );
     }
 
     return result;
 }
-
 
 /*! @}
  * end of mkvar group */

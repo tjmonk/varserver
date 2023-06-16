@@ -1,4 +1,4 @@
-/*============================================================================
+/*==============================================================================
 MIT License
 
 Copyright (c) 2023 Trevor Monk
@@ -20,7 +20,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-============================================================================*/
+==============================================================================*/
 
 /*!
  * @defgroup notify notify
@@ -28,7 +28,7 @@ SOFTWARE.
  * @{
  */
 
-/*==========================================================================*/
+/*============================================================================*/
 /*!
 @file notify.c
 
@@ -38,11 +38,11 @@ SOFTWARE.
     notifications associated with a variable.
 
 */
-/*==========================================================================*/
+/*============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Includes
-============================================================================*/
+==============================================================================*/
 
 #include <unistd.h>
 #include <stdio.h>
@@ -58,28 +58,28 @@ SOFTWARE.
 #include "varstorage.h"
 #include "notify.h"
 
-/*============================================================================
+/*==============================================================================
         Private definitions
-============================================================================*/
+==============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Private file scoped variables
-============================================================================*/
+==============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Private function declarations
-============================================================================*/
+==============================================================================*/
 
 static int notify_Send( Notification *pNotification,
                         int handle,
                         int signal );
 
-/*============================================================================
+/*==============================================================================
         Public function definitions
-============================================================================*/
+==============================================================================*/
 
-/*==========================================================================*/
-/*  NOTIFY_Add                                                              */
+/*============================================================================*/
+/*  NOTIFY_Add                                                                */
 /*!
     Add a new notification request
 
@@ -102,7 +102,7 @@ static int notify_Send( Notification *pNotification,
     @retval ENOTSUP the notification is not supported
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int NOTIFY_Add( Notification **ppNotification,
                 NotificationType type,
                 pid_t pid )
@@ -176,8 +176,8 @@ int NOTIFY_Add( Notification **ppNotification,
     return result;
 }
 
-/*==========================================================================*/
-/*  NOTIFY_Find                                                             */
+/*============================================================================*/
+/*  NOTIFY_Find                                                               */
 /*!
     Find an existing notification request
 
@@ -201,7 +201,7 @@ int NOTIFY_Add( Notification **ppNotification,
     @retval pointer to the matching notification
     @retval NULL if there was no matching notification
 
-============================================================================*/
+==============================================================================*/
 Notification *NOTIFY_Find( Notification *pNotification,
                            NotificationType type,
                            pid_t pid )
@@ -212,7 +212,8 @@ Notification *NOTIFY_Find( Notification *pNotification,
         {
             break;
         }
-        else if( ( pNotification->type == type ) && ( pNotification->pid == pid ) )
+        else if( ( pNotification->type == type ) &&
+                 ( pNotification->pid == pid ) )
         {
             break;
         }
@@ -223,8 +224,8 @@ Notification *NOTIFY_Find( Notification *pNotification,
     return pNotification;
 }
 
-/*==========================================================================*/
-/*  NOTIFY_Signal                                                           */
+/*============================================================================*/
+/*  NOTIFY_Signal                                                             */
 /*!
     Send a notification signal to all registered clients
 
@@ -258,7 +259,7 @@ Notification *NOTIFY_Find( Notification *pNotification,
     @retval ESRCH one or more processed did not exist
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int NOTIFY_Signal( pid_t pid,
                    Notification **ppNotification,
                    NotificationType type,
@@ -356,8 +357,8 @@ int NOTIFY_Signal( pid_t pid,
     return result;
 }
 
-/*==========================================================================*/
-/*  notify_Send                                                             */
+/*============================================================================*/
+/*  notify_Send                                                               */
 /*!
     Send a notification signal
 
@@ -383,7 +384,7 @@ int NOTIFY_Signal( pid_t pid,
     @retval ESRCH the process which reqeusted the notification does not exist
     @retval EINVAL invalid arguments
 
-============================================================================*/
+==============================================================================*/
 static int notify_Send( Notification *pNotification,
                         int handle,
                         int signal )

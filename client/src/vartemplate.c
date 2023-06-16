@@ -1,4 +1,4 @@
-/*============================================================================
+/*==============================================================================
 MIT License
 
 Copyright (c) 2023 Trevor Monk
@@ -20,7 +20,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-============================================================================*/
+==============================================================================*/
 
 /*!
  * @defgroup vartemplate vartemplate
@@ -28,7 +28,7 @@ SOFTWARE.
  * @{
  */
 
-/*==========================================================================*/
+/*============================================================================*/
 /*!
 @file vartemplate.c
 
@@ -39,12 +39,12 @@ SOFTWARE.
     variable references
 
 */
-/*==========================================================================*/
+/*============================================================================*/
 
 
-/*============================================================================
+/*==============================================================================
         Includes
-============================================================================*/
+==============================================================================*/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,13 +58,13 @@ SOFTWARE.
 #include "varserver.h"
 #include "vartemplate.h"
 
-/*============================================================================
+/*==============================================================================
         Private definitions
-============================================================================*/
+==============================================================================*/
 
-/*============================================================================
+/*==============================================================================
         Type Definitions
-============================================================================*/
+==============================================================================*/
 
 /*! track the state of the templating engine across function calls */
 typedef struct tState
@@ -101,9 +101,9 @@ typedef struct tState
 
 } TState;
 
-/*============================================================================
+/*==============================================================================
         Private function declarations
-============================================================================*/
+==============================================================================*/
 
 static int ProcessInputChunk( VARSERVER_HANDLE hVarServer,
                               TState *pTState,
@@ -124,12 +124,12 @@ static int CheckEndVariable( VARSERVER_HANDLE hVarServer,
 
 static int CheckOutputBuffer( TState *pTState );
 
-/*============================================================================
+/*==============================================================================
         Function definitions
-============================================================================*/
+==============================================================================*/
 
-/*==========================================================================*/
-/*  TEMPLATE_FileToFile                                                     */
+/*============================================================================*/
+/*  TEMPLATE_FileToFile                                                       */
 /*!
     Create an output file from an input file containing a rendering template
 
@@ -153,7 +153,7 @@ static int CheckOutputBuffer( TState *pTState );
     @retval ENOTSUP - one or more variable subsititions could not be performed
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 int TEMPLATE_FileToFile( VARSERVER_HANDLE hVarServer,
                          int fd_in,
                          int fd_out )
@@ -205,8 +205,8 @@ int TEMPLATE_FileToFile( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  TEMPLATE_StrToFile                                                      */
+/*============================================================================*/
+/*  TEMPLATE_StrToFile                                                        */
 /*!
     Process an input string and expand any variables found
 
@@ -233,7 +233,7 @@ int TEMPLATE_FileToFile( VARSERVER_HANDLE hVarServer,
     @retval E2BIG - the output buffer size was exceeded
     @retval ENOTSUP - one or more substitutions failed
 
-============================================================================*/
+==============================================================================*/
 int TEMPLATE_StrToFile( VARSERVER_HANDLE hVarServer,
                         char *input,
                         int fd )
@@ -271,12 +271,12 @@ int TEMPLATE_StrToFile( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*============================================================================
+/*==============================================================================
         Private Function definitions
-============================================================================*/
+==============================================================================*/
 
-/*==========================================================================*/
-/*  ProcessInputChunk                                                       */
+/*============================================================================*/
+/*  ProcessInputChunk                                                         */
 /*!
     Process a chunk of an input string and update the translation engine output
 
@@ -310,7 +310,7 @@ int TEMPLATE_StrToFile( VARSERVER_HANDLE hVarServer,
     @retval EINVAL - invalid arguments
     @retval ENOTSUP - one or more substitutions failed
 
-============================================================================*/
+==============================================================================*/
 static int ProcessInputChunk( VARSERVER_HANDLE hVarServer,
                               TState *pTState,
                               char *input,
@@ -374,8 +374,8 @@ static int ProcessInputChunk( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  CheckOutputBuffer                                                       */
+/*============================================================================*/
+/*  CheckOutputBuffer                                                         */
 /*!
     Check if we have reached the end of the output buffer
 
@@ -391,7 +391,7 @@ static int ProcessInputChunk( VARSERVER_HANDLE hVarServer,
     @retval EOK - output buffer was successfully checked
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 static int CheckOutputBuffer( TState *pTState )
 {
     int result = EINVAL;
@@ -412,8 +412,8 @@ static int CheckOutputBuffer( TState *pTState )
     return result;
 }
 
-/*==========================================================================*/
-/*  CheckStartDirective                                                     */
+/*============================================================================*/
+/*  CheckStartDirective                                                       */
 /*!
     Check if we are processing the start of a variable substitution directive
 
@@ -440,7 +440,7 @@ static int CheckOutputBuffer( TState *pTState )
     @retval EINVAL - invalid arguments
     @retval ENOENT - normal character copied to the output stream buffer
 
-============================================================================*/
+==============================================================================*/
 static int CheckStartDirective( TState *pTState, char c )
 {
     int result = EINVAL;
@@ -465,8 +465,8 @@ static int CheckStartDirective( TState *pTState, char c )
     return result;
 }
 
-/*==========================================================================*/
-/*  CheckStartVariable                                                      */
+/*============================================================================*/
+/*  CheckStartVariable                                                        */
 /*!
     Check if we are processing the start of a variable substitution directive
 
@@ -494,7 +494,7 @@ static int CheckStartDirective( TState *pTState, char c )
     @retval EINVAL - invalid arguments
     @retval ENOENT - normal character copied to the output stream buffer
 
-============================================================================*/
+==============================================================================*/
 static int CheckStartVariable( TState *pTState, char c )
 {
     int result = EINVAL;
@@ -533,8 +533,8 @@ static int CheckStartVariable( TState *pTState, char c )
 }
 
 
-/*==========================================================================*/
-/*  CheckEndVariable                                                        */
+/*============================================================================*/
+/*  CheckEndVariable                                                          */
 /*!
     Check if we are processing the end of a variable substitution directive
 
@@ -565,7 +565,7 @@ static int CheckStartVariable( TState *pTState, char c )
     @retval ENOENT - normal character which is part of the variable name string
     @retval ENOTSUP - Variable was not found and substitution was not done
 
-============================================================================*/
+==============================================================================*/
 static int CheckEndVariable( VARSERVER_HANDLE hVarServer,
                             TState *pTState,
                             char c )
@@ -608,8 +608,8 @@ static int CheckEndVariable( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
-/*==========================================================================*/
-/*  SubstituteVariable                                                      */
+/*============================================================================*/
+/*  SubstituteVariable                                                        */
 /*!
     Substitute a variable name with its value and write to the output stream
 
@@ -634,7 +634,7 @@ static int CheckEndVariable( VARSERVER_HANDLE hVarServer,
     @retval EINVAL - invalid arguments
     @retval ENOTSUP - one or more substitutions failed
 
-============================================================================*/
+==============================================================================*/
 static int SubstituteVariable( VARSERVER_HANDLE hVarServer, TState *pTState )
 {
     int result = EINVAL;
@@ -680,8 +680,8 @@ static int SubstituteVariable( VARSERVER_HANDLE hVarServer, TState *pTState )
     return result;
 }
 
-/*==========================================================================*/
-/*  FlushOutputBuffer                                                       */
+/*============================================================================*/
+/*  FlushOutputBuffer                                                         */
 /*!
     Flush the output buffer to the output stream
 
@@ -699,7 +699,7 @@ static int SubstituteVariable( VARSERVER_HANDLE hVarServer, TState *pTState )
     @retval EOK - output generation was successful
     @retval EINVAL - invalid arguments
 
-============================================================================*/
+==============================================================================*/
 static int FlushOutputBuffer( TState *pTState )
 {
     int result = EINVAL;
