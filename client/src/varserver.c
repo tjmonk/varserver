@@ -2477,7 +2477,7 @@ static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf )
                 break;
 
             case VARTYPE_BLOB:
-                dprintf(fd, "%s", "<object>");
+                dprintf(fd, "%s len=%d>", "<object:", pInfo->var.len);
                 result = EOK;
                 break;
 

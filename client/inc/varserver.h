@@ -95,6 +95,10 @@ int VARSERVER_ParseValueString( VarObject *var, char *valueString );
 /* variable functions */
 VAR_HANDLE VAR_FindByName( VARSERVER_HANDLE hVarServer, char *pName );
 
+int VAR_GetLength( VARSERVER_HANDLE hVarServer,
+                   VAR_HANDLE hVar,
+                   size_t *len );
+
 int VAR_Print( VARSERVER_HANDLE hVarServer,
                VAR_HANDLE hVar,
                int fd );
