@@ -2478,6 +2478,7 @@ static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf )
 
             case VARTYPE_BLOB:
                 dprintf(fd, "%s", "<object>");
+                result = EOK;
                 break;
 
             case VARTYPE_STR:
