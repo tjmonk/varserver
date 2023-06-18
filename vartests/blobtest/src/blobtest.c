@@ -181,14 +181,24 @@ void main(int argc, char **argv)
             obj.len = len;
             obj.val.blob = malloc( len );
 
-            if ( state.set )
+            if ( state.set == true )
             {
+                if ( state.verbose == true )
+                {
+                    printf("Setting %s\n", state.varname );
+                }
+
                 GetRandomData( &state, &obj );
                 VAR_Set( state.hVarServer, hVar, &obj );
             }
 
             if ( state.get )
             {
+                if ( state.verbose == true )
+                {
+                    printf("Getting %s\n", state.varname );
+                }
+
                 VAR_Get( state.hVarServer, hVar, &obj );
                 PrintBlobObj( &state, &obj, STDOUT_FILENO );
             }
@@ -226,6 +236,11 @@ void main(int argc, char **argv)
 
                 if ( hVar == hTestVar )
                 {
+                    if ( state.verbose == true )
+                    {
+                        printf( "Rendering %s\n", state.varname );
+                    }
+
                     /* print the blob */
                     PrintBlobObj( &state, &obj, fd );
                 }
@@ -237,13 +252,22 @@ void main(int argc, char **argv)
             }
             else if ( sig == SIG_VAR_CALC )
             {
+                if ( state.verbose == true )
+                {
+                    printf("Calculating %s\n", state.varname );
+                }
+
                 hVar = (VAR_HANDLE)sigval;
                 GetRandomData( &state, &obj );
                 VAR_Set( state.hVarServer, hVar, &obj );
             }
             else if ( sig == SIG_VAR_MODIFIED )
             {
-                dprintf( STDOUT_FILENO, "\033[2J" );
+                printf( "\033[2J]" );
+                if ( state.verbose == true )
+                {
+                    printf("%s\n", state.varname );
+                }
                 hVar = (VAR_HANDLE)sigval;
                 VAR_Get( state.hVarServer, hVar, &obj );
                 PrintBlobObj( &state, &obj, STDOUT_FILENO );
@@ -347,6 +371,10 @@ static int ProcessOptions( int argC, char *argV[], BlobTestState *pState )
                     pState->wait = true;
                     break;
 
+                case 'v':
+                    pState->verbose = true;
+                    break;
+
                 default:
                     break;
 
@@ -392,7 +420,7 @@ static int GetRandomData( BlobTestState *pState, VarObject *pVarObject )
     {
         if ( pVarObject->type == VARTYPE_BLOB )
         {
-            if ( pState->verbose )
+            if ( pState->verbose == true )
             {
                 printf( "Generating Random Blob Data for %s\n",
                         pState->varname );
