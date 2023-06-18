@@ -88,6 +88,12 @@ typedef struct blobtestState
     /*! name of blob variable */
     char *varname;
 
+    /*! count render actions*/
+    size_t rendercount;
+
+    /*! count calc actions */
+    size_t calccount;
+
 } BlobTestState;
 
 /*==============================================================================
@@ -236,9 +242,12 @@ void main(int argc, char **argv)
 
                 if ( hVar == hTestVar )
                 {
+                    state.rendercount++;
                     if ( state.verbose == true )
                     {
-                        printf( "Rendering %s\n", state.varname );
+                        printf( "Rendering %s [%d]\n",
+                                state.varname,
+                                state.rendercount );
                     }
 
                     /* get the blob data */
@@ -255,9 +264,12 @@ void main(int argc, char **argv)
             }
             else if ( sig == SIG_VAR_CALC )
             {
+                state.calccount++;
                 if ( state.verbose == true )
                 {
-                    printf("Calculating %s\n", state.varname );
+                    printf( "Calculating %s [%d]\n",
+                            state.varname,
+                            state.calccount );
                 }
 
                 hVar = (VAR_HANDLE)sigval;
