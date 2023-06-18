@@ -241,6 +241,9 @@ void main(int argc, char **argv)
                         printf( "Rendering %s\n", state.varname );
                     }
 
+                    /* get the blob data */
+                    VAR_Get( state.hVarServer, hVar, &obj );
+
                     /* print the blob */
                     PrintBlobObj( &state, &obj, fd );
                 }
@@ -270,7 +273,8 @@ void main(int argc, char **argv)
                 }
                 hVar = (VAR_HANDLE)sigval;
                 VAR_Get( state.hVarServer, hVar, &obj );
-                PrintBlobObj( &state, &obj, STDOUT_FILENO );
+
+                ( &state, &obj, STDOUT_FILENO );
             }
         }
 
