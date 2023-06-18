@@ -314,7 +314,7 @@ static int ProcessOptions( int argC, char *argV[], BlobTestState *pState )
 {
     int c;
     int result = EINVAL;
-    const char *options = "hgscpw";
+    const char *options = "vhgscpw";
 
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
