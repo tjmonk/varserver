@@ -189,7 +189,7 @@ void main(int argc, char **argv)
                 }
 
                 GetRandomData( &state, &obj );
-                VAR_Set( state.hVarServer, hVar, &obj );
+                VAR_Set( state.hVarServer, hTestVar, &obj );
             }
 
             if ( state.get )
@@ -199,7 +199,7 @@ void main(int argc, char **argv)
                     printf("Getting %s\n", state.varname );
                 }
 
-                VAR_Get( state.hVarServer, hVar, &obj );
+                VAR_Get( state.hVarServer, hTestVar, &obj );
                 PrintBlobObj( &state, &obj, STDOUT_FILENO );
             }
 
