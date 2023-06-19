@@ -88,11 +88,20 @@ typedef struct blobtestState
     /*! name of blob variable */
     char *varname;
 
+    /*! number of times to get or set */
+    size_t n;
+
+    /* delay in milliseconds between sets/gets */
+    int delay;
+
     /*! count render actions*/
     size_t rendercount;
 
     /*! count calc actions */
     size_t calccount;
+
+    /*! modified count */
+    size_t modifiedcount;
 
 } BlobTestState;
 
@@ -158,6 +167,7 @@ void main(int argc, char **argv)
     memset( &state, 0, sizeof( BlobTestState ) );
 
     state.varname = "/sys/test/blob";
+    state.n = 1;
 
     if( ( argc < 2 ) ||
         ( state.usage == true ) )
@@ -187,7 +197,8 @@ void main(int argc, char **argv)
             obj.len = len;
             obj.val.blob = malloc( len );
 
-            if ( state.set == true )
+            /* var set loop */
+            while ( ( state.set == true ) && ( state.n > 0 ) )
             {
                 if ( state.verbose == true )
                 {
@@ -196,9 +207,16 @@ void main(int argc, char **argv)
 
                 GetRandomData( &state, &obj );
                 VAR_Set( state.hVarServer, hTestVar, &obj );
+                state.n--;
+
+                if ( state.delay > 0 )
+                {
+                    usleep( state.delay * 1000 );
+                }
             }
 
-            if ( state.get )
+            /* var get loop */
+            while ( ( state.get == true ) && ( state.n > 0 ) )
             {
                 if ( state.verbose == true )
                 {
@@ -206,7 +224,18 @@ void main(int argc, char **argv)
                 }
 
                 VAR_Get( state.hVarServer, hTestVar, &obj );
-                PrintBlobObj( &state, &obj, STDOUT_FILENO );
+                state.n--;
+
+                if ( state.verbose == true )
+                {
+                    PrintBlobObj( &state, &obj, STDOUT_FILENO );
+                    printf("\n");
+                }
+
+                if ( state.delay > 0 )
+                {
+                    usleep( state.delay * 1000 );
+                }
             }
 
             /* tell varserver we will handle PRINT and CALC notifications
@@ -245,7 +274,7 @@ void main(int argc, char **argv)
                     state.rendercount++;
                     if ( state.verbose == true )
                     {
-                        printf( "Rendering %s [%d]\n",
+                        printf( "Rendering %s [%ld]\n",
                                 state.varname,
                                 state.rendercount );
                     }
@@ -267,7 +296,7 @@ void main(int argc, char **argv)
                 state.calccount++;
                 if ( state.verbose == true )
                 {
-                    printf( "Calculating %s [%d]\n",
+                    printf( "Calculating %s [%ld]\n",
                             state.varname,
                             state.calccount );
                 }
@@ -278,15 +307,16 @@ void main(int argc, char **argv)
             }
             else if ( sig == SIG_VAR_MODIFIED )
             {
-                printf( "\033[2J]" );
+                state.modifiedcount++;
+                dprintf( STDOUT_FILENO, "\033[H\033[J" );
                 if ( state.verbose == true )
                 {
-                    printf("%s\n", state.varname );
+                    dprintf( STDOUT_FILENO, "%s\n", state.varname );
                 }
                 hVar = (VAR_HANDLE)sigval;
                 VAR_Get( state.hVarServer, hVar, &obj );
-
-                ( &state, &obj, STDOUT_FILENO );
+                PrintBlobObj( &state, &obj, STDOUT_FILENO );
+                printf("\n%ld\n", state.modifiedcount);
             }
         }
 
@@ -314,14 +344,19 @@ static void usage( char *cmdname )
     if( cmdname != NULL )
     {
         fprintf(stderr,
-                "usage: %s [-v] [-h] [-g] [-s] [-c] [-p] [-m] <blobname>\n"
+                "usage: %s [-v] [-h] [-g] [-s] [-c] [-p] [-m] "
+                " [-n count]"
+                " [-d time] "
+                " <blobname>\n"
                 " [-v] : verbose mode\n"
                 " [-h] : display this help\n"
                 " [-g] : get the blob\n"
                 " [-s] : set the blob\n"
                 " [-c] : calculate the blob\n"
                 " [-p] : print the blob\n"
-                " [-w] : wait for modified blob\n",
+                " [-w] : wait for modified blob\n"
+                " [-n] : number of times to get or set (use with -s, -g)\n"
+                " [-d] : delay (ms).  (use with -n, -s, -g)\n",
                 cmdname );
     }
 }
@@ -354,7 +389,7 @@ static int ProcessOptions( int argC, char *argV[], BlobTestState *pState )
 {
     int c;
     int result = EINVAL;
-    const char *options = "vhgscpw";
+    const char *options = "vhgscpwn:d:";
 
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
@@ -389,6 +424,14 @@ static int ProcessOptions( int argC, char *argV[], BlobTestState *pState )
 
                 case 'v':
                     pState->verbose = true;
+                    break;
+
+                case 'n':
+                    pState->n = atol( optarg );
+                    break;
+
+                case 'd':
+                    pState->delay = atoi( optarg );
                     break;
 
                 default:
@@ -496,18 +539,13 @@ static int PrintBlobObj( BlobTestState *pState, VarObject *pObj, int fd )
     {
         if ( pObj->type == VARTYPE_BLOB )
         {
-            if ( pState->verbose == true )
-            {
-                dprintf(fd, "%s:\n", pState->varname );
-            }
-
             len = pObj->len;
             p = (uint8_t *)(pObj->val.blob);
             if ( p != NULL )
             {
                 for ( i = 0; i < len ; i ++ )
                 {
-                    if ( i % 64 == 0 )
+                    if ( i % 32 == 0 )
                     {
                         dprintf(fd, "\n");
                     }
