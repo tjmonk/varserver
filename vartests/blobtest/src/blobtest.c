@@ -171,6 +171,7 @@ void main(int argc, char **argv)
 
     state.varname = "/sys/test/blob";
     state.n = 1;
+    state.quiet = false;
 
     if( ( argc < 2 ) ||
         ( state.usage == true ) )
@@ -313,7 +314,6 @@ void main(int argc, char **argv)
                 state.modifiedcount++;
                 hVar = (VAR_HANDLE)sigval;
                 VAR_Get( state.hVarServer, hVar, &obj );
-                PrintBlobObj( &state, &obj, STDOUT_FILENO );
 
                 if ( state.quiet == false )
                 {
@@ -322,6 +322,8 @@ void main(int argc, char **argv)
                     {
                         dprintf( STDOUT_FILENO, "%s\n", state.varname );
                     }
+
+                    PrintBlobObj( &state, &obj, STDOUT_FILENO );
                     printf("\n%ld\n", state.modifiedcount);
                 }
             }
