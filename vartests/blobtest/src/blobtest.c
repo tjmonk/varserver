@@ -85,6 +85,9 @@ typedef struct blobtestState
     /*! client waits for variable to be modified */
     bool wait;
 
+    /*! quiet mode - suppress all output */
+    bool quiet;
+
     /*! name of blob variable */
     char *varname;
 
@@ -308,15 +311,19 @@ void main(int argc, char **argv)
             else if ( sig == SIG_VAR_MODIFIED )
             {
                 state.modifiedcount++;
-                dprintf( STDOUT_FILENO, "\033[H\033[J" );
-                if ( state.verbose == true )
-                {
-                    dprintf( STDOUT_FILENO, "%s\n", state.varname );
-                }
                 hVar = (VAR_HANDLE)sigval;
                 VAR_Get( state.hVarServer, hVar, &obj );
                 PrintBlobObj( &state, &obj, STDOUT_FILENO );
-                printf("\n%ld\n", state.modifiedcount);
+
+                if ( state.quiet == false )
+                {
+                    dprintf( STDOUT_FILENO, "\033[H\033[J" );
+                    if ( state.verbose == true )
+                    {
+                        dprintf( STDOUT_FILENO, "%s\n", state.varname );
+                    }
+                    printf("\n%ld\n", state.modifiedcount);
+                }
             }
         }
 
@@ -356,7 +363,8 @@ static void usage( char *cmdname )
                 " [-p] : print the blob\n"
                 " [-w] : wait for modified blob\n"
                 " [-n] : number of times to get or set (use with -s, -g)\n"
-                " [-d] : delay (ms).  (use with -n, -s, -g)\n",
+                " [-d] : delay (ms).  (use with -n, -s, -g)\n"
+                " [-q] : quiet mode\n",
                 cmdname );
     }
 }
@@ -389,7 +397,7 @@ static int ProcessOptions( int argC, char *argV[], BlobTestState *pState )
 {
     int c;
     int result = EINVAL;
-    const char *options = "vhgscpwn:d:";
+    const char *options = "vhgscpwn:d:q";
 
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
@@ -434,9 +442,12 @@ static int ProcessOptions( int argC, char *argV[], BlobTestState *pState )
                     pState->delay = atoi( optarg );
                     break;
 
-                default:
+                case 'q':
+                    pState->quiet = true;
                     break;
 
+                default:
+                    break;
             }
         }
 
@@ -569,8 +580,8 @@ static int PrintBlobObj( BlobTestState *pState, VarObject *pObj, int fd )
     return result;
 }
 
-/*==========================================================================*/
-/*  SetupTerminationHandler                                                 */
+/*============================================================================*/
+/*  SetupTerminationHandler                                                   */
 /*!
     Set up an abnormal termination handler
 
@@ -578,7 +589,7 @@ static int PrintBlobObj( BlobTestState *pState, VarObject *pObj, int fd )
     function with the kernel in case of an abnormal termination of this
     process.
 
-============================================================================*/
+==============================================================================*/
 static void SetupTerminationHandler( void )
 {
     static struct sigaction sigact;
