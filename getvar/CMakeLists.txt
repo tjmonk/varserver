@@ -3,11 +3,9 @@ cmake_minimum_required(VERSION 3.10)
 include(GNUInstallDirs)
 
 project(getvar
-	VERSION 0.1
+	VERSION ${VARSERVER_VERSION}
 	DESCRIPTION "Utility to get a Variable value"
 )
-
-find_library( LIB_VARSERVER varserver REQUIRED )
 
 add_executable( ${PROJECT_NAME}
 	src/getvar.c
@@ -21,11 +19,11 @@ target_include_directories( ${PROJECT_NAME}
 target_link_libraries( ${PROJECT_NAME}
 	${CMAKE_THREAD_LIBS_INIT}
 	rt
-	${LIB_VARSERVER}
+	varserver
 )
 
-set_target_properties(${PROJECT_NAME} 
-    PROPERTIES 
+set_target_properties(${PROJECT_NAME}
+    PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )

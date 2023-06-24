@@ -54,8 +54,8 @@ SOFTWARE.
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <varserver/varserver.h>
-#include <varserver/vartemplate.h>
+#include "varserver.h"
+#include "vartemplate.h"
 
 /*==============================================================================
         Private definitions

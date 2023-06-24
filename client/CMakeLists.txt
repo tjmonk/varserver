@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 # set the project name
 project(varserver
-	VERSION 0.2
+	VERSION ${VARSERVER_VERSION}
 	DESCRIPTION "Variable Server Interface Functions"
 )
 
@@ -37,8 +37,8 @@ set(VARSERVER_HEADERS
     inc/varquery.h
     inc/vartemplate.h)
 
-set_target_properties(${PROJECT_NAME} 
-    PROPERTIES 
+set_target_properties(${PROJECT_NAME}
+    PROPERTIES
     PUBLIC_HEADER "${VARSERVER_HEADERS}"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"

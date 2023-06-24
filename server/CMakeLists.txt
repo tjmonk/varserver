@@ -3,15 +3,13 @@ cmake_minimum_required(VERSION 3.10)
 include(GNUInstallDirs)
 
 project(varserver-bin
-    VERSION 0.1
+    VERSION ${VARSERVER_VERSION}
     DESCRIPTION "Variable Server"
 )
 
 #SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 
 find_package( Threads REQUIRED )
-
-find_library( LIB_VARSERVER varserver REQUIRED )
 
 add_executable( ${PROJECT_NAME}
     src/blocklist.c
@@ -32,11 +30,11 @@ target_include_directories( ${PROJECT_NAME}
 target_link_libraries( ${PROJECT_NAME}
     ${CMAKE_THREAD_LIBS_INIT}
     rt
-    ${LIB_VARSERVER}
+    varserver
 )
 
 set_target_properties( ${PROJECT_NAME}
-    PROPERTIES 
+    PROPERTIES
     OUTPUT_NAME varserver
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"

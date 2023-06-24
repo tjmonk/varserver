@@ -3,11 +3,9 @@ cmake_minimum_required(VERSION 3.10)
 include(GNUInstallDirs)
 
 project(mkvar
-	VERSION 0.1
+	VERSION ${VARSERVER_VERSION}
 	DESCRIPTION "Utility to create a Variable"
 )
-
-find_library( LIB_VARSERVER varserver REQUIRED )
 
 add_executable( ${PROJECT_NAME}
 	src/mkvar.c
@@ -21,7 +19,7 @@ target_include_directories( ${PROJECT_NAME}
 target_link_libraries( ${PROJECT_NAME}
 	${CMAKE_THREAD_LIBS_INIT}
 	rt
-	${LIB_VARSERVER}
+	varserver
 )
 
 install(TARGETS ${PROJECT_NAME}
