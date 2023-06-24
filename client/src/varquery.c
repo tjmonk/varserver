@@ -55,9 +55,9 @@ SOFTWARE.
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "var.h"
-#include "varserver.h"
-#include "varquery.h"
+#include <varserver/var.h>
+#include <varserver/varserver.h>
+#include <varserver/varquery.h>
 
 /*==============================================================================
         Private definitions

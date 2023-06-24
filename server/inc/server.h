@@ -30,8 +30,8 @@ SOFTWARE.
 ============================================================================*/
 
 #include <stdint.h>
-#include "varclient.h"
-#include "var.h"
+#include <varserver/varclient.h>
+#include <varserver/var.h>
 #include "notify.h"
 
 /*============================================================================

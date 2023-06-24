@@ -58,7 +58,7 @@ SOFTWARE.
 #include <strings.h>
 #include <errno.h>
 #include <fcntl.h>
-#include "varfp.h"
+#include <varserver/varfp.h>
 
 /*==============================================================================
         Private type declarations

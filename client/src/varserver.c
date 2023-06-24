@@ -60,11 +60,11 @@ SOFTWARE.
 #include <errno.h>
 #include <semaphore.h>
 #include <string.h>
-#include "varobject.h"
-#include "varclient.h"
-#include "varserver.h"
-#include "varprint.h"
-#include "var.h"
+#include <varserver/varobject.h>
+#include <varserver/varclient.h>
+#include <varserver/varserver.h>
+#include <varserver/varprint.h>
+#include <varserver/var.h>
 
 /*==============================================================================
         Private function declarations

@@ -54,7 +54,7 @@ SOFTWARE.
 #include <fcntl.h>
 #include <semaphore.h>
 #include <string.h>
-#include "var.h"
+#include <varserver/var.h>
 #include "varstorage.h"
 #include "notify.h"
 

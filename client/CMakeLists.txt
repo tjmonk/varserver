@@ -27,15 +27,15 @@ set_target_properties( ${PROJECT_NAME} PROPERTIES
 target_link_libraries( ${PROJECT_NAME} rt )
 
 set(VARSERVER_HEADERS
-    inc/varclient.h
-    inc/varobject.h
-    inc/var.h
-    inc/varserver.h
-    inc/varprint.h
-    inc/varcache.h
-    inc/varfp.h
-    inc/varquery.h
-    inc/vartemplate.h)
+    inc/varserver/varclient.h
+    inc/varserver/varobject.h
+    inc/varserver/var.h
+    inc/varserver/varserver.h
+    inc/varserver/varprint.h
+    inc/varserver/varcache.h
+    inc/varserver/varfp.h
+    inc/varserver/varquery.h
+    inc/varserver/vartemplate.h)
 
 set_target_properties(${PROJECT_NAME}
     PROPERTIES

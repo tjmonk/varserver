@@ -74,11 +74,11 @@ SOFTWARE.
 #include <sys/un.h>
 #include <string.h>
 #include <errno.h>
-#include "varobject.h"
-#include "varclient.h"
-#include "varserver.h"
-#include "var.h"
-#include "varcache.h"
+#include <varserver/varobject.h>
+#include <varserver/varclient.h>
+#include <varserver/varserver.h>
+#include <varserver/var.h>
+#include <varserver/varcache.h>
 
 /*==============================================================================
         Private type declarations

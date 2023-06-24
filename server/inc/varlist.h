@@ -32,7 +32,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include "../../client/inc/var.h"
+#include <varserver/var.h>
 
 /*============================================================================
         Public definitions

@@ -52,7 +52,7 @@ SOFTWARE.
 #include <unistd.h>
 #include <syslog.h>
 #include <fcntl.h>
-#include "varserver.h"
+#include <varserver/varserver.h>
 
 /*==============================================================================
         Private definitions

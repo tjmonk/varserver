@@ -60,7 +60,7 @@ SOFTWARE.
 #include <semaphore.h>
 #include <string.h>
 #include <inttypes.h>
-#include "varobject.h"
+#include <varserver/varobject.h>
 
 /*==============================================================================
         Private data types

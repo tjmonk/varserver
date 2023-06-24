@@ -30,7 +30,7 @@ SOFTWARE.
 ============================================================================*/
 
 #include <stdint.h>
-#include "varserver.h"
+#include <varserver/varserver.h>
 
 /*============================================================================
         Public definitions

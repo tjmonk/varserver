@@ -48,7 +48,7 @@ SOFTWARE.
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
-#include "varserver.h"
+#include <varserver/varserver.h>
 
 /*==============================================================================
         Private definitions

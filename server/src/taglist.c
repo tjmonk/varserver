@@ -57,8 +57,8 @@ SOFTWARE.
 #include <fcntl.h>
 #include <semaphore.h>
 #include <string.h>
-#include "var.h"
-#include "varserver.h"
+#include <varserver/var.h>
+#include <varserver/varserver.h>
 #include "taglist.h"
 
 /*==============================================================================

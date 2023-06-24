@@ -30,7 +30,7 @@ SOFTWARE.
 ============================================================================*/
 
 #include <stdint.h>
-#include "../../client/inc/var.h"
+#include <varserver/var.h>
 
 /*============================================================================
         Public function declarations

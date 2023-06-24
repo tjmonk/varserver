@@ -54,10 +54,10 @@ SOFTWARE.
 #include <fcntl.h>
 #include <semaphore.h>
 #include <string.h>
-#include "varclient.h"
-#include "varserver.h"
-#include "varobject.h"
-#include "var.h"
+#include <varserver/varclient.h>
+#include <varserver/varserver.h>
+#include <varserver/varobject.h>
+#include <varserver/var.h>
 #include "server.h"
 #include "varstorage.h"
 #include "varlist.h"

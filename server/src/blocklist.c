@@ -55,7 +55,7 @@ SOFTWARE.
 #include <fcntl.h>
 #include <semaphore.h>
 #include <string.h>
-#include "varclient.h"
+#include <varserver/varclient.h>
 #include "blocklist.h"
 
 /*==============================================================================

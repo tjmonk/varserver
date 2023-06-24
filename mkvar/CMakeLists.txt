@@ -13,7 +13,7 @@ add_executable( ${PROJECT_NAME}
 
 target_include_directories( ${PROJECT_NAME}
 	PRIVATE inc
-    PRIVATE ../client/inc
+    PRIVATE ../client/include
 )
 
 target_link_libraries( ${PROJECT_NAME}

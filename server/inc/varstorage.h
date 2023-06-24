@@ -29,8 +29,8 @@ SOFTWARE.
         Includes
 ============================================================================*/
 
-#include "../../client/inc/varclient.h"
-#include "../../client/inc/var.h"
+#include <varserver/varclient.h>
+#include <varserver/var.h>
 #include "notify.h"
 
 /*============================================================================

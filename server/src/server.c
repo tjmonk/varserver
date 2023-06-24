@@ -58,8 +58,8 @@ SOFTWARE.
 #include <fcntl.h>
 #include <semaphore.h>
 #include <string.h>
-#include "varclient.h"
-#include "varserver.h"
+#include <varserver/varclient.h>
+#include <varserver/varserver.h>
 #include "varlist.h"
 #include "taglist.h"
 #include "blocklist.h"

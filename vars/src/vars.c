@@ -61,8 +61,8 @@ SOFTWARE.
 #include <signal.h>
 #include <syslog.h>
 #include <errno.h>
-#include "varserver.h"
-#include "varquery.h"
+#include <varserver/varserver.h>
+#include <varserver/varquery.h>
 
 /*==============================================================================
        Type Definitions
