@@ -208,6 +208,9 @@ int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle )
                 {
                     /* increment the number of variables */
                     varcount++;
+
+                    /* assign the variable handle */
+                    *pVarHandle = varhandle;
                 }
             }
         }
@@ -665,7 +668,6 @@ int VARLIST_Set( pid_t clientPID,
             {
                 /* indicate that there is no validation in progress */
                 *validationInProgress = false;
-
                 switch( pVarStorage->var.type )
                 {
                     case VARTYPE_BLOB:

@@ -54,6 +54,7 @@ SOFTWARE.
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <sys/syslog.h>
+#include <time.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <semaphore.h>
@@ -72,6 +73,9 @@ SOFTWARE.
 
 /*! Maximum number of clients */
 #define MAX_VAR_CLIENTS                 ( 256 )
+
+/*! Timer Signal */
+#define SIG_TIMER                       ( SIGRTMIN + 5 )
 
 /*==============================================================================
         Private types
@@ -94,11 +98,32 @@ typedef struct _RequestHandler
 
 } RequestHandler;
 
+/*! the RequestStats is used to track the total number of requests
+    handled by the variable server, as well as the number of
+    requests per second */
+typedef struct _RequestStats
+{
+    /*! track the number of requests */
+    size_t requestCount;
+
+    /*! total request count */
+    size_t totalRequestCount;
+
+    /*! Track the number of requests per second */
+    size_t requestsPerSec;
+
+    /*! handle to the varserver transaction count statistic */
+    VAR_HANDLE hTransactionCount;
+
+    /*! handle to the varserver transactions per second statistic */
+    VAR_HANDLE hTransactionsPerSecond;
+} RequestStats;
+
 /*==============================================================================
         Private function declarations
 ==============================================================================*/
 static int NewClient( pid_t pid );
-static int ProcessRequest( siginfo_t *pInfo );
+static int ProcessRequest( siginfo_t *pInfo, RequestStats *pStats );
 static int UnblockClient( VarClient *pVarClient );
 static int GetClientID( void );
 static int SetupServerInfo( void );
@@ -124,6 +149,11 @@ static int ProcessVarRequestClosePrintSession( VarClient *pVarClient );
 static int ProcessVarRequestGetFirst( VarClient *pVarClient );
 static int ProcessVarRequestGetNext( VarClient *pVarClient );
 
+
+static int InitStats( RequestStats *pStats );
+static void CreateStatsTimer( int timeoutms );
+static void ProcessStats( RequestStats *pStats );
+
 /*==============================================================================
         Private file scoped variables
 ==============================================================================*/
@@ -137,19 +167,84 @@ static ServerInfo *pServerInfo = NULL;
     in the Request array */
 static RequestHandler RequestHandlers[] =
 {
-    { VARREQUEST_INVALID, "INVALID", ProcessVarRequestInvalid, 0 },
-    { VARREQUEST_OPEN, "OPEN", NULL, 0 },
-    { VARREQUEST_CLOSE, "CLOSE", ProcessVarRequestClose, 0 },
-    { VARREQUEST_ECHO, "ECHO", ProcessVarRequestEcho, 0 },
-    { VARREQUEST_NEW, "NEW", ProcessVarRequestNew, 0 },
-    { VARREQUEST_FIND, "FIND", ProcessVarRequestFind, 0 },
-    { VARREQUEST_GET, "GET", ProcessVarRequestGet, 0 },
-    { VARREQUEST_PRINT, "PRINT", ProcessVarRequestPrint, 0 },
-    { VARREQUEST_SET, "SET", ProcessVarRequestSet, 0 },
-    { VARREQUEST_TYPE, "TYPE", ProcessVarRequestType, 0 },
-    { VARREQUEST_NAME, "NAME", ProcessVarRequestName, 0 },
-    { VARREQUEST_LENGTH, "LENGTH", ProcessVarRequestLength, 0 },
-    { VARREQUEST_NOTIFY, "NOTIFY", ProcessVarRequestNotify, 0 },
+    {
+        VARREQUEST_INVALID,
+        "INVALID",
+        ProcessVarRequestInvalid,
+        0
+    },
+    {
+        VARREQUEST_OPEN,
+        "OPEN",
+        NULL,
+        0
+    },
+    {
+        VARREQUEST_CLOSE,
+        "CLOSE",
+        ProcessVarRequestClose,
+        0
+    },
+    {
+        VARREQUEST_ECHO,
+        "ECHO",
+        ProcessVarRequestEcho,
+        0
+    },
+    {
+        VARREQUEST_NEW,
+        "NEW",
+        ProcessVarRequestNew,
+        0
+    },
+    {
+        VARREQUEST_FIND,
+        "FIND",
+        ProcessVarRequestFind,
+        0
+    },
+    {
+        VARREQUEST_GET,
+        "GET",
+        ProcessVarRequestGet,
+        0
+    },
+    {
+        VARREQUEST_PRINT,
+        "PRINT",
+        ProcessVarRequestPrint,
+        0
+    },
+    {
+        VARREQUEST_SET,
+        "SET",
+        ProcessVarRequestSet,
+        0
+    },
+    {
+        VARREQUEST_TYPE,
+        "TYPE",
+        ProcessVarRequestType,
+        0
+    },
+    {
+        VARREQUEST_NAME,
+        "NAME",
+        ProcessVarRequestName,
+        0
+    },
+    {
+        VARREQUEST_LENGTH,
+        "LENGTH",
+        ProcessVarRequestLength,
+        0
+    },
+    {
+        VARREQUEST_NOTIFY,
+        "NOTIFY",
+        ProcessVarRequestNotify,
+        0
+    },
     {
         VARREQUEST_GET_VALIDATION_REQUEST,
         "VALIDATION_REQUEST",
@@ -219,18 +314,23 @@ void main(int argc, char **argv)
     int signum;
     int count = 0;
     ServerInfo *pServerInfo = NULL;
+    RequestStats stats;
 
     printf("SERVER: pid=%d\n", getpid());
+
 
     sigemptyset(&mask);
     sigaddset(&mask, SIG_NEWCLIENT );
     sigaddset(&mask, SIG_CLIENT_REQUEST );
+    sigaddset(&mask, SIG_TIMER );
     sigprocmask(SIG_BLOCK, &mask, NULL );
 
     /* Set up server information structure */
     pServerInfo = InitServerInfo();
     if( pServerInfo != NULL )
     {
+        InitStats( &stats );
+
         while(1)
         {
             memset( &info, 0, sizeof( siginfo_t ) );
@@ -241,11 +341,15 @@ void main(int argc, char **argv)
             }
             else if ( signum == SIG_CLIENT_REQUEST )
             {
-                ProcessRequest( &info );
+                ProcessRequest( &info, &stats );
+            }
+            else if ( signum == SIG_TIMER )
+            {
+                ProcessStats( &stats );
             }
             else
             {
-                sleep(1);
+                /* should not get here */
             }
         }
     }
@@ -360,7 +464,7 @@ static int GetClientID( void )
     @retval EINVAL invalid argument
 
 ==============================================================================*/
-static int ProcessRequest( siginfo_t *pInfo )
+static int ProcessRequest( siginfo_t *pInfo, RequestStats *pStats )
 {
     int result = EINVAL;
     int clientid;
@@ -368,10 +472,15 @@ static int ProcessRequest( siginfo_t *pInfo )
     VarRequest requestType;
     int (*handler)(VarClient *pVarClient);
 
-    if( pInfo != NULL )
+    if ( ( pInfo != NULL ) &&
+         ( pStats != NULL ) )
     {
         /* get the client id */
         clientid = pInfo->si_value.sival_int;
+
+        /* update the request stats */
+        pStats->requestCount++;
+        pStats->totalRequestCount++;
 
         if( clientid < MAX_VAR_CLIENTS )
         {
@@ -1423,6 +1532,137 @@ static int ProcessValidationResponse( VarClient *pVarClient )
 
     return result;
 
+}
+
+/*============================================================================*/
+/*  InitStats                                                                 */
+/*!
+    Initialize the varserver statistics
+
+    The InitStats function creates the varserver statistics variables
+    and sets up the statistics calculation timer.
+
+    @param[in]
+        pStats
+            pointer to the RequestStats statistics object
+
+    @retval EOK - stats initialized ok
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+int InitStats( RequestStats *pStats )
+{
+    int result = EINVAL;
+    VarInfo info;
+    VAR_HANDLE hVar;
+
+    if ( pStats != NULL )
+    {
+        /* reset the request stats */
+        memset( pStats, 0, sizeof( RequestStats ) );
+
+        /* set the transactions per second variable */
+        memset(&info, 0, sizeof(VarInfo));
+        strcpy(info.name, "/varserver/stats/tps");
+        info.var.len = sizeof( uint32_t );
+        info.var.type = VARTYPE_UINT32;
+        VARLIST_AddNew( &info, &pStats->hTransactionsPerSecond );
+
+        /* set the total transactions variable */
+        strcpy(info.name, "/varserver/stats/transactions");
+        info.var.len = sizeof( uint64_t );
+        info.var.type = VARTYPE_UINT64;
+        VARLIST_AddNew( &info, &pStats->hTransactionCount );
+
+        /* set up the statistics timer */
+        CreateStatsTimer( 1000 );
+
+        result = EOK;
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  CreateStatsTimer                                                          */
+/*!
+    Create a repeating 1 second timer
+
+    The CreateStatsTimer creates a timer used for periodic statistics
+    generation.
+
+@param[in]
+    timeoutms
+        timer interval in milliseconds
+
+==============================================================================*/
+static void CreateStatsTimer( int timeoutms )
+{
+    struct sigevent te;
+    struct itimerspec its;
+    int sigNo = SIGRTMIN+5;
+    long secs;
+    long msecs;
+    timer_t *timerID;
+    int result = EINVAL;
+
+    secs = timeoutms / 1000;
+    msecs = timeoutms % 1000;
+
+    /* Set and enable alarm */
+    te.sigev_notify = SIGEV_SIGNAL;
+    te.sigev_signo = sigNo;
+    te.sigev_value.sival_int = 1;
+    timer_create(CLOCK_REALTIME, &te, timerID);
+
+    its.it_interval.tv_sec = secs;
+    its.it_interval.tv_nsec = msecs * 1000000L;
+    its.it_value.tv_sec = secs;
+    its.it_value.tv_nsec = msecs * 1000000L;
+    timer_settime(*timerID, 0, &its, NULL);
+}
+
+/*============================================================================*/
+/*  ProcessStats                                                              */
+/*!
+    Process the statistics
+
+    The ProcessStats function processes the varserver statistics once
+    every timer interval (1 second)
+
+@param[in]
+    pStats
+        pointer to the stats
+
+==============================================================================*/
+static void ProcessStats( RequestStats *pStats )
+{
+    VarInfo info;
+    bool validationInProgress;
+    int rc;
+
+    if ( pStats != NULL )
+    {
+        /* update the requests per second counter */
+        pStats->requestsPerSec = pStats->requestCount;
+        pStats->requestCount=0;
+
+        /* set the transactions per second variable */
+        memset(&info, 0, sizeof(VarInfo));
+        info.hVar = pStats->hTransactionCount;
+        info.var.val.ull = pStats->totalRequestCount;
+        info.var.len = sizeof( uint64_t );
+        info.var.type = VARTYPE_UINT64;
+        rc = VARLIST_Set( -1, &info, &validationInProgress, NULL );
+        if ( rc != EOK ) printf("%d %s\n", rc, strerror(rc));
+        info.hVar = pStats->hTransactionsPerSecond;
+        info.var.val.ul = pStats->requestsPerSec;
+        info.var.len = sizeof( uint32_t );
+        info.var.type = VARTYPE_UINT32;
+        rc = VARLIST_Set( -1, &info, &validationInProgress, NULL );
+        if ( rc != EOK ) printf("%d %s\n", rc, strerror(rc));
+
+    }
 }
 
 /*! @}
