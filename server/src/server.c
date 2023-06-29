@@ -1603,7 +1603,8 @@ static void CreateStatsTimer( int timeoutms )
     int sigNo = SIGRTMIN+5;
     long secs;
     long msecs;
-    timer_t *timerID;
+
+    timer_t timerID;
     int result = EINVAL;
 
     secs = timeoutms / 1000;
@@ -1613,13 +1614,13 @@ static void CreateStatsTimer( int timeoutms )
     te.sigev_notify = SIGEV_SIGNAL;
     te.sigev_signo = sigNo;
     te.sigev_value.sival_int = 1;
-    timer_create(CLOCK_REALTIME, &te, timerID);
+    timer_create(CLOCK_REALTIME, &te, &timerID);
 
     its.it_interval.tv_sec = secs;
     its.it_interval.tv_nsec = msecs * 1000000L;
     its.it_value.tv_sec = secs;
     its.it_value.tv_nsec = msecs * 1000000L;
-    timer_settime(*timerID, 0, &its, NULL);
+    timer_settime(timerID, 0, &its, NULL);
 }
 
 /*============================================================================*/
@@ -1639,7 +1640,6 @@ static void ProcessStats( RequestStats *pStats )
 {
     VarInfo info;
     bool validationInProgress;
-    int rc;
 
     if ( pStats != NULL )
     {
@@ -1653,15 +1653,12 @@ static void ProcessStats( RequestStats *pStats )
         info.var.val.ull = pStats->totalRequestCount;
         info.var.len = sizeof( uint64_t );
         info.var.type = VARTYPE_UINT64;
-        rc = VARLIST_Set( -1, &info, &validationInProgress, NULL );
-        if ( rc != EOK ) printf("%d %s\n", rc, strerror(rc));
+        VARLIST_Set( -1, &info, &validationInProgress, NULL );
         info.hVar = pStats->hTransactionsPerSecond;
         info.var.val.ul = pStats->requestsPerSec;
         info.var.len = sizeof( uint32_t );
         info.var.type = VARTYPE_UINT32;
-        rc = VARLIST_Set( -1, &info, &validationInProgress, NULL );
-        if ( rc != EOK ) printf("%d %s\n", rc, strerror(rc));
-
+        VARLIST_Set( -1, &info, &validationInProgress, NULL );
     }
 }
 
