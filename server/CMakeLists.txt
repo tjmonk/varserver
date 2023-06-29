@@ -9,6 +9,8 @@ project(varserver-bin
 
 #SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 
+set(CMAKE_BUILD_TYPE Debug)
+
 find_package( Threads REQUIRED )
 
 add_executable( ${PROJECT_NAME}
