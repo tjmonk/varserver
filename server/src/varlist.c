@@ -151,6 +151,9 @@ static int varlist_CopyVarInfoBlobToClient( VarClient *pVarClient,
 static int varlist_CopyVarInfoStringToClient( VarClient *pVarClient,
                                               VarInfo *pVarInfo );
 
+static void *varlist_GetNotificationPayload( VAR_HANDLE hVar,
+                                             VarStorage *pVarStorage,
+                                             size_t *size );
 /*==============================================================================
         Public function definitions
 ==============================================================================*/
@@ -441,6 +444,7 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                     }
                 }
 
+
                 result = EOK;
             }
         }
@@ -616,6 +620,7 @@ int VARLIST_Set( pid_t clientPID,
     size_t n;
     VarType type;
     uint32_t validateHandle;
+    void *payload;
 
     if( pVarInfo != NULL )
     {
@@ -717,7 +722,7 @@ int VARLIST_Set( pid_t clientPID,
                 /* check for any CALC blocked clients on the variable */
                 if( pVarStorage->notifyMask & NOTIFY_MASK_HAS_CALC_BLOCK )
                 {
-                    /* unblock the CALC blocked clients */
+                    /* unblock the first CALC blocked client */
                     UnblockClients( hVar,
                                     NOTIFY_CALC,
                                     varlist_Calc,
@@ -734,6 +739,29 @@ int VARLIST_Set( pid_t clientPID,
                     NOTIFY_Signal( clientPID,
                                    &pVarStorage->pNotifications,
                                    NOTIFY_MODIFIED,
+                                   hVar,
+                                   NULL );
+                }
+
+                if ( ( pVarStorage->notifyMask & NOTIFY_MASK_MODIFIED_QUEUE ) &&
+                     ( result == EOK ) )
+                {
+                    /* prepare the notification payload */
+                    payload = varlist_GetNotificationPayload( hVar,
+                                                              pVarStorage,
+                                                              &n );
+
+                    /* send the notification payloads */
+                    NOTIFY_Payload( clientPID,
+                                    &pVarStorage->pNotifications,
+                                    NOTIFY_MODIFIED_QUEUE,
+                                    payload,
+                                    n );
+
+                    /* send notification signals to the clients */
+                    NOTIFY_Signal( clientPID,
+                                   &pVarStorage->pNotifications,
+                                   NOTIFY_MODIFIED_QUEUE,
                                    hVar,
                                    NULL );
                 }
@@ -2302,6 +2330,16 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
                     pVarStorage->notifyMask |= NOTIFY_MASK_MODIFIED;
                 }
             }
+            else if ( notifyType == NOTIFY_MODIFIED_QUEUE )
+            {
+                result = NOTIFY_Add( &pVarStorage->pNotifications,
+                                     notifyType,
+                                     pid );
+                if ( result == EOK )
+                {
+                    pVarStorage->notifyMask |= NOTIFY_MASK_MODIFIED_QUEUE;
+                }
+            }
             else if( notifyType == NOTIFY_CALC )
             {
                 result = NOTIFY_Add( &pVarStorage->pNotifications,
@@ -3045,6 +3083,120 @@ static int varlist_Match( VAR_HANDLE hVar, SearchContext *ctx )
     }
 
     return result;
+}
+
+/*============================================================================*/
+/*  VARLIST_GetObj                                                            */
+/*!
+    Get a pointer to the VarObject specified by the VAR_HANDLE
+
+    The VARLIST_GetObj function gets a pointer to the VarObject
+    associated with the specified VAR_HANDLE
+
+    @param[in]
+        hVarq
+            handle to the variable to get
+
+    @retval pointer to the VarObject associated with the VAR_HANDLE
+
+==============================================================================*/
+VarObject *VARLIST_GetObj( VAR_HANDLE hVar )
+{
+    VarStorage *pVarStorage;
+
+    /* get a pointer to the variable storage for this variable */
+    pVarStorage = &varstore[hVar];
+
+    return &(pVarStorage->var);
+}
+
+/*============================================================================*/
+/*  varlist_GetNotificationPayload                                            */
+/*!
+    Get a notification payload ready to send to clients
+
+    The varlist_GetNotificationPayload function populates a notification
+    payload ready to send to clients which have requested a notification
+    on change for the specified variable
+
+    @param[in]
+        hVar
+            handle to the variable to get the payload for
+
+    @param[in]
+        pVarStorage
+            pointer to the variable storage containing the payload data
+
+    @param[in,out]
+        size
+            pointer to a location to store the payload size
+
+    @retval pointer to the prepared payload to send
+    @retval NULL if the payload could not be sent
+
+==============================================================================*/
+static void *varlist_GetNotificationPayload( VAR_HANDLE hVar,
+                                             VarStorage *pVarStorage,
+                                             size_t *size )
+{
+    static char buf[VARSERVER_MAX_NOTIFICATION_MSG_SIZE];
+    VarNotification *pVarNotification;
+    void *p = &buf[sizeof(VarNotification)];
+    size_t len = VARSERVER_MAX_NOTIFICATION_MSG_SIZE - sizeof(VarNotification);
+    size_t n;
+
+    pVarNotification = (VarNotification *)buf;
+
+    pVarNotification->hVar = hVar;
+    pVarNotification->obj.type = pVarStorage->var.type;
+    pVarNotification->obj.len = pVarStorage->var.len;
+    pVarNotification->obj.val = pVarStorage->var.val;
+
+    if ( pVarStorage->var.type == VARTYPE_BLOB )
+    {
+        /* check that the blob fits in the notification */
+        if ( ( pVarStorage->var.len <= len ) &&
+             ( pVarStorage->var.val.blob != NULL ) )
+        {
+            /* copy the blob to the notification */
+            memcpy( p, pVarStorage->var.val.blob, pVarStorage->var.len );
+            *size = sizeof(VarNotification) + pVarStorage->var.len;
+        }
+        else
+        {
+            /* too big */
+            *size = 0;
+        }
+    }
+    else if ( pVarStorage->var.type == VARTYPE_STR )
+    {
+        if ( pVarStorage->var.val.str != NULL )
+        {
+            /* check that the string value fits in the notification */
+            n = strlen( pVarStorage->var.val.str );
+            if ( n < len )
+            {
+                /* copy the string to the notification */
+                strcpy( p, pVarStorage->var.val.str );
+            }
+            else
+            {
+                /* too big */
+                *size = 0;
+            }
+        }
+        else
+        {
+            /* source string is invalid */
+            *size = 0;
+        }
+    }
+    else
+    {
+        *size = sizeof( VarNotification );
+    }
+
+    return *size ? buf : NULL;
 }
 
 /*! @}

@@ -129,7 +129,7 @@ typedef union _VarData
 
     /*! void pointer to blob data */
     void *blob;
-    
+
 } VarData;
 
 /*! A variable object */

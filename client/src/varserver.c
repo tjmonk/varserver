@@ -56,7 +56,10 @@ SOFTWARE.
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/syslog.h>
+#include <sys/stat.h>
+#include <sys/signalfd.h>
 #include <fcntl.h>
+#include <mqueue.h>
 #include <errno.h>
 #include <semaphore.h>
 #include <string.h>
@@ -87,6 +90,8 @@ static int var_CopyStringVarObjectToWorkbuf( VarClient *pVarClient,
                                              VarObject *pVarObject );
 static int var_CopyBlobVarObjectToWorkbuf( VarClient *pVarClient,
                                         VarObject *pVarObject );
+
+static void DeleteClientQueue( VarClient *pVarClient );
 
 /*==============================================================================
         File scoped variables
@@ -194,7 +199,11 @@ VARSERVER_HANDLE VARSERVER_OpenExt( size_t workbufsize )
                     printf( "CLIENT: identifier is %d\n",
                             pTempVarClient->clientid );
                 }
-                pVarClient = pTempVarClient;
+
+                if ( pTempVarClient->clientid != 0 )
+                {
+                    pVarClient = pTempVarClient;
+                }
             }
         }
     }
@@ -205,6 +214,73 @@ VARSERVER_HANDLE VARSERVER_OpenExt( size_t workbufsize )
     }
 
     return pVarClient;
+}
+
+/*============================================================================*/
+/*  VARSERVER_CreateClientQueue                                               */
+/*!
+    Create a new client notification queue
+
+    The VARSERVER_CreateClientQueue function creates a new client notification
+    queue to receive variable modified notifications from the server.
+
+    @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[in]
+        queuelen
+            max number of queued messages.  -1 = use default
+
+    @param[in]
+        msgsize
+            max number of queueud messages. -1 = use default;
+
+    @retval EOK the new client queue was successfully created
+    @retval EINVAL an invalid variable client was specified
+    @retval other error from mq_open()
+
+==============================================================================*/
+int VARSERVER_CreateClientQueue( VARSERVER_HANDLE hVarServer,
+                                 long queuelen,
+                                 long msgsize )
+{
+    int result = EINVAL;
+    VarClient *pVarClient = ValidateHandle( hVarServer );
+    char clientname[BUFSIZ];
+    struct mq_attr attr;
+
+    if( pVarClient != NULL )
+    {
+        /* build the varclient identifier */
+        sprintf(clientname, "/varclient_%d", pVarClient->client_pid);
+
+        attr.mq_flags = 0;
+        attr.mq_maxmsg = queuelen == -1 ? VARSERVER_MAX_NOTIFICATION_MSG_COUNT
+                                        : queuelen;
+        attr.mq_msgsize = msgsize == -1 ? VARSERVER_MAX_NOTIFICATION_MSG_SIZE
+                                        : msgsize;
+        attr.mq_curmsgs = 0;
+
+        pVarClient->notificationQ = mq_open( clientname,
+                                             O_RDONLY | O_CREAT | O_NONBLOCK,
+                                             0644,
+                                             &attr );
+
+        if ( pVarClient->notificationQ == -1 )
+        {
+            printf( "Failed to create queue %s : %s\n",
+                    clientname,
+                    strerror(errno));
+            result = errno;
+        }
+        else
+        {
+            result = EOK;
+        }
+    }
+
+    return result;
 }
 
 /*============================================================================*/
@@ -430,6 +506,7 @@ int VARSERVER_Test( VARSERVER_HANDLE hVarServer )
     varserver signals:
 
         - SIG_VAR_MODIFIED
+        - SIG_VAR_QUEUE_MODIFIED
         - SIG_VAR_CALC
         - SIG_VAR_PRINT
         - SIG_VAR_VALIDATE
@@ -454,12 +531,16 @@ int VARSERVER_WaitSignal( int *sigval )
 
     /* modified notification */
     sigaddset( &mask, SIG_VAR_MODIFIED );
+    /* queue modified notification */
+    sigaddset( &mask, SIG_VAR_QUEUE_MODIFIED );
     /* calc notification */
     sigaddset( &mask, SIG_VAR_CALC );
     /* validate notification */
     sigaddset( &mask, SIG_VAR_PRINT );
     /* print notification */
     sigaddset( &mask, SIG_VAR_VALIDATE );
+    /* timer notification */
+    sigaddset( &mask, SIG_VAR_TIMER );
 
     /* block on these signals */
     sigprocmask( SIG_BLOCK, &mask, NULL );
@@ -473,6 +554,148 @@ int VARSERVER_WaitSignal( int *sigval )
     }
 
     return sig;
+}
+
+/*============================================================================*/
+/*  VARSERVER_Signalfd                                                        */
+/*!
+    Create a signal file descriptor
+
+    The VARSERVER_Signalfd function sets up a file descriptor which can
+    be read to retrieve VarServer signals.  The signals which can be trapped
+    are:
+
+        - SIG_VAR_MODIFIED
+        - SIG_VAR_QUEUE_MODIFIED
+        - SIG_VAR_CALC
+        - SIG_VAR_PRINT
+        - SIG_VAR_VALIDATE
+        - SIG_VAR_TIMER
+
+    @retval the signal file descriptor
+    @retval -1 an error occurred (see errno)
+
+==============================================================================*/
+int VARSERVER_Signalfd( void )
+{
+    sigset_t mask;
+    siginfo_t info;
+    int sig;
+
+    /* initialize empty signal set */
+    sigemptyset( &mask );
+
+    /* modified notification */
+    sigaddset( &mask, SIG_VAR_MODIFIED );
+    /* queue modified notification */
+    sigaddset( &mask, SIG_VAR_QUEUE_MODIFIED );
+    /* calc notification */
+    sigaddset( &mask, SIG_VAR_CALC );
+    /* validate notification */
+    sigaddset( &mask, SIG_VAR_PRINT );
+    /* print notification */
+    sigaddset( &mask, SIG_VAR_VALIDATE );
+    /* timer notification */
+    sigaddset( &mask, SIG_VAR_TIMER );
+
+    /* block on these signals */
+    sigprocmask( SIG_BLOCK, &mask, NULL );
+
+    /* return the file descriptor to read to get signals */
+    return signalfd( -1, &mask, 0 );
+}
+
+/*============================================================================*/
+/*  VARSERVER_WaitSignalfd                                                    */
+/*!
+    Wait for a VarServer signal
+
+    The VARSERVER_WaitSignalfd function waits for a signal using the
+    file descriptor provided by VARSERVER_Signalfd.
+
+    Signals which may be awaited are:
+
+        - SIG_VAR_MODIFIED
+        - SIG_VAR_QUEUE_MODIFIED
+        - SIG_VAR_CALC
+        - SIG_VAR_PRINT
+        - SIG_VAR_VALIDATE
+        - SIG_VAR_TIMER
+
+    The sigval field contains the payload value associated with the signal
+
+    @param[in]
+        fd
+            file descriptor provided by VARSERVER_Signalfd
+
+    @param[in]
+        sigval
+            pointer to a location to store the associated signal value
+
+    @retval the received signal
+    @retval -1 an error occurred (see errno)
+
+==============================================================================*/
+int VARSERVER_WaitSignalfd( int fd, int32_t *sigval )
+{
+    struct signalfd_siginfo info;
+    int n;
+    int sig = -1;
+
+    n = read( fd, &info, sizeof(struct signalfd_siginfo));
+    if ( n == sizeof( struct signalfd_siginfo ))
+    {
+        sig = info.ssi_signo;
+        if ( sigval != NULL )
+        {
+            *sigval = info.ssi_int;
+        }
+    }
+
+    return sig;
+}
+/*============================================================================*/
+/*  VARSERVER_SigMask                                                         */
+/*!
+    Get the VARSERVER signal mask
+
+    The VARSERVER_SigMask function sets up a signal mask for the following
+    varserver signals:
+
+        - SIG_VAR_MODIFIED
+        - SIG_VAR_QUEUE_MODIFIED
+        - SIG_VAR_CALC
+        - SIG_VAR_PRINT
+        - SIG_VAR_VALIDATE
+        - SIG_VAR_TIMER
+
+    @return the signal mask
+
+==============================================================================*/
+sigset_t VARSERVER_SigMask( void )
+{
+    sigset_t mask;
+
+    /* initialize empty signal set */
+    sigemptyset( &mask );
+
+    /* modified notification */
+    sigaddset( &mask, SIG_VAR_MODIFIED );
+    /* queue modified notification */
+    sigaddset( &mask, SIG_VAR_QUEUE_MODIFIED );
+    /* calc notification */
+    sigaddset( &mask, SIG_VAR_CALC );
+    /* validate notification */
+    sigaddset( &mask, SIG_VAR_PRINT );
+    /* print notification */
+    sigaddset( &mask, SIG_VAR_VALIDATE );
+    /* timer notification */
+    sigaddset( &mask, SIG_VAR_TIMER );
+
+    /* block on these signals */
+    sigprocmask( SIG_BLOCK, &mask, NULL );
+
+    return mask;
 }
 
 /*============================================================================*/
@@ -2296,7 +2519,16 @@ int VAR_Print( VARSERVER_HANDLE hVarServer,
             if( result == EOK )
             {
                 /* block client until printing is complete */
-                result = sem_wait( &pVarClient->sem );
+                pVarClient->blocked = 1;
+                do
+                {
+                    result = sem_wait( &pVarClient->sem );
+                    if ( result == -1 )
+                    {
+                        result = errno;
+                    }
+                } while ( result != EOK );
+                pVarClient->blocked = 0;
             }
         }
         else
@@ -2686,22 +2918,28 @@ static int ClientRequest( VarClient *pVarClient, int signal )
             result = sigqueue( pServerInfo->pid, signal, val );
             if( result == EOK )
             {
-                result = sem_wait( &pVarClient->sem );
-                if( result == EOK )
+                do
                 {
-                    if( pVarClient->debug >= LOG_DEBUG )
+                    pVarClient->blocked = 1;
+                    result = sem_wait( &pVarClient->sem );
+                    if( result == EOK )
                     {
-                        printf("CLIENT: Received response\n");
+                        if( pVarClient->debug >= LOG_DEBUG )
+                        {
+                            printf("CLIENT: Received response\n");
+                        }
                     }
+                    else
+                    {
+                        printf("sem_wait failed\n");
+                        result = errno;
+                    }
+                    pVarClient->blocked = 0;
                 }
-                else
-                {
-                    result = errno;
-                }
+                while ( result != EOK );
             }
             else
             {
-                printf("sigqueue failed\n");
                 result = errno;
             }
         }
@@ -2761,6 +2999,7 @@ static VarClient *NewClient( size_t workbufsize )
     /* build the varclient identifier */
 	pid = getpid();
 	sprintf(clientname, "/varclient_%d", pid);
+
 
 	/* get shared memory file descriptor (NOT a file) */
 	fd = shm_open(clientname, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
@@ -2845,6 +3084,153 @@ static int NewClientSemaphore( VarClient *pVarClient )
 }
 
 /*============================================================================*/
+/*  DeleteClientQueue                                                         */
+/*!
+    Delete a client notification queue
+
+    The DeleteClientQueue function deletes a client notification
+    queue.
+
+==============================================================================*/
+static void DeleteClientQueue( VarClient *pVarClient )
+{
+    char clientname[BUFSIZ];
+
+    if ( pVarClient != NULL )
+    {
+        /* build the varclient identifier */
+        sprintf(clientname, "/varclient_%d", pVarClient->client_pid);
+
+        mq_close( pVarClient->notificationQ );
+        mq_unlink( clientname );
+    }
+}
+
+/*============================================================================*/
+/*  VAR_GetFromQueue                                                          */
+/*!
+    Get a variable notification from the notification queue
+
+    The VAR_GetFromQueue function gets the value of the variable
+    from the notification queue and puts it into the specified
+    VarNotification object.
+
+    The caller should provide an appropriately sized buffer
+    in pVarNotification->obj.val.blob to receive the maximum
+    expected blob or string data.
+
+    If a buffer is not provided, one will be created, and the
+    caller must be responsible for deallocating the buffer
+    when they are done with it.
+
+    @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[in]
+        pVarNotification
+            specifies the location where the variable value should be stored
+
+    @param[in]
+        buf
+            pointer to a working buffer to receive a message
+
+    @param[in]
+        len
+            length of the working buffer
+
+    @retval EOK - the variable was retrieved ok
+    @retval EAGAIN - no data is available
+    @retval E2BIG - the received data is too big to fit in the supplied buffer
+    @retval ENOMEM - memory allocation failed
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+int VAR_GetFromQueue( VARSERVER_HANDLE hVarServer,
+                      VarNotification *pVarNotification,
+                      char *buf,
+                      size_t len )
+{
+    int result = EINVAL;
+    VarClient *pVarClient = ValidateHandle( hVarServer );
+    ssize_t n;
+    void *p;
+    size_t varlen;
+    VarNotification *pSrc;
+
+    if( ( pVarClient != NULL ) &&
+        ( pVarNotification != NULL ) &&
+        ( buf != NULL ) &&
+        ( len > sizeof(VarNotification) ) )
+    {
+        n = mq_receive( pVarClient->notificationQ,
+                        buf,
+                        len,
+                        NULL );
+        if ( n >= 0 )
+        {
+            /* get a pointer to the received VarObject */
+            pSrc = (VarNotification *)buf;
+
+            if ( n > sizeof( VarNotification ) )
+            {
+                /* calculate the length of the variable part of the message */
+                varlen = n - sizeof(VarNotification);
+
+                /* see if the caller has provided a blob/string buffer */
+                if ( pVarNotification->obj.val.blob == NULL )
+                {
+                    /* no user supplied buffer, create one */
+                    pVarNotification->obj.val.blob = calloc(1, varlen );
+                    if( pVarNotification->obj.val.blob == NULL )
+                    {
+                        /* failed to allocate memory for blob/string data */
+                        result = ENOMEM;
+                    }
+                }
+
+                if ( pVarNotification->obj.val.blob != NULL )
+                {
+                    if ( ( varlen > 0 ) &&
+                         ( varlen <= pVarNotification->obj.len ) )
+                    {
+                        /* copy the blob data */
+                        p = &buf[sizeof(VarNotification)];
+                        memcpy( pVarNotification->obj.val.blob, p, varlen );
+
+                        /* copy the blob metadata */
+                        pVarNotification->obj.len = varlen;
+                        pVarNotification->hVar = pSrc->hVar;
+                        pVarNotification->obj.type = pSrc->obj.type;
+
+                        result = EOK;
+                    }
+                    else
+                    {
+                        /* received blob/string data will not fit into
+                           the supplied buffer */
+                        result = E2BIG;
+                    }
+                }
+            }
+            else
+            {
+                /* copy primitive type */
+                memcpy( pVarNotification, buf, sizeof(VarNotification));
+
+                result = EOK;
+            }
+        }
+        else
+        {
+            result = errno;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
 /*  DeleteClientSemaphore                                                     */
 /*!
     Delete the Variable Client semaphore
@@ -2906,6 +3292,9 @@ static int ClientCleanup( VarClient *pVarClient )
     {
         /* delete the client semaphore */
         DeleteClientSemaphore( pVarClient );
+
+        /* delete the client notification queue */
+        DeleteClientQueue( pVarClient );
 
         /* build the varclient identifier */
         sprintf(clientname, "/varclient_%d", pVarClient->client_pid);

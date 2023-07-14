@@ -41,6 +41,19 @@ SOFTWARE.
 #define VARSERVER_DEFAULT_WORKBUF_SIZE  ( BUFSIZ )
 #endif
 
+#ifndef VARSERVER_MAX_NOTIFICATION_MSG_SIZE
+/*! default size of notification messages */
+#define VARSERVER_MAX_NOTIFICATION_MSG_SIZE    ( 4096 )
+#endif
+
+#ifndef VARSERVER_MAX_NOTIFICATION_MSG_COUNT
+/*! default max number of notification messages per client */
+#define VARSERVER_MAX_NOTIFICATION_MSG_COUNT   ( 10 )
+#endif
+
+/*! signal indicating a timer has fired  */
+#define SIG_VAR_TIMER    ( SIGRTMIN + 5 )
+
 /*! signal indicating a variable has been modified */
 #define SIG_VAR_MODIFIED ( SIGRTMIN + 6 )
 
@@ -53,8 +66,24 @@ SOFTWARE.
 /*! signal indicating a variable print is required */
 #define SIG_VAR_PRINT    ( SIGRTMIN + 9 )
 
+/*! signal indicating the variable notification queue has been modified */
+#define SIG_VAR_QUEUE_MODIFIED ( SIGRTMIN + 10 )
+
 /*! handle to the variable server */
 typedef void * VARSERVER_HANDLE;
+
+/*! The VarNotification object is used to retrieve
+    variable notifications from the Variable Server
+    via the Notification message queue */
+typedef struct _VarNotification
+{
+    /*! variable handle */
+    VAR_HANDLE hVar;
+
+    /*! variable object containing TLV data */
+    VarObject obj;
+
+} VarNotification;
 
 /*============================================================================
         Public function declarations
@@ -143,6 +172,8 @@ int VAR_SetNameValue( VARSERVER_HANDLE hVarServer,
 
 int VARSERVER_WaitSignal( int *sigval );
 
+sigset_t VARSERVER_SigMask( void );
+
 int VAR_Notify( VARSERVER_HANDLE hVarServer,
                 VAR_HANDLE hVar,
                 NotificationType notificationType );
@@ -171,5 +202,18 @@ int VAR_GetFirst( VARSERVER_HANDLE hVarServer,
 int VAR_GetNext( VARSERVER_HANDLE hVarServer,
                  VarQuery *query,
                  VarObject *obj );
+
+int VARSERVER_CreateClientQueue( VARSERVER_HANDLE hVarServer,
+                                 long queuelen,
+                                 long msgsize );
+
+int VAR_GetFromQueue( VARSERVER_HANDLE hVarServer,
+                      VarNotification *pVarNotification,
+                      char *buf,
+                      size_t len );
+
+int VARSERVER_Signalfd( void );
+
+int VARSERVER_WaitSignalfd( int fd, int32_t *sigval );
 
 #endif

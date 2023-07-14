@@ -76,6 +76,9 @@ typedef struct _BlockedClient
     /*! pointer to the variable client which is blocked */
     VarClient *pVarClient;
 
+    /*! handle of the variable the client is blocked on */
+    VAR_HANDLE hVar;
+
     /*! pointer to the next blocked client */
     struct _BlockedClient *pNext;
 
@@ -90,10 +93,14 @@ typedef struct _BlockedClient
 ==============================================================================*/
 
 /*! blocked clients */
-static BlockedClient *blockedClients = NULL;
+static BlockedClient *blockedClientsHead = NULL;
+static BlockedClient *blockedClientsTail = NULL;
 
 /*! list of available BlockedClient objects */
 static BlockedClient *freelist = NULL;
+
+/*! pointer to the blocked client counter */
+static uint64_t *pBlockedClientCount = NULL;
 
 /*==============================================================================
         Public function definitions
@@ -105,7 +112,7 @@ static BlockedClient *freelist = NULL;
     Block a client while it waits for a transaction to complete
 
     The BlockClient function adds the specified client to the
-    blocked client list
+    end of the blocked client list
 
     @param[in]
         pVarClient
@@ -144,11 +151,25 @@ int BlockClient( VarClient *pVarClient, NotificationType notifyType )
             /* populate the blocked client object */
             pBlockedClient->notifyType = notifyType;
             pBlockedClient->pVarClient = pVarClient;
+            pBlockedClient->hVar = pVarClient->variableInfo.hVar;
+            pBlockedClient->pNext = NULL;
 
-            /* insert the blocked client on the head of the blocked
+            /* insert the blocked client on the tail of the blocked
                client list */
-            pBlockedClient->pNext = blockedClients;
-            blockedClients = pBlockedClient;
+            if ( blockedClientsHead == NULL )
+            {
+                blockedClientsHead = blockedClientsTail = pBlockedClient;
+            }
+            else
+            {
+                blockedClientsTail->pNext = pBlockedClient;
+                blockedClientsTail = pBlockedClient;
+            }
+
+            if ( pBlockedClientCount != NULL )
+            {
+                (*pBlockedClientCount)++;
+            }
 
             result = EOK;
         }
@@ -191,8 +212,9 @@ int UnblockClients( VAR_HANDLE hVar,
 {
     int result = ENOENT;
 
-    BlockedClient *pBlockedClient = blockedClients;
-    BlockedClient *pPrevClient = blockedClients;
+    BlockedClient *pBlockedClient = blockedClientsHead;
+    BlockedClient *pPrevClient = blockedClientsHead;
+    BlockedClient *pNext;
     VarClient *pVarClient;
 
     while( pBlockedClient != NULL )
@@ -202,7 +224,7 @@ int UnblockClients( VAR_HANDLE hVar,
             /* get a pointer to the blocked varclient */
             pVarClient = pBlockedClient->pVarClient;
             if( ( pBlockedClient->notifyType == notifyType ) &&
-                ( pVarClient->variableInfo.hVar == hVar ) )
+                ( pBlockedClient->hVar == hVar ) )
             {
                 /* found a match */
                 if( pVarClient->debug >= LOG_DEBUG )
@@ -217,15 +239,27 @@ int UnblockClients( VAR_HANDLE hVar,
                     cb( pVarClient, arg );
                 }
 
-                /* unblock the client by posting to the client semaphore */
-                sem_post( &pVarClient->sem );
+                if ( pBlockedClientCount != NULL )
+                {
+                    (*pBlockedClientCount)--;
+                }
 
                 /* remove the blocked client from the blocked client list */
-                if( pPrevClient == blockedClients )
+                if ( ( pBlockedClient == blockedClientsHead ) &&
+                     ( blockedClientsHead == blockedClientsTail ) )
+                {
+                    blockedClientsHead = blockedClientsTail = NULL;
+                }
+                else if( pBlockedClient == blockedClientsHead )
                 {
                     /* remove the blocked client from
                        the head of the blocked client list */
-                    blockedClients = pBlockedClient->pNext;
+                    blockedClientsHead = pBlockedClient->pNext;
+                }
+                else if ( pBlockedClient == blockedClientsTail )
+                {
+                    blockedClientsTail = pPrevClient;
+                    blockedClientsTail->pNext = NULL;
                 }
                 else
                 {
@@ -237,23 +271,59 @@ int UnblockClients( VAR_HANDLE hVar,
                 /* move the blocked client to the free list */
                 pBlockedClient->notifyType = NOTIFY_NONE;
                 pBlockedClient->pVarClient = NULL;
+                pBlockedClient->hVar = VAR_INVALID;
+
+                /* put the blocked client object back on the free list */
                 pBlockedClient->pNext = freelist;
                 freelist = pBlockedClient;
 
+                /* unblock the client by posting to the client semaphore */
+                sem_post( &pVarClient->sem );
+
                 /* indicate that a client was unblocked */
                 result = EOK;
+
+                break;
             }
             else
             {
                 /* update the pointer to the previous client
                    which is still in the blocked client list */
                 pPrevClient = pBlockedClient;
+
+                /* move on to the next blocked client */
+                pBlockedClient = pBlockedClient->pNext;
             }
         }
+        else
+        {
+            pPrevClient = pBlockedClient;
 
-        /* move on to the next blocked client */
-        pBlockedClient = pBlockedClient->pNext;
+            /* move on to the next blocked client */
+            pBlockedClient = pBlockedClient->pNext;
+        }
     }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  SetBlockedClientMetric                                                    */
+/*!
+    Set up the pointer to the blocked client counter metric
+
+    The SetBlockedClientMetric sets up a pointer to the blocked client
+    counter metric used to track the number of blocked clients at
+    any given time
+
+    @param[in]
+        pMetric
+            pointer to the blocked client counter metric
+
+==============================================================================*/
+void SetBlockedClientMetric( uint64_t *pMetric )
+{
+    pBlockedClientCount = pMetric;
 }
 
 /*! @}

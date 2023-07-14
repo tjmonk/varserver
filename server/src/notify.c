@@ -54,9 +54,11 @@ SOFTWARE.
 #include <fcntl.h>
 #include <semaphore.h>
 #include <string.h>
+#include <mqueue.h>
 #include <varserver/var.h>
 #include "varstorage.h"
 #include "notify.h"
+#include "stats.h"
 
 /*==============================================================================
         Private definitions
@@ -73,6 +75,8 @@ SOFTWARE.
 static int notify_Send( Notification *pNotification,
                         int handle,
                         int signal );
+
+static mqd_t notify_GetQueue( pid_t pid );
 
 /*==============================================================================
         Public function definitions
@@ -116,6 +120,7 @@ int NOTIFY_Add( Notification **ppNotification,
         pNotification = *ppNotification;
         switch( type )
         {
+            case NOTIFY_MODIFIED_QUEUE:
             case NOTIFY_MODIFIED:
                 /* check if we are already registered */
                 pNotification = NOTIFY_Find( pNotification, type, pid );
@@ -159,6 +164,11 @@ int NOTIFY_Add( Notification **ppNotification,
 
             if( pNotification != NULL )
             {
+                if ( type == NOTIFY_MODIFIED_QUEUE )
+                {
+                    pNotification->mq = notify_GetQueue( pid );
+                }
+
                 /* populate the notification structure */
                 pNotification->pid = pid;
                 pNotification->type = type;
@@ -285,6 +295,20 @@ int NOTIFY_Signal( pid_t pid,
             {
                 switch(type)
                 {
+                    case NOTIFY_MODIFIED_QUEUE:
+                        if ( pNotification->pending == true )
+                        {
+                            sig = SIGRTMIN+10;
+                            pNotification->pending = false;
+                        }
+                        else
+                        {
+                            /* don't send this notification because
+                               the message queue payload was not sent */
+                            sig = -1;
+                        }
+                        break;
+
                     case NOTIFY_MODIFIED:
                         sig = SIGRTMIN+6;
                         break;
@@ -422,6 +446,125 @@ static int notify_Send( Notification *pNotification,
     }
 
     return result;
+}
+
+/*============================================================================*/
+/*  NOTIFY_Payload                                                            */
+/*!
+    Send a notification payload to a client's message queue
+
+    The NOTIFY_Payload function sends a notification payload to each client
+    which has registered to receive it.
+
+    @param[in]
+        pid
+            process identifier of the sending client process
+
+    @param[in]
+        ppNotification
+            pointer to the Notification list
+
+    @param[in]
+        type
+            type of the notification (should be NOTIFY_MODIFIED_QUEUE )
+
+    @param[in]
+        buf
+            pointer to the notification payload to send
+
+    @param[in]
+        len
+            length of the payload to send
+
+    @retval EOK at least one notification was sent
+    @retval EINVAL invalid arguments
+    @retval ENOENT no notifications registered
+
+==============================================================================*/
+int NOTIFY_Payload( pid_t pid,
+                    Notification **ppNotification,
+                    NotificationType type,
+                    void *buf,
+                    size_t len )
+{
+    int result = EINVAL;
+    int rc;
+    Notification *pNotification;
+    int sig = -1;
+
+    if( ppNotification != NULL )
+    {
+        /* select the first notification */
+        pNotification = *ppNotification;
+
+        result = ENOENT;
+
+        while( pNotification != NULL )
+        {
+            if( pNotification->type == NOTIFY_MODIFIED_QUEUE )
+            {
+                /* send the message to the clients message queue */
+                rc = mq_send( pNotification->mq, buf, len, 0);
+                if ( rc == 0 )
+                {
+                    /* update the request stats */
+                    STATS_IncrementRequestCount();
+
+                    pNotification->pending = true;
+                    result = EOK;
+                }
+                else
+                {
+                    rc = errno;
+                    if ( rc == EBADF )
+                    {
+                        /* the process that requested this notification is gone,
+                        mark the signal as unused */
+                        pNotification->type = NOTIFY_NONE;
+                        pNotification->pid = -1;
+                    }
+                }
+            }
+
+            /* select the next notification */
+            pNotification = pNotification->pNext;
+        }
+    }
+
+    return result;
+}
+
+
+/*============================================================================*/
+/*  notify_GetQueue                                                           */
+/*!
+    Get the notification queue for a client process
+
+    The notify_GetQueue function gets the notification queue associated
+    with the client specified via its pid.
+
+    @param[in]
+        pid
+            process identifier of the client process
+
+    @retval message queue descriptor
+    @retval -1 if the message queue does not exist
+
+==============================================================================*/
+static mqd_t notify_GetQueue( pid_t pid )
+{
+    char clientname[BUFSIZ];
+    mqd_t mq;
+
+    /* build the varclient identifier */
+    sprintf(clientname, "/varclient_%d", pid);
+
+    mq = mq_open( clientname, O_WRONLY | O_NONBLOCK );
+    if ( mq == -1 )
+    {
+        printf("Failed to open %s : %s\n", clientname, strerror(errno));
+    }
+    return mq;
 }
 
 /*! @}

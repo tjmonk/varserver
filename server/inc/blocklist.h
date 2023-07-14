@@ -41,5 +41,6 @@ int UnblockClients( VAR_HANDLE hVar,
                     NotificationType notifyType,
                     int (*cb)( VarClient *pVarClient, void *arg ),
                     void *arg );
+void SetBlockedClientMetric( uint64_t *pMetric );
 
 #endif

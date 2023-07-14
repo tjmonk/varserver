@@ -22,61 +22,34 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ============================================================================*/
 
-#ifndef VARSTORAGE_H
-#define VARSTORAGE_H
+#ifndef STATS_H
+#define STATS_H
 
 /*============================================================================
         Includes
 ============================================================================*/
 
-#include <varserver/varclient.h>
-#include <varserver/var.h>
-#include "notify.h"
+#include <stdint.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 /*============================================================================
         Public definitions
 ============================================================================*/
 
-#ifndef MAX_TAGS_LEN
-/*! maximum number of tags per variable */
-#define MAX_TAGS_LEN        ( 8 )
-#endif
 
-/*! The VarStorage object is used internally by the varserver to
-    encapsulate all the information about a single variable */
-typedef struct _VarStorage
-{
-    /*! instance identifier for this variable */
-    uint32_t instanceID;
+/*============================================================================
+        File Scoped Variables
+============================================================================*/
 
-    /*! name of the variable */
-    char name[MAX_NAME_LEN+1];
+/*============================================================================
+        Public function declarations
+============================================================================*/
 
-    /*! globally unique identifier for the variable */
-    uint32_t guid;
-
-    /*! variable data */
-    VarObject var;
-
-    /*! variable flags */
-    VarFlags flags;
-
-    /*! variable tag specifiers */
-    uint16_t tags[MAX_TAGS_LEN];
-
-    /*! variable format specifier */
-    char formatspec[MAX_FORMATSPEC_LEN];
-
-    /*! variable permissions */
-    VarPermissions permissions;
-
-    /*! pointer to the notification list for this variable */
-    Notification *pNotifications;
-
-    /* indicate if this variable has an associated CALC notification */
-    uint16_t notifyMask;
-
-} VarStorage;
-
+void STATS_Initialize( void );
+void STATS_IncrementRequestCount( void );
+void STATS_Process( void );
+void STATS_SetRequestsPerSecPtr( uint64_t *p );
+void STATS_SetTotalRequestsPtr( uint64_t *p );
 
 #endif

@@ -21,6 +21,7 @@ add_executable( ${PROJECT_NAME}
     src/transaction.c
     src/validate.c
     src/varlist.c
+    src/stats.c
 )
 
 target_include_directories( ${PROJECT_NAME}

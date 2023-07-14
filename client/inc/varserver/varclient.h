@@ -33,6 +33,7 @@ SOFTWARE.
 #include <signal.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <mqueue.h>
 #include "varobject.h"
 #include "var.h"
 
@@ -155,6 +156,9 @@ typedef struct _varClient
     /*! semaphore used to synchronize client and server */
     sem_t sem;
 
+    /*! client message queue used to receive notifications */
+    mqd_t notificationQ;
+
     /*! flag indicating to output debug information */
     int debug;
 
@@ -189,11 +193,17 @@ typedef struct _varClient
     /*! pointer to the server information */
     ServerInfo *pServerInfo;
 
+    /*! client transaction counter */
+    uint64_t transactionCount;
+
+    /*! client blocked 0=not blocked non-zero=blocked */
+    int blocked;
 
     /*! specifies the length of the working buffer */
     size_t workbufsize;
 
-    /*! first byte of the working buffer */
+    /*! first byte of the working buffer (must be
+        the last element in this structure )*/
     char workbuf;
 
 } VarClient;

@@ -146,7 +146,10 @@ typedef enum _NotificationType
     NOTIFY_VALIDATE = 3,
 
     /*! request for printing of a variable */
-    NOTIFY_PRINT = 4
+    NOTIFY_PRINT = 4,
+
+    /*! request for queue notification */
+    NOTIFY_MODIFIED_QUEUE = 5
 
 } NotificationType;
 

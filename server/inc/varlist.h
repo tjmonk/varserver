@@ -78,4 +78,7 @@ int VARLIST_GetNext( pid_t clientPID,
                      char *buf,
                      size_t bufsize,
                      int *response );
+
+VarObject *VARLIST_GetObj( VAR_HANDLE hVar );
+
 #endif

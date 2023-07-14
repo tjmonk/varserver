@@ -65,6 +65,7 @@ SOFTWARE.
 #include "taglist.h"
 #include "blocklist.h"
 #include "transaction.h"
+#include "stats.h"
 #include "server.h"
 
 /*==============================================================================
@@ -72,7 +73,7 @@ SOFTWARE.
 ==============================================================================*/
 
 /*! Maximum number of clients */
-#define MAX_VAR_CLIENTS                 ( 256 )
+#define MAX_VAR_CLIENTS                 ( 4096 )
 
 /*! Timer Signal */
 #define SIG_TIMER                       ( SIGRTMIN + 5 )
@@ -87,43 +88,25 @@ typedef struct _RequestHandler
     /*! the type of request this handler is for */
     VarRequest requestType;
 
-    /*! the name of the request */
+    /*! request name */
     char *requestName;
 
     /*! pointer to the request handler function */
     int (*handler)( VarClient *pVarClient );
 
+    /*! pointer to the name of the metric counter */
+    char *pMetricName;
+
     /*! counter for the number of times this request has been made */
-    uint32_t requestCount;
+    uint64_t *pMetric;
 
 } RequestHandler;
-
-/*! the RequestStats is used to track the total number of requests
-    handled by the variable server, as well as the number of
-    requests per second */
-typedef struct _RequestStats
-{
-    /*! track the number of requests */
-    size_t requestCount;
-
-    /*! total request count */
-    size_t totalRequestCount;
-
-    /*! Track the number of requests per second */
-    size_t requestsPerSec;
-
-    /*! handle to the varserver transaction count statistic */
-    VAR_HANDLE hTransactionCount;
-
-    /*! handle to the varserver transactions per second statistic */
-    VAR_HANDLE hTransactionsPerSecond;
-} RequestStats;
 
 /*==============================================================================
         Private function declarations
 ==============================================================================*/
 static int NewClient( pid_t pid );
-static int ProcessRequest( siginfo_t *pInfo, RequestStats *pStats );
+static int ProcessRequest( siginfo_t *pInfo );
 static int UnblockClient( VarClient *pVarClient );
 static int GetClientID( void );
 static int SetupServerInfo( void );
@@ -149,18 +132,23 @@ static int ProcessVarRequestClosePrintSession( VarClient *pVarClient );
 static int ProcessVarRequestGetFirst( VarClient *pVarClient );
 static int ProcessVarRequestGetNext( VarClient *pVarClient );
 
+static uint64_t *MakeMetric( char *name );
 
-static int InitStats( RequestStats *pStats );
-static void CreateStatsTimer( int timeoutms );
-static void ProcessStats( RequestStats *pStats );
+static int InitStats( void );
+
+static int PrintClientInfo( VarInfo *pVarInfo, char *buf, size_t len );
+
+void RegisterHandler(void(*f)(int sig, siginfo_t *info, void *ucontext));
+void handler(int sig, siginfo_t *info, void *ucontext);
 
 /*==============================================================================
         Private file scoped variables
 ==============================================================================*/
 
 /*! variable clients */
-static VarClient *VarClients[MAX_VAR_CLIENTS] = {0};
+static VarClient *VarClients[MAX_VAR_CLIENTS+1] = {0};
 static ServerInfo *pServerInfo = NULL;
+static VAR_HANDLE hClientInfo = VAR_INVALID;
 
 /*! Request Handlers - these must appear in the exact same order
     as the request enumerations so they can be looked up directly
@@ -169,117 +157,136 @@ static RequestHandler RequestHandlers[] =
 {
     {
         VARREQUEST_INVALID,
-        "INVALID",
+        "IMVALID",
         ProcessVarRequestInvalid,
-        0
+        NULL,
+        NULL
     },
     {
         VARREQUEST_OPEN,
         "OPEN",
         NULL,
-        0
+        NULL,
+        NULL
     },
     {
         VARREQUEST_CLOSE,
         "CLOSE",
         ProcessVarRequestClose,
-        0
+        "/varserver/stats/close",
+        NULL
     },
     {
         VARREQUEST_ECHO,
         "ECHO",
         ProcessVarRequestEcho,
-        0
+        "/varserver/stats/echo",
+        NULL
     },
     {
         VARREQUEST_NEW,
         "NEW",
         ProcessVarRequestNew,
-        0
+        "/varserver/stats/new",
+        NULL
     },
     {
         VARREQUEST_FIND,
         "FIND",
         ProcessVarRequestFind,
-        0
+        "/varserver/stats/find",
+        NULL
     },
     {
         VARREQUEST_GET,
         "GET",
         ProcessVarRequestGet,
-        0
+        "/varserver/stats/get",
+        NULL
     },
     {
         VARREQUEST_PRINT,
         "PRINT",
         ProcessVarRequestPrint,
-        0
+        "/varserver/stats/print",
+        NULL
     },
     {
         VARREQUEST_SET,
         "SET",
         ProcessVarRequestSet,
-        0
+        "/varserver/stats/set",
+        NULL
     },
     {
         VARREQUEST_TYPE,
         "TYPE",
         ProcessVarRequestType,
-        0
+        "/varserver/stats/type",
+        NULL
     },
     {
         VARREQUEST_NAME,
         "NAME",
         ProcessVarRequestName,
-        0
+        "/varserver/stats/name",
+        NULL
     },
     {
         VARREQUEST_LENGTH,
         "LENGTH",
         ProcessVarRequestLength,
-        0
+        "/varserver/stats/length",
+        NULL
     },
     {
         VARREQUEST_NOTIFY,
         "NOTIFY",
         ProcessVarRequestNotify,
-        0
+        "/varserver/stats/notify",
+        NULL
     },
     {
         VARREQUEST_GET_VALIDATION_REQUEST,
         "VALIDATION_REQUEST",
         ProcessValidationRequest,
-        0
+        "/varserver/stats/validate_request",
+        NULL
     },
     {
         VARREQUEST_SEND_VALIDATION_RESPONSE,
         "VALIDATION_RESPONSE",
         ProcessValidationResponse,
-        0
+        "/varserver/stats/validation_response",
+        NULL
     },
     {
         VARREQUEST_OPEN_PRINT_SESSION,
         "OPEN_PRINT_SESSION",
         ProcessVarRequestOpenPrintSession,
-        0
+        "/varserver/stats/open_print_session",
+        NULL
     },
     {
         VARREQUEST_CLOSE_PRINT_SESSION,
         "CLOSE_PRINT_SESSION",
         ProcessVarRequestClosePrintSession,
-        0
+        "/varserver/stats/close_print_session",
+        NULL
     },
     {
         VARREQUEST_GET_FIRST,
         "GET_FIRST",
         ProcessVarRequestGetFirst,
-        0
+        "/varserver/stats/get_first",
+        NULL
     },
     {
         VARREQUEST_GET_NEXT,
         "GET_FIRST",
         ProcessVarRequestGetNext,
-        0
+        "/varserver/stats/get_next",
+        NULL
     }
 };
 
@@ -314,47 +321,104 @@ void main(int argc, char **argv)
     int signum;
     int count = 0;
     ServerInfo *pServerInfo = NULL;
-    RequestStats stats;
-
-    printf("SERVER: pid=%d\n", getpid());
-
-
-    sigemptyset(&mask);
-    sigaddset(&mask, SIG_NEWCLIENT );
-    sigaddset(&mask, SIG_CLIENT_REQUEST );
-    sigaddset(&mask, SIG_TIMER );
-    sigprocmask(SIG_BLOCK, &mask, NULL );
 
     /* Set up server information structure */
     pServerInfo = InitServerInfo();
     if( pServerInfo != NULL )
     {
-        InitStats( &stats );
+        /* initialize the varserver statistics */
+        InitStats();
 
+        /* register the real-time signal handler */
+        RegisterHandler(handler);
+
+        /* loop forever processing signals */
         while(1)
         {
-            memset( &info, 0, sizeof( siginfo_t ) );
-            signum = sigwaitinfo(&mask, &info);
-            if ( signum == SIG_NEWCLIENT )
-            {
-                NewClient( info.si_pid );
-            }
-            else if ( signum == SIG_CLIENT_REQUEST )
-            {
-                ProcessRequest( &info, &stats );
-            }
-            else if ( signum == SIG_TIMER )
-            {
-                ProcessStats( &stats );
-            }
-            else
-            {
-                /* should not get here */
-            }
+            /* do nothing - handler functions take care of everything */
+            pause();
         }
     }
+}
 
-    printf("SERVER: exiting!\n");
+/*============================================================================*/
+/*  RegisterHandler                                                           */
+/*!
+    Register handler function with the real time signals
+
+    The RegisterHandler function registers the specified handler function
+    with the real time signals.  The handler function must follow the
+    form:
+
+    handler( int sig, siginfo_t *info, void *ucontext )
+
+    @param[in]
+        f
+            handler function to register with the real time signals
+
+==============================================================================*/
+void RegisterHandler(void(*f)(int sig, siginfo_t *info, void *ucontext))
+{
+    struct sigaction siga;
+
+    siga.sa_sigaction = f;
+    siga.sa_flags = SA_SIGINFO;
+
+    /* register the handler function with the real-time signals */
+    for (int sig = 1; sig <= SIGRTMAX; ++sig)
+    {
+        /* register handler function with the signal */
+        sigaction(sig, &siga, NULL);
+    }
+}
+
+/*============================================================================*/
+/*  handler                                                                   */
+/*!
+    Real time signal handler
+
+    The handler function is called to handle any received real-time signals.
+
+    Handled real-time signals include:
+
+    - SIG_NEWCLIENT
+    - SIG_CLIENT_REQUEST
+    - SIG_TIMER
+
+    @param[in]
+        sig
+            signal identifier
+
+    @param[in]
+        info
+            pointer to the siginfo_t object containing the signal info
+
+    @param[in]
+        ucontext
+            opaque context pointer, unused
+
+==============================================================================*/
+void handler(int sig, siginfo_t *info, void *ucontext)
+{
+    if ( sig == SIG_NEWCLIENT )
+    {
+        if ( info != NULL )
+        {
+            NewClient( info->si_pid );
+        }
+    }
+    else if ( sig == SIG_CLIENT_REQUEST )
+    {
+        ProcessRequest( info );
+    }
+    else if ( sig == SIG_TIMER )
+    {
+        STATS_Process();
+    }
+    else
+    {
+        printf("SERVER: unhandled signal: %d\n", sig);
+    }
 }
 
 /*============================================================================*/
@@ -464,23 +528,22 @@ static int GetClientID( void )
     @retval EINVAL invalid argument
 
 ==============================================================================*/
-static int ProcessRequest( siginfo_t *pInfo, RequestStats *pStats )
+static int ProcessRequest( siginfo_t *pInfo )
 {
     int result = EINVAL;
     int clientid;
     VarClient *pVarClient;
     VarRequest requestType;
     int (*handler)(VarClient *pVarClient);
+    uint64_t *pMetric;
 
-    if ( ( pInfo != NULL ) &&
-         ( pStats != NULL ) )
+    if ( pInfo != NULL )
     {
         /* get the client id */
         clientid = pInfo->si_value.sival_int;
 
         /* update the request stats */
-        pStats->requestCount++;
-        pStats->totalRequestCount++;
+        STATS_IncrementRequestCount();
 
         if( clientid < MAX_VAR_CLIENTS )
         {
@@ -503,6 +566,16 @@ static int ProcessRequest( siginfo_t *pInfo, RequestStats *pStats )
                             RequestHandlers[requestType].requestName,
                             clientid);
                 }
+
+                /* update the metric */
+                pMetric = RequestHandlers[requestType].pMetric;
+                if ( pMetric != NULL )
+                {
+                    (*pMetric)++;
+                }
+
+                /* increment the client's transaction counter */
+                (pVarClient->transactionCount)++;
 
                 /* get the appropriate handler */
                 handler = RequestHandlers[requestType].handler;
@@ -685,13 +758,26 @@ static int NewClient( pid_t pid )
         if (pVarClient != MAP_FAILED)
         {
             clientId=GetClientID();
-            VarClients[clientId] = pVarClient;
-            pVarClient->clientid = clientId;
+            if ( clientId != 0 )
+            {
+                VarClients[clientId] = pVarClient;
+                pVarClient->clientid = clientId;
+            }
+            else
+            {
+                pVarClient->clientid = 0;
+            }
 
             /* close the file descriptor since we don't need it for anything */
             close( fd );
 
             UnblockClient( pVarClient );
+
+            if ( clientId == 0 )
+            {
+                munmap( pVarClient, sizeof(VarClient));
+            }
+
             result = EOK;
         }
         else
@@ -927,12 +1013,21 @@ static int ProcessVarRequestPrint( VarClient *pVarClient )
     result = ValidateClient( pVarClient );
     if( result == EOK)
     {
-        result = VARLIST_PrintByHandle( pVarClient->client_pid,
-                                        &pVarClient->variableInfo,
-                                        &pVarClient->workbuf,
-                                        pVarClient->workbufsize,
-                                        pVarClient,
-                                        &handler );
+        if ( pVarClient->variableInfo.hVar == hClientInfo )
+        {
+            result = PrintClientInfo( &pVarClient->variableInfo,
+                                      &pVarClient->workbuf,
+                                      pVarClient->workbufsize );
+        }
+        else
+        {
+            result = VARLIST_PrintByHandle( pVarClient->client_pid,
+                                            &pVarClient->variableInfo,
+                                            &pVarClient->workbuf,
+                                            pVarClient->workbufsize,
+                                            pVarClient,
+                                            &handler );
+        }
 
         /* capture the result */
         pVarClient->responseVal = result;
@@ -1235,6 +1330,8 @@ static int ProcessVarRequestLength( VarClient *pVarClient )
     The ProcessVarRequestNotify function handles a variable notification
     requests from a client.  It registers a request for a notification
     of type:
+        NOTIFY_MODIFIED_QUEUE
+            - request a notification when the notification queue changes
         NOTIFY_MODIFIED
             - request a notification when a variable's value changes
         NOTIFY_CALC
@@ -1485,10 +1582,8 @@ static int ProcessValidationRequest( VarClient *pVarClient )
 /*!
     Process a Validation Response from a client
 
-    The ProcessValidationResponse function handles a validation response
-    from a client.  A client sends a validation response to the server
-    after it has completed a validation request and is ready to
-    indicate if the data point change is accepted or rejected.
+    The ProcessValidationResponse function handles a validge is accepted
+    or rejected.
 
     @param[in]
         pVarClient
@@ -1540,126 +1635,170 @@ static int ProcessValidationResponse( VarClient *pVarClient )
     Initialize the varserver statistics
 
     The InitStats function creates the varserver statistics variables
-    and sets up the statistics calculation timer.
-
-    @param[in]
-        pStats
-            pointer to the RequestStats statistics object
 
     @retval EOK - stats initialized ok
     @retval EINVAL - invalid arguments
 
 ==============================================================================*/
-int InitStats( RequestStats *pStats )
+static int InitStats( void )
 {
-    int result = EINVAL;
     VarInfo info;
     VAR_HANDLE hVar;
+    VarObject *pVarObject;
+    size_t len;
+    size_t n;
+    size_t i;
+    char *pMetricName;
+    uint64_t *pMetric;
 
-    if ( pStats != NULL )
+    /* initialize an empty stats object */
+    STATS_Initialize();
+
+    /* set the transactions per second variable */
+    STATS_SetRequestsPerSecPtr(MakeMetric("/varserver/stats/tps" ));
+    STATS_SetTotalRequestsPtr(MakeMetric("/varserver/stats/transactions"));
+
+    /* set up the blocked client counter metric */
+    SetBlockedClientMetric(MakeMetric("/varserver/stats/blocked_clients"));
+
+    /* create the metric variable */
+    memset(&info, 0, sizeof(VarInfo));
+    len = sizeof(info.name);
+    strncpy(info.name, "/varserver/client/info", len);
+    info.name[len-1] = 0;
+    info.var.len = BUFSIZ;
+    info.var.val.str = calloc(1, BUFSIZ);
+    info.var.type = VARTYPE_STR;
+    VARLIST_AddNew( &info, &hClientInfo );
+
+    /* make metrics for all the request endpoints */
+    n = sizeof(RequestHandlers) / sizeof(RequestHandler);
+    for ( i=0; i<n; i++ )
     {
-        /* reset the request stats */
-        memset( pStats, 0, sizeof( RequestStats ) );
+        pMetricName = RequestHandlers[i].pMetricName;
+        if( pMetricName != NULL )
+        {
+            pMetric = MakeMetric( pMetricName );
+            RequestHandlers[i].pMetric = pMetric;
+        }
+    }
 
-        /* set the transactions per second variable */
-        memset(&info, 0, sizeof(VarInfo));
-        strcpy(info.name, "/varserver/stats/tps");
-        info.var.len = sizeof( uint32_t );
-        info.var.type = VARTYPE_UINT32;
-        VARLIST_AddNew( &info, &pStats->hTransactionsPerSecond );
+    return EOK;
+}
 
-        /* set the total transactions variable */
-        strcpy(info.name, "/varserver/stats/transactions");
-        info.var.len = sizeof( uint64_t );
-        info.var.type = VARTYPE_UINT64;
-        VARLIST_AddNew( &info, &pStats->hTransactionCount );
+/*============================================================================*/
+/*  MakeMetric                                                                */
+/*!
+    Create a 64-bit metric counter
 
-        /* set up the statistics timer */
-        CreateStatsTimer( 1000 );
+    The MakeMetric function creates a new 64-bit unsigned integer for
+    use as a metric counter.  It returns a pointer to the 64 bit value
+    that can be quickly accessed to update the metric value.
+
+    @param[in]
+        name
+            pointer to the name of the metric to create
+
+    @retval pointer to the 64-bit metric value
+    @retval NULL if the metric could not be created
+
+==============================================================================*/
+static uint64_t *MakeMetric( char *name )
+{
+    uint64_t *p = NULL;
+    VarInfo info;
+    VAR_HANDLE hVar;
+    VarObject *pVarObject;
+    size_t len;
+
+    /* create the metric variable */
+    memset(&info, 0, sizeof(VarInfo));
+    len = sizeof(info.name);
+    strncpy(info.name, name, len);
+    info.name[len-1] = 0;
+    info.var.len = sizeof( uint64_t );
+    info.var.type = VARTYPE_UINT64;
+    VARLIST_AddNew( &info, &hVar );
+
+    /* get a pointer to the metric variable */
+    pVarObject = VARLIST_GetObj( hVar );
+    if ( pVarObject != NULL )
+    {
+        /* get a pointer to the metric value */
+        p = &(pVarObject->val.ull);
+    }
+
+    return p;
+}
+
+/*============================================================================*/
+/*  PrintClientInfo                                                           */
+/*!
+    Print Client Runtime information
+
+    The PrintClientInfo function iterates through all the clients
+    and prints the client's runtime statistics into the output buffer.
+
+    @param[in]
+        pVarInfo
+            pointer to a VarInfo object for the variable associated with the
+            client info
+
+    @param[in,out]
+        buf
+            pointer to the output buffer to print the information into
+
+    @param[in]
+        len
+            length of the output buffer to print the information into
+
+    @retval EOK output generated successfully
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+static int PrintClientInfo( VarInfo *pVarInfo, char *buf, size_t len )
+{
+    size_t i;
+    size_t offset = 0;
+    size_t n;
+    VarClient *pVarClient;
+    int result = EINVAL;
+
+    if ( ( pVarInfo != NULL ) &&
+         ( buf != NULL ) )
+    {
+        /* get the variable TLV */
+        pVarInfo->var.type = VARTYPE_STR;
+        pVarInfo->var.len = len;
+        strcpy(pVarInfo->formatspec, "%s");
+
+        buf[0] = '\n';
+        offset = 1;
+
+        for(i=1;i<MAX_VAR_CLIENTS;i++)
+        {
+            pVarClient = VarClients[i];
+            if( pVarClient != NULL )
+            {
+                n = snprintf( &buf[offset],
+                            len,
+                            "id: %d, blk: %d, txn: %lu, pid: %d\n",
+                            pVarClient->clientid,
+                            pVarClient->blocked,
+                            pVarClient->transactionCount,
+                            pVarClient->client_pid );
+
+                offset += n;
+                len -= n;
+            }
+        }
+
+        buf[offset]=0;
 
         result = EOK;
     }
 
     return result;
-}
-
-/*============================================================================*/
-/*  CreateStatsTimer                                                          */
-/*!
-    Create a repeating 1 second timer
-
-    The CreateStatsTimer creates a timer used for periodic statistics
-    generation.
-
-@param[in]
-    timeoutms
-        timer interval in milliseconds
-
-==============================================================================*/
-static void CreateStatsTimer( int timeoutms )
-{
-    struct sigevent te;
-    struct itimerspec its;
-    int sigNo = SIGRTMIN+5;
-    long secs;
-    long msecs;
-
-    timer_t timerID;
-    int result = EINVAL;
-
-    secs = timeoutms / 1000;
-    msecs = timeoutms % 1000;
-
-    /* Set and enable alarm */
-    te.sigev_notify = SIGEV_SIGNAL;
-    te.sigev_signo = sigNo;
-    te.sigev_value.sival_int = 1;
-    timer_create(CLOCK_REALTIME, &te, &timerID);
-
-    its.it_interval.tv_sec = secs;
-    its.it_interval.tv_nsec = msecs * 1000000L;
-    its.it_value.tv_sec = secs;
-    its.it_value.tv_nsec = msecs * 1000000L;
-    timer_settime(timerID, 0, &its, NULL);
-}
-
-/*============================================================================*/
-/*  ProcessStats                                                              */
-/*!
-    Process the statistics
-
-    The ProcessStats function processes the varserver statistics once
-    every timer interval (1 second)
-
-@param[in]
-    pStats
-        pointer to the stats
-
-==============================================================================*/
-static void ProcessStats( RequestStats *pStats )
-{
-    VarInfo info;
-    bool validationInProgress;
-
-    if ( pStats != NULL )
-    {
-        /* update the requests per second counter */
-        pStats->requestsPerSec = pStats->requestCount;
-        pStats->requestCount=0;
-
-        /* set the transactions per second variable */
-        memset(&info, 0, sizeof(VarInfo));
-        info.hVar = pStats->hTransactionCount;
-        info.var.val.ull = pStats->totalRequestCount;
-        info.var.len = sizeof( uint64_t );
-        info.var.type = VARTYPE_UINT64;
-        VARLIST_Set( -1, &info, &validationInProgress, NULL );
-        info.hVar = pStats->hTransactionsPerSecond;
-        info.var.val.ul = pStats->requestsPerSec;
-        info.var.len = sizeof( uint32_t );
-        info.var.type = VARTYPE_UINT32;
-        VARLIST_Set( -1, &info, &validationInProgress, NULL );
-    }
 }
 
 /*! @}

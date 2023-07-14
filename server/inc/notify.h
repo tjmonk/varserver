@@ -61,6 +61,9 @@ SOFTWARE.
 /*! bitmask to indicate if the variable has clients blocked on a VALIDATE notification */
 #define NOTIFY_MASK_HAS_VALIDATE_BLOCK  ( 1 << 7 )
 
+/*! bitmask to indiciate if a variable has clients with queue notification */
+#define NOTIFY_MASK_MODIFIED_QUEUE ( 1 << 8 )
+
 /*! The Notification object is used for storing notifications
     associated with each variable */
 typedef struct _Notification
@@ -70,6 +73,12 @@ typedef struct _Notification
 
     /*! The PID of the process we need to notify */
     pid_t pid;
+
+    /*! the notification queue descriptor */
+    mqd_t mq;
+
+    /*! message queue signal notification is pending */
+    bool pending;
 
     /*! The type of notification being requested */
     NotificationType type;
@@ -88,6 +97,12 @@ int NOTIFY_Signal( pid_t pid,
                    NotificationType type,
                    int handle,
                    pid_t *sentTo );
+
+int NOTIFY_Payload( pid_t pid,
+                    Notification **ppNotification,
+                    NotificationType type,
+                    void *buf,
+                    size_t len );
 
 Notification *NOTIFY_Find( Notification *pNotification,
                            NotificationType type,
