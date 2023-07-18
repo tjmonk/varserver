@@ -102,6 +102,7 @@ static const char *flagNames[] =
     "volatile",
     "readonly",
     "hidden",
+    "dirty",
     NULL
 };
 

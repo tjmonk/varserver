@@ -112,7 +112,10 @@ typedef enum _VarFlags
     VARFLAG_READONLY = 2,
 
     /*! hidden variable */
-    VARFLAG_HIDDEN = 4
+    VARFLAG_HIDDEN = 4,
+
+    /*! dirty variable */
+    VARFLAG_DIRTY = 8
 
 } VarFlags;
 

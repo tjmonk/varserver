@@ -186,6 +186,7 @@ static void usage( char *cmdname )
         fprintf(stderr,
                 "usage: %s [-n name] [-v] [-h]\n"
                 " [-n name] : variable name search term\n"
+                " [-f flagslist] : variable flags search term\n"
                 " [-h] : display this help\n"
                 " [-v] : output values\n",
                 cmdname );
@@ -222,7 +223,7 @@ static int ProcessOptions( int argC,
 {
     int c;
     int result = EINVAL;
-    const char *options = "hvn:";
+    const char *options = "hvn:f:";
 
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
@@ -238,6 +239,11 @@ static int ProcessOptions( int argC,
                 case 'n':
                     pState->searchText = optarg;
                     pState->searchType |= QUERY_MATCH;
+                    break;
+
+                case 'f':
+                    pState->searchType |= QUERY_FLAGS;
+                    VARSERVER_StrToFlags( optarg, &pState->flags );
                     break;
 
                 case 'h':

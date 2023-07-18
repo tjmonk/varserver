@@ -154,6 +154,9 @@ static int varlist_CopyVarInfoStringToClient( VarClient *pVarClient,
 static void *varlist_GetNotificationPayload( VAR_HANDLE hVar,
                                              VarStorage *pVarStorage,
                                              size_t *size );
+
+static void varlist_SetDirty( VarStorage *pVarStorage );
+
 /*==============================================================================
         Public function definitions
 ==============================================================================*/
@@ -716,6 +719,11 @@ int VARLIST_Set( pid_t clientPID,
                 }
             }
 
+            if ( result == EOK )
+            {
+                varlist_SetDirty( pVarStorage );
+            }
+
             if ( ( result == EOK ) ||
                  ( result == EALREADY ) )
             {
@@ -785,6 +793,36 @@ int VARLIST_Set( pid_t clientPID,
 /*==============================================================================
         Private function definitions
 ==============================================================================*/
+
+/*============================================================================*/
+/*  varlist_SetDirty                                                          */
+/*!
+    Set the variable's dirty bit
+
+    The varlist_SetDirty function sets the dirty bit for the variable
+    if it is a non-volatile variable.  The dirty bit is used to identify
+    variables that have been modified after startup.
+
+    @param[in]
+        pVarStorage
+            Pointer to the variable storage
+
+==============================================================================*/
+static void varlist_SetDirty( VarStorage *pVarStorage )
+{
+    if ( pVarStorage != NULL )
+    {
+        if (  pVarStorage->flags & VARFLAG_VOLATILE )
+        {
+            /* do nothing for volatile flags */
+        }
+        else
+        {
+            /* set the dirty bit for non-volatile variables */
+            pVarStorage->flags |= VARFLAG_DIRTY;
+        }
+    }
+}
 
 /*============================================================================*/
 /*  varlist_Calc                                                              */
@@ -3045,6 +3083,7 @@ static int varlist_Match( VAR_HANDLE hVar, SearchContext *ctx )
     VarStorage *pVarStorage;
     int searchtype;
     bool found = true;
+    bool match;
 
     if ( ( ctx != NULL ) &&
          ( hVar < VARSERVER_MAX_VARIABLES ) &&
@@ -3076,7 +3115,8 @@ static int varlist_Match( VAR_HANDLE hVar, SearchContext *ctx )
         /* any flags matching */
         if( searchtype & QUERY_FLAGS )
         {
-            found &= (ctx->query.flags & pVarStorage->flags );
+            match = (ctx->query.flags & pVarStorage->flags ) ? true : false;
+            found &= match;
         }
 
         result = ( found == true ) ? EOK : ENOENT;
