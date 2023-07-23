@@ -142,25 +142,15 @@ typedef struct _serverInfo
 
 } ServerInfo;
 
-
-/*! The VarClient structure is used as the primary data structure
-    for client/server interactions */
-typedef struct _varClient
+/*! The requestResponse object is used to send and receive commands and
+    responses between the client and the server */
+typedef struct _requestResponse
 {
     /*! identifier of the var client */
     uint32_t id;
 
     /*! varserver version */
     uint16_t version;
-
-    /*! semaphore used to synchronize client and server */
-    sem_t sem;
-
-    /*! client message queue used to receive notifications */
-    mqd_t notificationQ;
-
-    /*! flag indicating to output debug information */
-    int debug;
 
     /*! client identifier */
     int clientid;
@@ -183,6 +173,36 @@ typedef struct _varClient
 
     /*! response value */
     int responseVal;
+
+    /*! length of data in workbuf */
+    size_t len;
+
+} RequestResponse;
+
+/*! The VarClient structure is used as the primary data structure
+    for client/server interactions */
+typedef struct _varClient
+{
+    /*! used for server-side client chaining */
+    struct _varClient *pNext;
+
+    /* client request - common data shared between client and server */
+    RequestResponse rr;
+
+    /*! semaphore used to synchronize client and server */
+    sem_t sem;
+
+    /*! client message queue used to receive notifications */
+    mqd_t notificationQ;
+
+    /*! flag indicating to output debug information */
+    int debug;
+
+    /*! client socket descriptor */
+    int sd;
+
+    /*! indicate if client is active */
+    bool active;
 
     /*! indicates a request is already in progress */
     bool validationInProgress;

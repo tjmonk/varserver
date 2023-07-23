@@ -151,7 +151,7 @@ int BlockClient( VarClient *pVarClient, NotificationType notifyType )
             /* populate the blocked client object */
             pBlockedClient->notifyType = notifyType;
             pBlockedClient->pVarClient = pVarClient;
-            pBlockedClient->hVar = pVarClient->variableInfo.hVar;
+            pBlockedClient->hVar = pVarClient->rr.variableInfo.hVar;
             pBlockedClient->pNext = NULL;
 
             /* insert the blocked client on the tail of the blocked
@@ -230,8 +230,8 @@ int UnblockClients( VAR_HANDLE hVar,
                 if( pVarClient->debug >= LOG_DEBUG )
                 {
                     printf( "SERVER: unblocking client %d pid(%d)\n",
-                            pVarClient->clientid,
-                            pVarClient->client_pid );
+                            pVarClient->rr.clientid,
+                            pVarClient->rr.client_pid );
                 }
 
                 if( cb != NULL )

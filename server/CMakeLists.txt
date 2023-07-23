@@ -16,12 +16,13 @@ find_package( Threads REQUIRED )
 add_executable( ${PROJECT_NAME}
     src/blocklist.c
     src/notify.c
-    src/server.c
+    src/sockserver.c
     src/taglist.c
     src/transaction.c
     src/validate.c
     src/varlist.c
     src/stats.c
+    src/clientlist.c
 )
 
 target_include_directories( ${PROJECT_NAME}

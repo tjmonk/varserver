@@ -551,13 +551,13 @@ static int ProcessRequest( siginfo_t *pInfo )
             pVarClient = VarClients[clientid];
             if( pVarClient != NULL )
             {
-                if( pVarClient->requestType >= VARREQUEST_END_MARKER )
+                if( pVarClient->rr.requestType >= VARREQUEST_END_MARKER )
                 {
                     requestType = VARREQUEST_INVALID;
                 }
                 else
                 {
-                    requestType = pVarClient->requestType;
+                    requestType = pVarClient->rr.requestType;
                 }
 
                 if( pVarClient->debug >= LOG_DEBUG )
@@ -648,13 +648,13 @@ static int ProcessVarRequestClose( VarClient *pVarClient )
             printf("SERVER: Closing Client\n");
         }
 
-        pVarClient->responseVal = 0;
+        pVarClient->rr.responseVal = 0;
 
         /* allow the client to proceed */
         UnblockClient( pVarClient );
 
         /* get the client id */
-        clientid = pVarClient->clientid;
+        clientid = pVarClient->rr.clientid;
 
         if( ( clientid > 0 ) && ( clientid < MAX_VAR_CLIENTS ) )
         {
@@ -704,8 +704,8 @@ static int UnblockClient( VarClient *pVarClient )
         if( pVarClient->debug >= LOG_DEBUG )
         {
             printf( "SERVER: unblocking client %d pid(%d)\n",
-                    pVarClient->clientid,
-                    pVarClient->client_pid );
+                    pVarClient->rr.clientid,
+                    pVarClient->rr.client_pid );
         }
 
         /* unblock the client by posting to the client semaphore */
@@ -761,11 +761,11 @@ static int NewClient( pid_t pid )
             if ( clientId != 0 )
             {
                 VarClients[clientId] = pVarClient;
-                pVarClient->clientid = clientId;
+                pVarClient->rr.clientid = clientId;
             }
             else
             {
-                pVarClient->clientid = 0;
+                pVarClient->rr.clientid = 0;
             }
 
             /* close the file descriptor since we don't need it for anything */
@@ -815,9 +815,9 @@ static int ValidateClient( VarClient *pVarClient )
     int result = EINVAL;
 
     if( ( pVarClient != NULL ) &&
-        ( pVarClient->id == VARSERVER_ID ) )
+        ( pVarClient->rr.id == VARSERVER_ID ) )
     {
-        if( pVarClient->version == VARSERVER_VERSION )
+        if( pVarClient->rr.version == VARSERVER_VERSION )
         {
             result = EOK;
         }
@@ -860,24 +860,24 @@ static int ProcessVarRequestNew( VarClient *pVarClient )
     {
         /* special handling for string variables uses the client's
            working buffer to pass the variable value */
-        if( pVarClient->variableInfo.var.type == VARTYPE_STR )
+        if( pVarClient->rr.variableInfo.var.type == VARTYPE_STR )
         {
-            pVarClient->variableInfo.var.val.str = &pVarClient->workbuf;
+            pVarClient->rr.variableInfo.var.val.str = &pVarClient->workbuf;
         }
 
         /* special handling for blob variables uses the client's
            working buffer to pass the variable value */
-        if( pVarClient->variableInfo.var.type == VARTYPE_BLOB )
+        if( pVarClient->rr.variableInfo.var.type == VARTYPE_BLOB )
         {
-            pVarClient->variableInfo.var.val.blob = &pVarClient->workbuf;
+            pVarClient->rr.variableInfo.var.val.blob = &pVarClient->workbuf;
         }
 
         /* add the new variable to the variable list */
-        rc = VARLIST_AddNew( &pVarClient->variableInfo, &varhandle );
+        rc = VARLIST_AddNew( &pVarClient->rr.variableInfo, &varhandle );
         if( rc == EOK )
         {
             /* return the new variable's handle */
-            pVarClient->responseVal = varhandle;
+            pVarClient->rr.responseVal = varhandle;
         }
     }
 
@@ -913,8 +913,8 @@ static int ProcessVarRequestFind( VarClient *pVarClient )
     if( result == EOK)
     {
         /* search for the variable in the variable list */
-        result = VARLIST_Find( &pVarClient->variableInfo,
-                               (VAR_HANDLE *)&pVarClient->responseVal );
+        result = VARLIST_Find( &pVarClient->rr.variableInfo,
+                               (VAR_HANDLE *)&pVarClient->rr.responseVal );
     }
 
     return result;
@@ -945,7 +945,7 @@ static int ProcessVarRequestEcho( VarClient *pVarClient )
     if( result == EOK)
     {
         /* echo request back to response */
-        pVarClient->responseVal = pVarClient->requestVal;
+        pVarClient->rr.responseVal = pVarClient->rr.requestVal;
     }
 
     return result;
@@ -1013,16 +1013,16 @@ static int ProcessVarRequestPrint( VarClient *pVarClient )
     result = ValidateClient( pVarClient );
     if( result == EOK)
     {
-        if ( pVarClient->variableInfo.hVar == hClientInfo )
+        if ( pVarClient->rr.variableInfo.hVar == hClientInfo )
         {
-            result = PrintClientInfo( &pVarClient->variableInfo,
+            result = PrintClientInfo( &pVarClient->rr.variableInfo,
                                       &pVarClient->workbuf,
                                       pVarClient->workbufsize );
         }
         else
         {
-            result = VARLIST_PrintByHandle( pVarClient->client_pid,
-                                            &pVarClient->variableInfo,
+            result = VARLIST_PrintByHandle( pVarClient->rr.client_pid,
+                                            &pVarClient->rr.variableInfo,
                                             &pVarClient->workbuf,
                                             pVarClient->workbufsize,
                                             pVarClient,
@@ -1030,7 +1030,7 @@ static int ProcessVarRequestPrint( VarClient *pVarClient )
         }
 
         /* capture the result */
-        pVarClient->responseVal = result;
+        pVarClient->rr.responseVal = result;
 
         if( result == EINPROGRESS )
         {
@@ -1043,7 +1043,7 @@ static int ProcessVarRequestPrint( VarClient *pVarClient )
         {
             /* printing is being handled by another client */
             /* get the PID of the client handling the printing */
-            pVarClient->peer_pid = handler;
+            pVarClient->rr.peer_pid = handler;
 
             /* don't unblock the requesting client */
             result = EINPROGRESS;
@@ -1083,17 +1083,17 @@ static int ProcessVarRequestOpenPrintSession( VarClient *pVarClient )
     if( result == EOK)
     {
         /* get the print session transaction */
-        pRequestor = (VarClient *)TRANSACTION_Get( pVarClient->requestVal );
+        pRequestor = (VarClient *)TRANSACTION_Get( pVarClient->rr.requestVal );
         if( pRequestor != NULL )
         {
             /* get the handle for the variable being requested */
-            pVarClient->variableInfo.hVar = pRequestor->variableInfo.hVar;
+            pVarClient->rr.variableInfo.hVar = pRequestor->rr.variableInfo.hVar;
 
             /* get the PID of the client requesting the print */
-            pVarClient->peer_pid = pRequestor->client_pid;
+            pVarClient->rr.peer_pid = pRequestor->rr.client_pid;
 
             /* get the PID of the client performing the print */
-            pRequestor->peer_pid = pVarClient->client_pid;
+            pRequestor->rr.peer_pid = pVarClient->rr.client_pid;
 
             /* unblock the requesting client */
             UnblockClient( pRequestor );
@@ -1143,7 +1143,7 @@ static int ProcessVarRequestClosePrintSession( VarClient *pVarClient )
     if( result == EOK)
     {
         /* get the client object of the requestor of the print */
-        pRequestor = (VarClient *)TRANSACTION_Remove( pVarClient->requestVal );
+        pRequestor = (VarClient *)TRANSACTION_Remove( pVarClient->rr.requestVal );
         if( pRequestor != NULL )
         {
             /* unblock the reqeusting client */
@@ -1188,26 +1188,26 @@ static int ProcessVarRequestSet( VarClient *pVarClient )
     if( result == EOK)
     {
         /* check if we are dealing with a string */
-        if( pVarClient->variableInfo.var.type == VARTYPE_STR )
+        if( pVarClient->rr.variableInfo.var.type == VARTYPE_STR )
         {
             /* for strings, the data is transferred via the working buffer */
-            pVarClient->variableInfo.var.val.str = &pVarClient->workbuf;
+            pVarClient->rr.variableInfo.var.val.str = &pVarClient->workbuf;
         }
 
         /* check if we are dealing with a blob */
-        if( pVarClient->variableInfo.var.type == VARTYPE_BLOB )
+        if( pVarClient->rr.variableInfo.var.type == VARTYPE_BLOB )
         {
             /* for strings, the data is transferred via the working buffer */
-            pVarClient->variableInfo.var.val.blob = &pVarClient->workbuf;
+            pVarClient->rr.variableInfo.var.val.blob = &pVarClient->workbuf;
         }
 
         /* set the variable value */
-        result = VARLIST_Set( pVarClient->client_pid,
-                              &pVarClient->variableInfo,
+        result = VARLIST_Set( pVarClient->rr.client_pid,
+                              &pVarClient->rr.variableInfo,
                               &pVarClient->validationInProgress,
                               (void *)pVarClient );
 
-        pVarClient->responseVal = result;
+        pVarClient->rr.responseVal = result;
     }
 
     if( ( result != EOK ) &&
@@ -1247,7 +1247,7 @@ static int ProcessVarRequestType( VarClient *pVarClient )
     if( result == EOK)
     {
         /* fet the variable type */
-        result = VARLIST_GetType( &pVarClient->variableInfo );
+        result = VARLIST_GetType( &pVarClient->rr.variableInfo );
     }
 
     return result;
@@ -1281,7 +1281,7 @@ static int ProcessVarRequestName( VarClient *pVarClient )
     if( result == EOK)
     {
         /* fetch the variable name */
-        result = VARLIST_GetName( &pVarClient->variableInfo );
+        result = VARLIST_GetName( &pVarClient->rr.variableInfo );
     }
 
     return result;
@@ -1316,7 +1316,7 @@ static int ProcessVarRequestLength( VarClient *pVarClient )
     if( result == EOK)
     {
         /* get the variable length */
-        result = VARLIST_GetLength( &(pVarClient->variableInfo) );
+        result = VARLIST_GetLength( &(pVarClient->rr.variableInfo) );
     }
 
     return result;
@@ -1363,8 +1363,8 @@ static int ProcessVarRequestNotify( VarClient *pVarClient )
     if( result == EOK)
     {
         /* register the notification request */
-        result = VARLIST_RequestNotify( &(pVarClient->variableInfo),
-                                        pVarClient->client_pid );
+        result = VARLIST_RequestNotify( &(pVarClient->rr.variableInfo),
+                                        pVarClient->rr.client_pid );
     }
 
     return result;
@@ -1400,8 +1400,8 @@ static int ProcessVarRequestGet( VarClient *pVarClient )
     result = ValidateClient( pVarClient );
     if( result == EOK)
     {
-        result = VARLIST_GetByHandle( pVarClient->client_pid,
-                                      &pVarClient->variableInfo,
+        result = VARLIST_GetByHandle( pVarClient->rr.client_pid,
+                                      &pVarClient->rr.variableInfo,
                                       &pVarClient->workbuf,
                                       pVarClient->workbufsize );
         if( result == EINPROGRESS )
@@ -1443,12 +1443,12 @@ static int ProcessVarRequestGetFirst( VarClient *pVarClient )
     result = ValidateClient( pVarClient );
     if( result == EOK)
     {
-        result = VARLIST_GetFirst( pVarClient->client_pid,
-                                   pVarClient->requestVal,
-                                   &pVarClient->variableInfo,
+        result = VARLIST_GetFirst( pVarClient->rr.client_pid,
+                                   pVarClient->rr.requestVal,
+                                   &pVarClient->rr.variableInfo,
                                    &pVarClient->workbuf,
                                    pVarClient->workbufsize,
-                                   &pVarClient->responseVal);
+                                   &pVarClient->rr.responseVal);
         if( result == EINPROGRESS )
         {
             /* add the client to the blocked clients list */
@@ -1488,12 +1488,12 @@ static int ProcessVarRequestGetNext( VarClient *pVarClient )
     result = ValidateClient( pVarClient );
     if( result == EOK)
     {
-        result = VARLIST_GetNext( pVarClient->client_pid,
-                                  pVarClient->requestVal,
-                                  &pVarClient->variableInfo,
+        result = VARLIST_GetNext( pVarClient->rr.client_pid,
+                                  pVarClient->rr.requestVal,
+                                  &pVarClient->rr.variableInfo,
                                   &pVarClient->workbuf,
                                   pVarClient->workbufsize,
-                                  &pVarClient->responseVal );
+                                  &pVarClient->rr.responseVal );
         if( result == EINPROGRESS )
         {
             /* add the client to the blocked clients list */
@@ -1540,33 +1540,33 @@ static int ProcessValidationRequest( VarClient *pVarClient )
     if( result == EOK )
     {
         /* get a pointer to the client requesting the validation */
-        pSetClient = (VarClient *)TRANSACTION_Get( pVarClient->requestVal );
+        pSetClient = (VarClient *)TRANSACTION_Get( pVarClient->rr.requestVal );
         if( pSetClient != NULL )
         {
-            if( pSetClient->variableInfo.var.type == VARTYPE_STR )
+            if( pSetClient->rr.variableInfo.var.type == VARTYPE_STR )
             {
                 /* strings will be stored in the client's working buffer */
-                pVarClient->variableInfo.var.val.str = &pVarClient->workbuf;
-                pVarClient->variableInfo.var.len = pVarClient->workbufsize;
+                pVarClient->rr.variableInfo.var.val.str = &pVarClient->workbuf;
+                pVarClient->rr.variableInfo.var.len = pVarClient->workbufsize;
             }
 
-            if( pSetClient->variableInfo.var.type == VARTYPE_BLOB )
+            if( pSetClient->rr.variableInfo.var.type == VARTYPE_BLOB )
             {
                 /* blobs will be stored in the client's working buffer */
-                pVarClient->variableInfo.var.val.blob = &pVarClient->workbuf;
+                pVarClient->rr.variableInfo.var.val.blob = &pVarClient->workbuf;
 
 
                 // TO DO : Need to pass blob size as well as blob!!!!
-                pVarClient->variableInfo.var.len = pVarClient->workbufsize;
+                pVarClient->rr.variableInfo.var.len = pVarClient->workbufsize;
             }
 
             /* copy the variable handle from the setting client to the
                validating client */
-            pVarClient->variableInfo.hVar = pSetClient->variableInfo.hVar;
+            pVarClient->rr.variableInfo.hVar = pSetClient->rr.variableInfo.hVar;
 
             /* copy the Variable object from the setter to the validator */
-            result = VAROBJECT_Copy( &pVarClient->variableInfo.var,
-                                     &pSetClient->variableInfo.var );
+            result = VAROBJECT_Copy( &pVarClient->rr.variableInfo.var,
+                                     &pSetClient->rr.variableInfo.var );
         }
         else
         {
@@ -1608,13 +1608,13 @@ static int ProcessValidationResponse( VarClient *pVarClient )
     if( result == EOK )
     {
         /* get a pointer to the client requesting the validation */
-        pSetClient = (VarClient *)TRANSACTION_Remove(pVarClient->requestVal);
+        pSetClient = (VarClient *)TRANSACTION_Remove(pVarClient->rr.requestVal);
         if( pSetClient != NULL )
         {
             /* copy the response from the validator to the setter */
-            pSetClient->responseVal = pVarClient->responseVal;
+            pSetClient->rr.responseVal = pVarClient->rr.responseVal;
 
-            if( pVarClient->responseVal == EOK )
+            if( pVarClient->rr.responseVal == EOK )
             {
                 /* set the value on behalf of the requestor */
                 result = ProcessVarRequestSet( pSetClient );
@@ -1783,10 +1783,10 @@ static int PrintClientInfo( VarInfo *pVarInfo, char *buf, size_t len )
                 n = snprintf( &buf[offset],
                             len,
                             "id: %d, blk: %d, txn: %lu, pid: %d\n",
-                            pVarClient->clientid,
+                            pVarClient->rr.clientid,
                             pVarClient->blocked,
                             pVarClient->transactionCount,
-                            pVarClient->client_pid );
+                            pVarClient->rr.client_pid );
 
                 offset += n;
                 len -= n;

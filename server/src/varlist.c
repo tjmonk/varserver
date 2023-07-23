@@ -863,17 +863,17 @@ static int varlist_Calc( VarClient *pVarClient, void *arg )
         hVar = pVarInfo->hVar;
 
         /* copy the format specifier */
-        memcpy( pVarClient->variableInfo.formatspec,
+        memcpy( pVarClient->rr.variableInfo.formatspec,
                 varstore[hVar].formatspec,
                 MAX_FORMATSPEC_LEN );
 
         /* copy the variable type from the varstore */
         varType = varstore[hVar].var.type;
-        pVarClient->variableInfo.var.type = varType;
+        pVarClient->rr.variableInfo.var.type = varType;
 
         /* copy the variable length from the varstore */
         len = varstore[hVar].var.len;
-        pVarClient->variableInfo.var.len = len;
+        pVarClient->rr.variableInfo.var.len = len;
 
         if( varType == VARTYPE_STR )
         {
@@ -886,7 +886,7 @@ static int varlist_Calc( VarClient *pVarClient, void *arg )
         else
         {
             /* copy the source VarObject to the VarClient */
-            pVarClient->variableInfo.var.val = pVarInfo->var.val;
+            pVarClient->rr.variableInfo.var.val = pVarInfo->var.val;
 
             result = EOK;
         }
@@ -932,7 +932,7 @@ static int varlist_CopyVarInfoBlobToClient( VarClient *pVarClient,
          ( pVarInfo != NULL ) )
     {
         /* get the destination blob size */
-        destlen = pVarClient->variableInfo.var.len;
+        destlen = pVarClient->rr.variableInfo.var.len;
 
         /* check that the blob will fit */
         if( ( pVarInfo->var.len <= destlen ) &&
@@ -1000,7 +1000,7 @@ static int varlist_CopyVarInfoStringToClient( VarClient *pVarClient,
          ( pVarInfo != NULL ) )
     {
         /* get the destination blob size */
-        destlen = pVarClient->variableInfo.var.len;
+        destlen = pVarClient->rr.variableInfo.var.len;
 
         /* check that the blob will fit */
         if( ( pVarInfo->var.len <= destlen ) &&
