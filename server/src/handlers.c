@@ -464,21 +464,19 @@ int UnblockClient( VarClient *pVarClient )
 
     if( pVarClient != NULL )
     {
-        if( pVarClient->debug >= LOG_DEBUG )
+        if ( pVarClient->pFnUnblock != NULL )
         {
-            printf( "SERVER: unblocking client %d pid(%d)\n",
-                    pVarClient->rr.clientid,
-                    pVarClient->rr.client_pid );
+            /* call the client specific unblocking function */
+            result = pVarClient->pFnUnblock( pVarClient );
         }
-
-        /* unblock the client by posting to the client semaphore */
-        sem_post( &pVarClient->sem );
-        result = EOK;
+        else
+        {
+            result = ENOTSUP;
+        }
     }
 
     return result;
 }
-
 
 /*============================================================================*/
 /*  ValidateClient                                                            */

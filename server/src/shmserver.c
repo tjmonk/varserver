@@ -96,6 +96,7 @@ static void RegisterHandler(void(*f)(int sig, siginfo_t *info, void *ucontext));
 static void handler(int sig, siginfo_t *info, void *ucontext);
 
 static int CloseClient( VarClient *pVarClient );
+static int UnblockShmClient( VarClient *pVarClient );
 
 /*==============================================================================
         Private file scoped variables
@@ -387,6 +388,7 @@ static int NewClient( pid_t pid )
                 VarClients[clientId] = pVarClient;
                 pVarClient->rr.clientid = clientId;
                 pVarClient->pFnClose = CloseClient;
+                pVarClient->pFnUnblock = UnblockShmClient;
             }
             else
             {
@@ -396,7 +398,8 @@ static int NewClient( pid_t pid )
             /* close the file descriptor since we don't need it for anything */
             close( fd );
 
-            UnblockClient( pVarClient );
+            /* unblock the client */
+            UnblockShmClient( pVarClient );
 
             if ( clientId == 0 )
             {
@@ -529,6 +532,27 @@ static int CloseClient( VarClient *pVarClient )
         {
             printf("%s failed: (%d) %s\n", __func__, result, strerror(result));
         }
+    }
+
+    return result;
+}
+
+static int UnblockShmClient( VarClient *pVarClient )
+{
+    int result = EINVAL;
+
+    if( pVarClient != NULL )
+    {
+        if( pVarClient->debug >= LOG_DEBUG )
+        {
+            printf( "SERVER: unblocking client %d pid(%d)\n",
+                    pVarClient->rr.clientid,
+                    pVarClient->rr.client_pid );
+        }
+
+        /* unblock the client by posting to the client semaphore */
+        sem_post( &pVarClient->sem );
+        result = EOK;
     }
 
     return result;

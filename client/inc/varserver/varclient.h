@@ -222,6 +222,9 @@ typedef struct _varClient
     /*! pointer to close handler */
     int (*pFnClose)(struct _varClient *pVarClient);
 
+    /*! pointer to unblocking function */
+    int (*pFnUnblock)(struct _varClient *pVarClient);
+
     /*! specifies the length of the working buffer */
     size_t workbufsize;
 
