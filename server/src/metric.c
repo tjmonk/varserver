@@ -23,21 +23,19 @@ SOFTWARE.
 ==============================================================================*/
 
 /*!
- * @defgroup varserver varserver
- * @brief RealTime In-Memory Publish/Subscribe Key/Value store
+ * @defgroup metric variable server metrics
+ * @brief Functions for managing variable server metrics
  * @{
  */
 
 /*============================================================================*/
 /*!
-@file server.c
+@file metric.c
 
-    Variable Server
+    Variable Server Metrics
 
-    The Variable Server is a real time in-memory pub/sub key/value store
-    It is a single threaded, POSIX compliant server application used to
-    centrally store key/value data for multiple clients.  It is designed
-    for real-time use in embedded systems.
+    The Variable Server Metrics create internal metrics variables for reporting
+    varserver statistics and metrics.
 
 */
 /*============================================================================*/
@@ -49,13 +47,20 @@ SOFTWARE.
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <sys/types.h>
-#include "stats.h"
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <sys/syslog.h>
+#include <time.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <semaphore.h>
+#include <string.h>
+#include <varserver/varclient.h>
+#include <varserver/varserver.h>
+#include "varlist.h"
 #include "metric.h"
-#include "handlers.h"
-#include "shmserver.h"
-#include "blocklist.h"
-#include "server.h"
 
 /*==============================================================================
         Private definitions
@@ -65,96 +70,97 @@ SOFTWARE.
         Private types
 ==============================================================================*/
 
-
 /*==============================================================================
         Private function declarations
 ==============================================================================*/
-
-static int InitStats( void );
 
 /*==============================================================================
         Private file scoped variables
 ==============================================================================*/
 
-/*==============================================================================
-        Public function definitions
-==============================================================================*/
-
 /*============================================================================*/
-/*  main                                                                      */
+/*  MakeMetric                                                                */
 /*!
-    Main entry point for the variable server
+    Create a 64-bit metric counter
 
-    The main function starts the variable server process and waits for
-    messages from clients
-
-    @param[in]
-        argc
-            number of arguments on the command line
-            (including the command itself)
+    The MakeMetric function creates a new 64-bit unsigned integer for
+    use as a metric counter.  It returns a pointer to the 64 bit value
+    that can be quickly accessed to update the metric value.
 
     @param[in]
-        argv
-            array of pointers to the command line arguments
+        name
+            pointer to the name of the metric to create
 
-    @return none
+    @retval pointer to the 64-bit metric value
+    @retval NULL if the metric could not be created
 
 ==============================================================================*/
-void main(int argc, char **argv)
+uint64_t *MakeMetric( char *name )
 {
-    /* initialize the varserver statistics */
-    InitStats();
+    uint64_t *p = NULL;
+    VarInfo info;
+    VAR_HANDLE hVar;
+    VarObject *pVarObject;
+    size_t len;
 
-    /* initialize the shared memory variable server interface */
-    SHMSERVER_Init();
+    /* create the metric variable */
+    memset(&info, 0, sizeof(VarInfo));
+    len = sizeof(info.name);
+    strncpy(info.name, name, len);
+    info.name[len-1] = 0;
+    info.var.len = sizeof( uint64_t );
+    info.var.type = VARTYPE_UINT64;
+    VARLIST_AddNew( &info, &hVar );
 
-    /* loop forever processing signals */
-    while(1)
+    /* get a pointer to the metric variable */
+    pVarObject = VARLIST_GetObj( hVar );
+    if ( pVarObject != NULL )
     {
-        /* do nothing - handler functions take care of everything */
-        pause();
+        /* get a pointer to the metric value */
+        p = &(pVarObject->val.ull);
     }
+
+    return p;
 }
 
-
 /*============================================================================*/
-/*  InitStats                                                                 */
+/*  MakeStringMetric                                                          */
 /*!
-    Initialize the varserver statistics
+    Make a string metric variable
 
-    The InitStats function creates the varserver statistics variables
+    The MakeStringMetric function creates a string variable for reporting
+    VarServer string metrics.  It returns a handle to the new variable.
 
-    @retval EOK - stats initialized ok
-    @retval EINVAL - invalid arguments
+    @param[in]
+        name
+            pointer to the name of the metric to create
+
+    @param[in]
+        len
+            the length of the string buffer to allocate for the string variable
+
+    @retval handle to the VarServer variable
+    @retval VAR_INVALID if the variable could not be created
 
 ==============================================================================*/
-static int InitStats( void )
+VAR_HANDLE MakeStringMetric( char *name, size_t len )
 {
     VarInfo info;
-    size_t len;
-    VAR_HANDLE hVar;
+    VAR_HANDLE hVar = VAR_INVALID;
+    size_t l;
 
-    /* initialize an empty stats object */
-    STATS_Initialize();
+    /* create the string metric variable */
+    memset(&info, 0, sizeof(VarInfo));
+    l = sizeof(info.name);
+    strncpy(info.name, name, l);
+    info.name[l-1] = 0;
+    info.var.len = len;
+    info.var.val.str = calloc(1, len);
+    info.var.type = VARTYPE_STR;
+    VARLIST_AddNew( &info, &hVar );
 
-    /* set the transactions per second variable */
-    STATS_SetRequestsPerSecPtr(MakeMetric("/varserver/stats/tps" ));
-    STATS_SetTotalRequestsPtr(MakeMetric("/varserver/stats/transactions"));
-
-    /* set up the blocked client counter metric */
-    SetBlockedClientMetric(MakeMetric("/varserver/stats/blocked_clients"));
-
-    /* set up render handler for client info */
-    hVar = MakeStringMetric("/varserver/client/info", BUFSIZ);
-
-    AddRenderHandler( hVar, PrintClientInfo );
-
-    /* set up metrics to track handler function invocations */
-    InitHandlerMetrics();
-
-    return EOK;
+    return hVar;
 }
 
-
 /*! @}
- * end of varserver group */
+ * end of metric group */

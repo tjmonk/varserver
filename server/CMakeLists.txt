@@ -16,12 +16,15 @@ find_package( Threads REQUIRED )
 add_executable( ${PROJECT_NAME}
     src/blocklist.c
     src/notify.c
-    src/sockserver.c
+    src/server.c
+    src/shmserver.c
     src/taglist.c
     src/transaction.c
     src/validate.c
     src/varlist.c
     src/stats.c
+    src/handlers.c
+    src/metric.c
     src/clientlist.c
 )
 
