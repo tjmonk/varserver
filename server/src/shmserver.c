@@ -90,7 +90,7 @@ static int ProcessRequest( siginfo_t *pInfo );
 static int GetClientID( void );
 static ServerInfo *InitServerInfo( void );
 
-static int NewClient( pid_t pid );
+static int NewShmClient( pid_t pid );
 
 static void RegisterHandler(void(*f)(int sig, siginfo_t *info, void *ucontext));
 static void handler(int sig, siginfo_t *info, void *ucontext);
@@ -195,7 +195,7 @@ void handler(int sig, siginfo_t *info, void *ucontext)
     {
         if ( info != NULL )
         {
-            NewClient( info->si_pid );
+            NewShmClient( info->si_pid );
         }
     }
     else if ( sig == SIG_CLIENT_REQUEST )
@@ -342,11 +342,11 @@ static int ProcessRequest( siginfo_t *pInfo )
 }
 
 /*============================================================================*/
-/*  NewClient                                                                 */
+/*  NewShmClient                                                                 */
 /*!
     Registers a new client
 
-    The NewClient function registers a new client with the server using
+    The NewShmClient function registers a new client with the server using
     the client's process identifier.  Once a client has been created
     and registered, it may send requests to the server using the
     variable server APIs.
@@ -359,7 +359,7 @@ static int ProcessRequest( siginfo_t *pInfo )
     @retval EINVAL the new client could not be created
 
 ==============================================================================*/
-static int NewClient( pid_t pid )
+static int NewShmClient( pid_t pid )
 {
     int fd;
     char clientname[BUFSIZ];

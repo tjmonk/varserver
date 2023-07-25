@@ -18,6 +18,7 @@ add_executable( ${PROJECT_NAME}
     src/notify.c
     src/server.c
     src/shmserver.c
+    src/sockserver.c
     src/taglist.c
     src/transaction.c
     src/validate.c

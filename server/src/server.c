@@ -102,17 +102,21 @@ static int InitStats( void );
 ==============================================================================*/
 void main(int argc, char **argv)
 {
+    int sock;
+
     /* initialize the varserver statistics */
     InitStats();
 
     /* initialize the shared memory variable server interface */
     SHMSERVER_Init();
 
+    sock = SOCKSERVER_Init();
+
     /* loop forever processing signals */
     while(1)
     {
-        /* do nothing - handler functions take care of everything */
-        pause();
+        /* run the socket server */
+        SOCKSERVER_Run( sock );
     }
 }
 

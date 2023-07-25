@@ -91,6 +91,8 @@ SOFTWARE.
 static int SetupListener( void );
 static int HandleNewClient( int sock, fd_set *pfds );
 static int HandleClientRequest( int sock, fd_set *pfds );
+static int SendClientResponse( VarClient *pVarClient );
+static int writesd( int sd, char *p, size_t len );
 
 /*==============================================================================
         Private file scoped variables
@@ -101,79 +103,81 @@ static int HandleClientRequest( int sock, fd_set *pfds );
 ==============================================================================*/
 
 /*============================================================================*/
-/*  main                                                                      */
+/*  SOCSERVER_Run                                                             */
 /*!
-    Main entry point for the variable server
+    Run the Variable Server socket interface
 
-    The main function starts the variable server process and waits for
-    messages from clients
-
-    @param[in]
-        argc
-            number of arguments on the command line
-            (including the command itself)
+    The SOCKSERVER_Run function runs the variable server socket interface.
+    It waits for a socket message and handles it.
 
     @param[in]
-        argv
-            array of pointers to the command line arguments
+        sock
+            socket interface to process
 
-    @return none
+    @retval EOK a transaction was successfully processed
+    @retval EINVAL invalid arguments
+    @retval EINTR interrupted by signal
+    @retval other error from select
 
 ==============================================================================*/
-int main(int argc, char *argv[])
+int SOCKSERVER_Run( int sock )
 {
-    int sock;
     fd_set readfds;
-    fd_set savefds;
+    static fd_set savefds;
+    static int clientcount = -1;
     int max_sd;
     int activity;
-    int clientcount = 0;
     int numclients;
+    int result = EINVAL;
 
-    /* setup listener to accept client connections */
-    sock = SetupListener();
     if ( sock != -1 )
     {
-        /* setup file descriptor to wait on */
-        FD_ZERO( &savefds );
-        FD_SET( sock, &savefds );
-        max_sd = sock;
-
-        while (1)
+        if ( clientcount == -1 )
         {
-            readfds = savefds;
-            numclients = GetActiveClients();
-            if ( numclients != clientcount )
-            {
-                FD_ZERO( &readfds );
-                FD_SET( sock, &readfds );
-                max_sd = GetClientfds( sock, &readfds );
-                savefds = readfds;
-                clientcount = numclients;
-            }
+            /* one time initialization */
+            FD_ZERO( &savefds );
+            FD_SET( sock, &savefds );
+            max_sd = sock;
+        }
 
-            /* wait for an activity on one of the sockets */
-            activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
-            if ( activity > 0 )
-            {
-                /* handle new client connections */
-                HandleNewClient( sock, &readfds );
+        readfds = savefds;
+        numclients = GetActiveClients();
+        if ( numclients != clientcount )
+        {
+            FD_ZERO( &readfds );
+            FD_SET( sock, &readfds );
+            max_sd = GetClientfds( sock, &readfds );
+            savefds = readfds;
+            clientcount = numclients;
+        }
 
-                /* handle client requests */
-                HandleClientRequest( sock, &readfds );
-            }
-            else if ( ( activity < 0 ) && ( errno!=EINTR ) )
-            {
-                printf("select error: %s\n", strerror(errno));
-                exit(1);
-            }
+        /* wait for an activity on one of the sockets */
+        activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
+        if ( activity > 0 )
+        {
+            /* handle new client connections */
+            HandleNewClient( sock, &readfds );
+
+            /* handle client requests */
+            HandleClientRequest( sock, &readfds );
+
+            result = EOK;
+        }
+        else if ( ( activity < 0 ) && ( errno!=EINTR ) )
+        {
+            printf("select error: %s\n", strerror(errno));
+            result = errno;
+        }
+        else
+        {
+            result = errno;
         }
     }
 
-    return 0;
+    return result;
 }
 
-static int SetupListener( void )
+int SOCKSERVER_Init( void )
 {
     int sock = -1;
     int opt = true;
@@ -219,7 +223,6 @@ static int SetupListener( void )
                 close( sock );
                 sock = -1;
             }
-
         }
         else
         {
@@ -245,10 +248,9 @@ static int HandleNewClient( int sock, fd_set *pfds )
     int new_client;
     ssize_t n;
     ssize_t s;
-    char *message = "ECHO Daemon v1.0 \r\n";
     int result = EINVAL;
     VarClient *pVarClient;
-    int clientid;
+    int clientid = -1;
 
     if ( ( sock != -1 ) && ( pfds != NULL ) )
     {
@@ -265,7 +267,11 @@ static int HandleNewClient( int sock, fd_set *pfds )
             {
                 /* add the new client */
                 pVarClient = NewClient( new_client );
-                clientid = ( pVarClient != NULL ) ? pVarClient->rr.clientid : -1;
+                if ( pVarClient != NULL )
+                {
+                    pVarClient->pFnUnblock = SendClientResponse;
+                    clientid = pVarClient->rr.clientid;
+                }
 
                 /* report new client connection */
                 printf( "New connection: "
@@ -277,14 +283,6 @@ static int HandleNewClient( int sock, fd_set *pfds )
                         new_client,
                         inet_ntoa(address.sin_addr),
                         ntohs(address.sin_port));
-
-                /* send new connection greeting message */
-                n = strlen( message );
-                s = send( new_client, message, n, 0 );
-                if( s != n )
-                {
-                    perror("send");
-                }
             }
             else
             {
@@ -361,6 +359,141 @@ static int HandleClientRequest( int sock, fd_set *pfds )
             /* move to next socket descriptor */
             i++;
         } while ( sd != 0 );
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  SendClientResponse                                                        */
+/*!
+    Send a response from the server to the client
+
+    The SendClientResponse function is used to send a client response
+    from the Variable Server to one of its clients via a socket descriptor.
+
+    If the request response length is greater than zero, then the
+    variable length response in the client's working buffer is
+    sent also.
+
+    @param[in]
+        pVarClient
+            pointer to the VarClient object belonging to the client
+
+    @retval EOK - the client response was handled successfully by the server
+    @retval EINVAL - an invalid client was specified
+    @retval other - error code
+
+==============================================================================*/
+static int SendClientResponse( VarClient *pVarClient )
+{
+    int result = EINVAL;
+    int rc;
+    char *p;
+    size_t len;
+    int sd;
+
+    if( pVarClient != NULL )
+    {
+        if( pVarClient->debug >= LOG_DEBUG )
+        {
+            printf( "SERVER: Sending client response (%d)\n",
+                    pVarClient->rr.responseVal );
+        }
+
+        /* get the socket descriptor */
+        sd = pVarClient->sd;
+
+        /* send response */
+        result = writesd( sd,
+                          (char *)&pVarClient->rr,
+                          sizeof( RequestResponse ) );
+        if ( rc == EOK )
+        {
+            /* check the length of the (optional) request response body */
+            len = pVarClient->rr.len;
+            if ( len > 0 )
+            {
+                /* write data from the working buffer */
+                result = writesd( sd, (char *)&pVarClient->workbuf, len );
+            }
+        }
+    }
+
+    if( ( result != EOK ) &&
+        ( pVarClient->debug >= LOG_ERR ) )
+    {
+        printf("%s failed: (%d) %s\n", __func__, result, strerror(result));
+    }
+
+    if (result != EOK )
+    {
+        printf("%s failed: (%d) %s\n", __func__, result, strerror(result));
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  writesd                                                                   */
+/*!
+    Write a buffer to a socket descriptor
+
+    The writesd function is used to send a buffer of data to the
+    server via a socket descriptor.
+
+    @param[in]
+        sd
+            socket descriptor to send data on
+
+    @param[in]
+        p
+            pointer to the data to send
+
+    @param[in]
+        len
+            length of data to send
+
+    @retval EOK - the data as sent successfully
+    @retval EINVAL - invalid arguments
+    @retval other - error code from write()
+
+==============================================================================*/
+static int writesd( int sd, char *p, size_t len )
+{
+    size_t n = 0;
+    size_t sent = 0;
+    size_t remaining = len;
+    int result = EINVAL;
+
+    if ( ( p != NULL ) &&
+         ( len > 0 ) )
+    {
+        do
+        {
+            n = write( sd,
+                    &p[sent],
+                    remaining );
+            if ( n < 0 )
+            {
+                result = errno;
+                if ( result != EINTR )
+                {
+                    break;
+                }
+            }
+            else
+            {
+                sent += n;
+                remaining -= n;
+            }
+        }
+        while ( remaining > 0 );
+
+        if ( remaining == 0 )
+        {
+            result = EOK;
+        }
     }
 
     return result;
