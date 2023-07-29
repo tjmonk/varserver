@@ -54,6 +54,7 @@ SOFTWARE.
 #include "metric.h"
 #include "handlers.h"
 #include "shmserver.h"
+#include "sockserver.h"
 #include "blocklist.h"
 #include "server.h"
 

@@ -134,7 +134,7 @@ static RequestHandler RequestHandlers[] =
     {
         VARREQUEST_OPEN,
         "OPEN",
-        NULL,
+        ProcessVarRequestOpen,
         NULL,
         NULL
     },
@@ -382,7 +382,9 @@ int HandleRequest( VarClient *pVarClient )
         if( result != EINPROGRESS )
         {
             /* unblock the client so it can proceed */
-            if( requestType != VARREQUEST_CLOSE )
+            /* we don't unblock OPEN and CLOSE requests */
+            if( ( requestType != VARREQUEST_CLOSE ) &&
+                ( requestType != VARREQUEST_OPEN ) )
             {
                 UnblockClient( pVarClient );
             }
@@ -391,6 +393,49 @@ int HandleRequest( VarClient *pVarClient )
     else
     {
         printf("SERVER: Invalid var client : NULL pointer\n");
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  ProcessVarRequestOpen                                                     */
+/*!
+    Open a client connection
+
+    Handle a request from a client to open its connection to the
+    server.  The client open function (if specified) is called
+    and the client is unblocked
+
+    @param[in]
+        pVarClient
+            pointer to the variable client object
+
+    @retval EOK the client was closed successfully
+    @retval EINVAL invalid argument
+    @retval errno error number returned by munmap
+
+==============================================================================*/
+int ProcessVarRequestOpen( VarClient *pVarClient )
+{
+    int result = EINVAL;
+    int clientid = 0;
+
+    if( pVarClient != NULL )
+    {
+        result = EOK;
+
+        if( pVarClient->debug >= LOG_DEBUG )
+        {
+            printf("SERVER: Opening Client\n");
+        }
+
+        pVarClient->rr.responseVal = 0;
+
+        if ( pVarClient->pFnOpen != NULL )
+        {
+            result = pVarClient->pFnOpen( pVarClient );
+        }
     }
 
     return result;
@@ -728,6 +773,7 @@ int ProcessVarRequestPrint( VarClient *pVarClient )
                                             &pVarClient->rr.variableInfo,
                                             &pVarClient->workbuf,
                                             pVarClient->workbufsize,
+                                            &pVarClient->rr.len,
                                             pVarClient,
                                             &handler );
         }
@@ -1106,7 +1152,8 @@ int ProcessVarRequestGet( VarClient *pVarClient )
         result = VARLIST_GetByHandle( pVarClient->rr.client_pid,
                                       &pVarClient->rr.variableInfo,
                                       &pVarClient->workbuf,
-                                      pVarClient->workbufsize );
+                                      pVarClient->workbufsize,
+                                      &pVarClient->rr.len );
         if( result == EINPROGRESS )
         {
             /* add the client to the blocked clients list */
@@ -1151,6 +1198,7 @@ int ProcessVarRequestGetFirst( VarClient *pVarClient )
                                    &pVarClient->rr.variableInfo,
                                    &pVarClient->workbuf,
                                    pVarClient->workbufsize,
+                                   &pVarClient->rr.len,
                                    &pVarClient->rr.responseVal);
         if( result == EINPROGRESS )
         {
@@ -1196,6 +1244,7 @@ int ProcessVarRequestGetNext( VarClient *pVarClient )
                                   &pVarClient->rr.variableInfo,
                                   &pVarClient->workbuf,
                                   pVarClient->workbufsize,
+                                  &pVarClient->rr.len,
                                   &pVarClient->rr.responseVal );
         if( result == EINPROGRESS )
         {

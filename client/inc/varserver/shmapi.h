@@ -22,32 +22,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ============================================================================*/
 
-#ifndef CLIENTLIST_H
-#define CLIENTLIST_H
+#ifndef SHMAPI_H
+#define SHMAPI_H
 
 /*============================================================================
         Includes
 ============================================================================*/
 
-#include <sys/select.h>
-#include <varserver/varclient.h>
+#include <stdint.h>
+#include "var.h"
 
 /*============================================================================
         Public definitions
 ============================================================================*/
 
-/*============================================================================
-        Public function declarations
-============================================================================*/
-
-VarClient *NewClient( int sd );
-void DeleteClient( VarClient *pVarClient );
-VarClient *GetClient( int client_id );
-int GetActiveClients(void);
-int GetClientfds( int max_sd, fd_set *pfds );
-int *GetClientSDMap( void );
-void SetClient( int idx, VarClient *pVarClient );
-int FindClient( VarClient *pVarClient );
-int ReplaceClient( VarClient *pOldClient, VarClient *pNewClient );
+const VarServerAPI *SHMAPI( void );
 
 #endif

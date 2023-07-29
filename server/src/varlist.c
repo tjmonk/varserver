@@ -313,6 +313,10 @@ int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle )
             the maximum string length that can be retrieved).
 
     @param[in]
+        len
+            pointer to location to store the length of the printed data
+
+    @param[in]
         clientInto
             opaque pointer to the client information
 
@@ -329,13 +333,14 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                            VarInfo *pVarInfo,
                            char *workbuf,
                            size_t workbufsize,
+                           size_t *len,
                            void *clientInfo,
                            pid_t *handler )
 {
     VarStorage *pVarStorage;
     int result = EINVAL;
     VAR_HANDLE hVar;
-    size_t n;
+    size_t n = 0;
     uint32_t printHandle;
 
     if( ( pVarInfo != NULL ) &&
@@ -425,6 +430,7 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                         /* copy the string */
                         memcpy( workbuf, pVarStorage->var.val.str, n );
                         workbuf[n] = '\0';
+                        n++;
                     }
                     else
                     {
@@ -447,6 +453,10 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                     }
                 }
 
+                if ( len != NULL )
+                {
+                    *len = n;
+                }
 
                 result = EOK;
             }
@@ -492,12 +502,13 @@ int VARLIST_PrintByHandle( pid_t clientPID,
 int VARLIST_GetByHandle( pid_t clientPID,
                          VarInfo *pVarInfo,
                          char *buf,
-                         size_t bufsize )
+                         size_t bufsize,
+                         size_t *len )
 {
     VarStorage *pVarStorage;
     int result = EINVAL;
     VAR_HANDLE hVar;
-    size_t n;
+    size_t n = 0;
     uint8_t notifyType;
 
     if( ( pVarInfo != NULL ) &&
@@ -556,6 +567,7 @@ int VARLIST_GetByHandle( pid_t clientPID,
                         /* copy the string */
                         memcpy( buf, pVarStorage->var.val.str, n );
                         buf[n] = '\0';
+                        n++;
                     }
                     else
                     {
@@ -576,6 +588,12 @@ int VARLIST_GetByHandle( pid_t clientPID,
                     {
                         result = E2BIG;
                     }
+                }
+
+                if ( len != NULL )
+                {
+                    /* report number of bytes copied */
+                    *len = n;
                 }
             }
         }
@@ -2687,6 +2705,11 @@ static int assign_StringVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo )
             the maximum string length that can be retrieved).
 
     @param[in,out]
+        len
+            pointer to a location to store the length of the
+            data written into buf
+
+    @param[in,out]
         context
             pointer to a location to store the search context
 
@@ -2701,6 +2724,7 @@ int VARLIST_GetFirst( pid_t clientPID,
                       VarInfo *pVarInfo,
                       char *buf,
                       size_t bufsize,
+                      size_t *len,
                       int *context )
 {
     int result = EINVAL;
@@ -2752,7 +2776,8 @@ int VARLIST_GetFirst( pid_t clientPID,
                     result = VARLIST_GetByHandle( clientPID,
                                                   pVarInfo,
                                                   buf,
-                                                  bufsize );
+                                                  bufsize,
+                                                  len );
                     break;
                 }
 
@@ -2808,6 +2833,11 @@ int VARLIST_GetFirst( pid_t clientPID,
             the maximum string length that can be retrieved).
 
     @param[in,out]
+        len
+            pointer to a location to store the length of the
+            data written into buf
+
+    @param[in,out]
        response
             pointer to a location to store the response value
 
@@ -2822,6 +2852,7 @@ int VARLIST_GetNext( pid_t clientPID,
                      VarInfo *pVarInfo,
                      char *buf,
                      size_t bufsize,
+                     size_t *len,
                      int *response )
 {
     int result = EINVAL;
@@ -2866,7 +2897,8 @@ int VARLIST_GetNext( pid_t clientPID,
                 result = VARLIST_GetByHandle( clientPID,
                                               pVarInfo,
                                               buf,
-                                              bufsize );
+                                              bufsize,
+                                              len );
                 break;
             }
 

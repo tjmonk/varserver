@@ -48,6 +48,7 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                            VarInfo *pVarInfo,
                            char *workbuf,
                            size_t workbufsize,
+                           size_t *len,
                            void *clientInfo,
                            pid_t *handler );
 
@@ -63,13 +64,15 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid );
 int VARLIST_GetByHandle( pid_t clientPID,
                          VarInfo *pVarInfo,
                          char *buf,
-                         size_t bufsize );
+                         size_t bufsize,
+                         size_t *len );
 
 int VARLIST_GetFirst( pid_t clientPID,
                       int searchType,
                       VarInfo *pVarInfo,
                       char *buf,
                       size_t bufsize,
+                      size_t *len,
                       int *context );
 
 int VARLIST_GetNext( pid_t clientPID,
@@ -77,6 +80,7 @@ int VARLIST_GetNext( pid_t clientPID,
                      VarInfo *pVarInfo,
                      char *buf,
                      size_t bufsize,
+                     size_t *len,
                      int *response );
 
 VarObject *VARLIST_GetObj( VAR_HANDLE hVar );

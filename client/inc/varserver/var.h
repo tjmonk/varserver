@@ -78,6 +78,9 @@ SOFTWARE.
 /*! invalid variable handle */
 #define VAR_INVALID     ( 0 )
 
+/*! handle to the variable server */
+typedef void * VARSERVER_HANDLE;
+
 /*! handle to a variable stored in the variable server */
 typedef uint32_t VAR_HANDLE;
 

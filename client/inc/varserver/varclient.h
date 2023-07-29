@@ -186,6 +186,9 @@ typedef struct _varClient
     /*! used for server-side client chaining */
     struct _varClient *pNext;
 
+    /*! pointer to the variable server interface API */
+    const void *pAPI;
+
     /* client request - common data shared between client and server */
     RequestResponse rr;
 
@@ -225,6 +228,9 @@ typedef struct _varClient
     /*! pointer to unblocking function */
     int (*pFnUnblock)(struct _varClient *pVarClient);
 
+    /*! pointer to open handler */
+    int (*pFnOpen)(struct _varClient *pVarClient);
+
     /*! specifies the length of the working buffer */
     size_t workbufsize;
 
@@ -233,5 +239,39 @@ typedef struct _varClient
     char workbuf;
 
 } VarClient;
+
+/*! The VarServerAPI defines the functional interface between the
+    VarServer client and server */
+typedef struct _VarServerAPI
+{
+    VARSERVER_HANDLE (*open)( size_t workbufsize );
+    int (*close)( VarClient *pVarClient );
+    VAR_HANDLE (*findByName)( VarClient *pVarClient, char *pName );
+    int (*createvar)( VarClient *pVarClient, VarInfo *pVarInfo );
+    int (*test)( VarClient *pVarClient );
+    int (*get)( VarClient *pVarClient, VAR_HANDLE hVar, VarObject *pVarObject );
+    int (*getvalidationrequest)(VarClient *pVarClient,
+                                uint32_t id,
+                                VAR_HANDLE *hVar,
+                                VarObject *pVarObject );
+    int (*sendvalidationresponse)(VarClient *pVarClient,
+                                  uint32_t id,
+                                  int response );
+    int (*getlength)(VarClient *pVarClient, VAR_HANDLE hVar, size_t *len );
+    int (*gettype)(VarClient *pVarClient, VAR_HANDLE hVar, VarType *pVarType );
+    int (*getname)(VarClient *pVarClient,
+                   VAR_HANDLE hVar,
+                   char *buf,
+                   size_t len );
+    int (*set)(VarClient *pVarClient, VAR_HANDLE hVar, VarObject *pVarObject);
+    int (*first)(VarClient *pVarClient, VarQuery *query, VarObject *obj);
+    int (*next)(VarClient *pVarClient, VarQuery *query, VarObject *obj);
+    int (*notify)(VarClient *pVarClient,
+                  VAR_HANDLE hVar,
+                  NotificationType notificationType);
+    int (*print)(VarClient *pVarClient, VAR_HANDLE hVar, int fd);
+    int (*ops)(VarClient *pVarClient, uint32_t id, VAR_HANDLE *hVar, int *fd);
+    int (*cps)(VarClient *pVarClient, uint32_t id, int fd);
+} VarServerAPI;
 
 #endif

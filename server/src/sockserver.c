@@ -65,13 +65,15 @@ SOFTWARE.
 #include <string.h>
 #include <varserver/varclient.h>
 #include <varserver/varserver.h>
+#include <varserver/sockapi.h>
 #include "varlist.h"
 #include "taglist.h"
 #include "blocklist.h"
 #include "transaction.h"
 #include "stats.h"
 #include "clientlist.h"
-#include "server.h"
+#include "handlers.h"
+#include "sockserver.h"
 
 /*==============================================================================
         Private definitions
@@ -89,10 +91,14 @@ SOFTWARE.
 ==============================================================================*/
 
 static int SetupListener( void );
+static int SetupClient( VarClient *pVarClient );
 static int HandleNewClient( int sock, fd_set *pfds );
 static int HandleClientRequest( int sock, fd_set *pfds );
 static int SendClientResponse( VarClient *pVarClient );
+static int ReadPayload( int sd, VarClient *pVarClient );
+
 static int writesd( int sd, char *p, size_t len );
+static int readsd( int sd, char *p, size_t len );
 
 /*==============================================================================
         Private file scoped variables
@@ -103,7 +109,7 @@ static int writesd( int sd, char *p, size_t len );
 ==============================================================================*/
 
 /*============================================================================*/
-/*  SOCSERVER_Run                                                             */
+/*  SOCKSERVER_Run                                                            */
 /*!
     Run the Variable Server socket interface
 
@@ -270,6 +276,7 @@ static int HandleNewClient( int sock, fd_set *pfds )
                 if ( pVarClient != NULL )
                 {
                     pVarClient->pFnUnblock = SendClientResponse;
+                    pVarClient->pFnOpen = SetupClient;
                     clientid = pVarClient->rr.clientid;
                 }
 
@@ -306,6 +313,7 @@ static int HandleClientRequest( int sock, fd_set *pfds )
     int *pSDMap = GetClientSDMap();
     VarClient *pVarClient;
     int clientid;
+    RequestResponse rr;
 
     if ( pfds != NULL )
     {
@@ -326,7 +334,7 @@ static int HandleClientRequest( int sock, fd_set *pfds )
                                                       : -1;
 
                     /* read incoming message */
-                    n = read( sd, buffer, 1024 );
+                    n = read( sd, &rr, sizeof(RequestResponse) );
                     if ( n == 0 )
                     {
                         /* client disconnected */
@@ -345,13 +353,34 @@ static int HandleClientRequest( int sock, fd_set *pfds )
                         /* close and clear the client socket */
                         close( sd );
 
+                        /* Delete the client and move it to the free list */
                         DeleteClient( pVarClient );
+                    }
+                    else if ( n != sizeof(RequestResponse) )
+                    {
+                        printf("SERVER: Invalid read: n=%ld\n", n );
+                    }
+                    else if ( ( rr.id == VARSERVER_ID ) &&
+                              ( rr.version == VARSERVER_VERSION ) )
+                    {
+                        rr.clientid = clientid;
+                        memcpy( &pVarClient->rr, &rr, sizeof( RequestResponse));
+
+                        if ( pVarClient->rr.requestType != VARREQUEST_OPEN )
+                        {
+                            ReadPayload( sd, pVarClient );
+                        }
+
+//                        printf("SERVER: Handling Request\n");
+//                        printf("SERVER:    id: %d\n", pVarClient->rr.id );
+//                        printf("SERVER:    version: %d\n", pVarClient->rr.version );
+//                        printf("SERVER:    request: %d\n", pVarClient->rr.requestType );
+
+                        HandleRequest( pVarClient );
                     }
                     else
                     {
-                        /* echo back to the client what it sent */
-                        buffer[n] = '\0';
-                        send(sd, buffer, strlen(buffer), 0 );
+                        printf("SERVER: Invalid read\n");
                     }
                 }
             }
@@ -401,6 +430,10 @@ static int SendClientResponse( VarClient *pVarClient )
                     pVarClient->rr.responseVal );
         }
 
+//        printf("SERVER: Send client response\n" );
+//        printf("SERVER:     id: %d\n", pVarClient->rr.id );
+//        printf("SERVER:     version: %d\n", pVarClient->rr.version);
+
         /* get the socket descriptor */
         sd = pVarClient->sd;
 
@@ -408,13 +441,14 @@ static int SendClientResponse( VarClient *pVarClient )
         result = writesd( sd,
                           (char *)&pVarClient->rr,
                           sizeof( RequestResponse ) );
-        if ( rc == EOK )
+        if ( result == EOK )
         {
             /* check the length of the (optional) request response body */
             len = pVarClient->rr.len;
             if ( len > 0 )
             {
                 /* write data from the working buffer */
+//                printf("SERVER: Sending variable length response: %ld\n", len );
                 result = writesd( sd, (char *)&pVarClient->workbuf, len );
             }
         }
@@ -429,6 +463,62 @@ static int SendClientResponse( VarClient *pVarClient )
     if (result != EOK )
     {
         printf("%s failed: (%d) %s\n", __func__, result, strerror(result));
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  SetupClient                                                               */
+/*!
+    Set up the client
+
+    The SetupClient function is invoked as part of the client creation.
+    It allocates the server-side working buffer based on the length
+    specified in the RequestResponse object.
+
+    @param[in]
+        pVarClient
+            pointer to the VarClient object belonging to the client
+
+    @retval EOK - the client setup was successful
+    @retval EINVAL - invalid arguments
+    @retval ENOMEM - memory allocation failure
+
+==============================================================================*/
+static int SetupClient( VarClient *pVarClient )
+{
+    int result;
+    size_t len;
+    int idx;
+    VarClient *pNewVarClient;
+
+    if ( pVarClient != NULL )
+    {
+        result = EOK;
+
+        /* check if we need to (re)allocate a server-side working buffer */
+        len = pVarClient->rr.len;
+        pVarClient->rr.len = 0;
+
+        if ( ( len > 0 ) && ( len != pVarClient->workbufsize ) )
+        {
+            /* reallocate the client to set a new work buffer size */
+            pNewVarClient = realloc( pVarClient, sizeof(VarClient)+len );
+            if ( pNewVarClient != NULL )
+            {
+                ReplaceClient( pVarClient, pNewVarClient );
+                pNewVarClient->workbufsize = len + 1;
+
+                /* this replaces the unblock client call which we
+                cannot use since we just invalidated the pVarClient pointer */
+                SendClientResponse( pNewVarClient );
+            }
+            else
+            {
+                result = ENOMEM;
+            }
+        }
     }
 
     return result;
@@ -474,6 +564,7 @@ static int writesd( int sd, char *p, size_t len )
             n = write( sd,
                     &p[sent],
                     remaining );
+//            printf("SERVER: write: n=%ld\n", n);
             if ( n < 0 )
             {
                 result = errno;
@@ -491,6 +582,129 @@ static int writesd( int sd, char *p, size_t len )
         while ( remaining > 0 );
 
         if ( remaining == 0 )
+        {
+            result = EOK;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  readsd                                                                    */
+/*!
+    Read a buffer from a socket descriptor
+
+    The readsd function is used to read a buffer of data from the
+    server via a socket descriptor.
+
+    @param[in]
+        sd
+            socket descriptor to receive data on
+
+    @param[in]
+        p
+            pointer to a buffer to store the data
+
+    @param[in]
+        len
+            length of data to receive
+
+    @retval EOK - the data as received successfully
+    @retval EINVAL - invalid arguments
+    @retval other - error code from read()
+
+==============================================================================*/
+static int readsd( int sd, char *p, size_t len )
+{
+    size_t n = 0;
+    size_t rcvd = 0;
+    size_t remaining = len;
+    int result = EINVAL;
+    int count = 0;
+
+    if ( ( p != NULL ) && ( len > 0 ) )
+    {
+        do
+        {
+            n = read( sd,
+                    &p[rcvd],
+                    remaining );
+//            printf("SERVER: read: n = %ld\n", n);
+            if ( n < 0 )
+            {
+                result = errno;
+                if ( result != EINTR )
+                {
+                    break;
+                }
+            }
+            else if ( n == 0 )
+            {
+                if ( ++count >= 3 )
+                {
+                    break;
+                }
+            }
+            else
+            {
+                rcvd += n;
+                remaining -= n;
+            }
+        }
+        while ( remaining > 0 );
+
+        if ( remaining == 0 )
+        {
+            result = EOK;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  ReadPayload                                                               */
+/*!
+    Read the payload buffer from a socket descriptor
+
+    The ReadPayload function checks if a payload is expected by inspecting
+    the rr.len field of the request.  If this is non-zero it indicates
+    the number of bytes still to be received as the message payload.
+    This data is read into the client's working buffer.
+
+    @param[in]
+        sd
+            socket descriptor to receive data on
+
+    @param[in]
+        pVarClient
+            pointer to the VarServer client to receive the data
+
+    @retval EOK - the data as received successfully
+    @retval EINVAL - invalid arguments
+    @retval E2BIG - read data will not fit into client's working buffer
+
+==============================================================================*/
+static int ReadPayload( int sd, VarClient *pVarClient )
+{
+    int result = EINVAL;
+    size_t len;
+
+    if ( pVarClient != NULL )
+    {
+        len = pVarClient->rr.len;
+        pVarClient->rr.len = 0;
+        if ( ( len > 0 ) && ( len <= pVarClient->workbufsize ) )
+        {
+//            printf("SERVER: Reading Payload: len=%ld\n", len);
+            result = readsd( sd, &pVarClient->workbuf, len);
+        }
+        else if ( len > pVarClient->workbufsize )
+        {
+            result = E2BIG;
+        }
+        else
         {
             result = EOK;
         }

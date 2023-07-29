@@ -146,6 +146,9 @@ VarClient *NewClient( int sd )
         /* set the client socket descriptor */
         pVarClient->sd = sd;
 
+        /* initialize the payload length */
+        pVarClient->rr.len = 0;
+
         /* increment the number of active clients */
         ActiveClients++;
 
@@ -155,6 +158,71 @@ VarClient *NewClient( int sd )
     }
 
     return pVarClient;
+}
+
+/*============================================================================*/
+/*  ReplaceClient                                                             */
+/*!
+    Replace an old VarClient reference with a new one
+
+    The ReplaceClient function replaces an old VarClient reference with
+    a new one in the client list and client map.  This function is invoked
+    when a VarClient is reallocated to change the working buffer size.
+
+    @param[in]
+        pOldClient
+            pointer to the VarClient reference to be replaced
+
+    @param[in]
+        pNewVarClient
+            pointer to the new VarClient reference
+
+    @retval EINVAL invalid arguments
+    @retval ENOENT old client not found
+    @retval EOK client reference successfully replaced
+
+==============================================================================*/
+int ReplaceClient( VarClient *pOldClient, VarClient *pNewClient )
+{
+    int result = EINVAL;
+    VarClient *p;
+    int idx;
+
+    if ( ( pOldClient != NULL )  && ( pNewClient != NULL ) )
+    {
+        result = ENOENT;
+
+        /* replace the client in the client map */
+        idx = FindClient( pOldClient );
+        if ( idx != -1 )
+        {
+            SetClient( idx, pNewClient );
+        }
+
+        /* replace the client in the client list */
+        if ( clientlist == pOldClient )
+        {
+            clientlist = pNewClient;
+            result = EOK;
+        }
+        else
+        {
+            p = clientlist;
+            while ( p != NULL )
+            {
+                if ( p->pNext == pOldClient )
+                {
+                    p->pNext = pNewClient;
+                    result = EOK;
+                    break;
+                }
+
+                p = p->pNext;
+            }
+        }
+    }
+
+    return result;
 }
 
 /*============================================================================*/
@@ -244,6 +312,61 @@ VarClient *GetClient( int idx )
     }
 
     return pVarClient;
+}
+
+/*============================================================================*/
+/*  SetClient                                                                 */
+/*!
+    Set a VarClient into the client map at the specified index
+
+    The SetClient function stores a VarClient at the specified
+    index in the client map.
+
+    @param[in]
+        idx
+            index into the client map
+
+    @param[in]
+        pVarClient
+            pointer to the VarClient to store at the index
+
+==============================================================================*/
+void SetClient( int idx, VarClient *pVarClient )
+{
+    if ( ( idx < NumClients ) && ( pVarClient != NULL ) )
+    {
+        clientmap[idx] = pVarClient;
+    }
+}
+
+/*============================================================================*/
+/*  FindClient                                                                */
+/*!
+    Find a VarClient in the client map
+
+    The FindClient function searches the client map for the specified client.
+
+    @param[in]
+        pVarClient
+            pointer to the VarClient to find
+
+    @retval index in the client map where the client was found
+    @retval -1 if the client was not found
+
+==============================================================================*/
+int FindClient( VarClient *pVarClient )
+{
+    int i;
+
+    for ( i=0; i < NumClients; i++ )
+    {
+        if ( clientmap[i] == pVarClient )
+        {
+            return i;
+        }
+    }
+
+    return -1;
 }
 
 /*============================================================================*/

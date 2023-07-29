@@ -646,7 +646,7 @@ static int SetupVarObject( BlobTestState *pState, size_t len )
 }
 
 /*============================================================================*/
-/*  SetupNotificationQueue                                                                */
+/*  SetupNotificationQueue                                                    */
 /*!
     Set up the client notification queue
 

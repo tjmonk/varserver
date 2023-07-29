@@ -70,35 +70,17 @@ SOFTWARE.
 #include <varserver/varserver.h>
 #include <varserver/varprint.h>
 #include <varserver/var.h>
+#include <varserver/shmapi.h>
+#include <varserver/sockapi.h>
 
 /*==============================================================================
         Private type declarations
 ==============================================================================*/
 
-/*! the VarServerAddress object specifies the network connectivity
-    information for the VarServer */
-typedef struct varserverAddress
-{
-    /* varserver address */
-    struct sockaddr_in addr;
-
-    /* varserver port */
-    uint16_t port;
-} VarserverAddress;
-
 /*==============================================================================
         Private function declarations
 ==============================================================================*/
 
-static int ClientRequest( VarClient *pVarClient, int request );
-static int ClientRequestSig( VarClient *pVarClient, int request );
-static int ClientRequestSd( VarClient *pVarClient, int request );
-
-static VarClient *NewClient( size_t workbufsize );
-static int ClientCleanup( VarClient *pVarClient );
-static int DeleteClientSemaphore( VarClient *pVarClient );
-static int NewClientSemaphore( VarClient *pVarClient );
-static int InitServerInfo( VarClient *pVarClient );
 static VarClient *ValidateHandle( VARSERVER_HANDLE hVarServer );
 static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf );
 static int var_GetVarObject( VarClient *pVarClient, VarObject *pVarObject );
@@ -111,14 +93,6 @@ static int var_CopyStringVarObjectToWorkbuf( VarClient *pVarClient,
 static int var_CopyBlobVarObjectToWorkbuf( VarClient *pVarClient,
                                         VarObject *pVarObject );
 
-static void DeleteClientQueue( VarClient *pVarClient );
-
-static VARSERVER_HANDLE varserver_OpenRemote( size_t workbufsize );
-static VARSERVER_HANDLE varserver_OpenLocal( size_t workbufsize );
-static int varserver_GetAddress( VarserverAddress *pVarserverAddress );
-
-static int writesd( int sd, char *p, size_t len );
-static int readsd( int sd, char *p, size_t len );
 
 /*==============================================================================
         File scoped variables
@@ -201,208 +175,30 @@ VARSERVER_HANDLE VARSERVER_Open( void )
 ==============================================================================*/
 VARSERVER_HANDLE VARSERVER_OpenExt( size_t workbufsize )
 {
-    VarClient *pVarClient;
+    VARSERVER_HANDLE hVarServer = NULL;
 
-    /* try to open a remote connection first */
-    pVarClient = varserver_OpenRemote( workbufsize );
-    if ( pVarClient == NULL )
+    const VarServerAPI *shmapi = SHMAPI();
+    const VarServerAPI *sockapi = SOCKAPI();
+
+    if ( sockapi != NULL )
     {
-        /* fall back to a local connection */
-        pVarClient = varserver_OpenLocal( workbufsize );
-    }
-
-    return pVarClient;
-}
-
-/*============================================================================*/
-/*  varserver_OpenLocal                                                       */
-/*!
-    Open a local connection to the variable server
-
-    The varserver_OpenLocal function is used by the variable server clients
-    to connect to the variable server and obtain a VARSERVER_HANDLE to
-    use for subsequent communication with the server.  It allows
-    a custom client-server working buffer size to be specified.
-    It connects to a local variable server using real-time signals
-
-    @param[in]
-        workbufsize
-            specifies the size of the client-server working buffer
-
-    @retval a handle to the variable server
-    @retval NULL if the variable server could not be opened
-
-==============================================================================*/
-static VARSERVER_HANDLE varserver_OpenLocal( size_t workbufsize )
-{
-    int i;
-    int result = EINVAL;
-    VarClient *pTempVarClient = NULL;
-    VarClient *pVarClient = NULL;
-    sigset_t mask;
-    static ServerInfo *pServerInfo = NULL;
-
-    /* create a new client instance */
-    pTempVarClient = NewClient( workbufsize );
-    if( pTempVarClient != NULL )
-    {
-        sigemptyset(&pTempVarClient->mask);
-        sigaddset(&pTempVarClient->mask, SIG_CLIENT_RESPONSE );
-        sigprocmask(SIG_BLOCK, &pTempVarClient->mask, NULL );
-
-        /* initialize the server information object */
-        if( InitServerInfo(pTempVarClient) == EOK )
+        /* try to open the socket interface first */
+        if ( sockapi->open != NULL )
         {
-            /* tell the variable server about us */
-            if( ClientRequest( pTempVarClient, SIG_NEWCLIENT ) == EOK )
-            {
-                if( pTempVarClient->debug >= LOG_DEBUG )
-                {
-                    printf( "CLIENT: identifier is %d\n",
-                            pTempVarClient->rr.clientid );
-                }
-
-                if ( pTempVarClient->rr.clientid != 0 )
-                {
-                    pVarClient = pTempVarClient;
-                }
-            }
+            hVarServer = sockapi->open( workbufsize );
         }
     }
 
-    if( pVarClient == NULL )
+    if ( hVarServer == NULL )
     {
-        ClientCleanup( pTempVarClient );
-    }
-
-    return pVarClient;
-}
-
-/*============================================================================*/
-/*  varserver_OpenRemote                                                      */
-/*!
-    Connect to a remote variable server
-
-    The varserver_OpenRemote function is used to connect to a remote
-    variable server via a socket.
-
-    @param[in]
-        workbufsize
-            size of the client's working buffer
-
-    @retval handle to the variable server
-    @retval NULL if the remote variable server could not be opened
-
-==============================================================================*/
-static VARSERVER_HANDLE varserver_OpenRemote( size_t workbufsize )
-{
-    int result = EINVAL;
-    VarserverAddress vsa;
-    VarClient *pVarClient = NULL;
-    int sd;
-    int rc;
-
-    /* get the variable server address information */
-    result = varserver_GetAddress( &vsa );
-    if ( result == EOK )
-    {
-        /* create a communication socket */
-        sd = socket( AF_INET, SOCK_STREAM, 0 );
-        if ( sd < 0 )
+        if (shmapi != NULL )
         {
-            result = errno;
-        }
-        else
-        {
-            /* connect to the remote */
-            rc = connect( sd, (struct sockaddr *)&vsa.addr, sizeof(vsa.addr));
-            if ( rc < 0 )
-            {
-                result = errno;
-            }
-            else
-            {
-                /* allocate memory for the VarClient */
-                pVarClient = calloc( 1, sizeof( VarClient ) + workbufsize );
-                if ( pVarClient != NULL )
-                {
-                    pVarClient->sd = sd;
-                    pVarClient->rr.id = VARSERVER_ID;
-                    pVarClient->rr.version = VARSERVER_VERSION;
-                    pVarClient->rr.client_pid = getpid();
-                    pVarClient->workbufsize = workbufsize + 1;
-                }
-                else
-                {
-                    close( sd );
-                }
-            }
+            /* then try to open the shared memory interface */
+            hVarServer = shmapi->open( workbufsize );
         }
     }
 
-    return pVarClient;
-}
-
-/*============================================================================*/
-/*  varserver_GetAddress                                                      */
-/*!
-    Get the Variable Server network connectivity information
-
-    The varserver_GetAddress function is used to get the variable server
-    network connectivity information.  That is the IP address and port
-    number of the variable server.
-
-    This information is retrieved from the VARSERVER_ADDRESS and
-    VARSERVER_PORT environment variables
-
-    @param[in,out]
-        pVarserverAddress
-            pointer to a VarserverAddress object to initialize
-
-    @retval EOK the VarserverAddress object was populated
-    @retval EINVAL invalid arguments
-    @retval ENOTSUP address format not supported
-    @retval ENOENT address information not found
-
-==============================================================================*/
-static int varserver_GetAddress( VarserverAddress *pVarserverAddress )
-{
-    char *addr;
-    char *portnum;
-    int port;
-    int result = EINVAL;
-    int rc;
-
-    if ( pVarserverAddress != NULL )
-    {
-        addr = getenv("VARSERVER_ADDRESS");
-        portnum = getenv("VARSERVER_PORT");
-
-        result = ENOENT;
-
-        if ( ( addr != NULL ) && ( portnum != NULL ) )
-        {
-            result = ENOTSUP;
-
-            rc = inet_pton( AF_INET,
-                            addr,
-                            &pVarserverAddress->addr.sin_addr );
-            if ( rc == 1 )
-            {
-                port = atoi( portnum );
-                if ( ( port > 0 ) && ( port <= 65535 ) )
-                {
-                    pVarserverAddress->port = port;
-                    pVarserverAddress->addr.sin_family = AF_INET;
-                    pVarserverAddress->addr.sin_port = htons(port);
-
-                    result = EOK;
-                }
-            }
-        }
-    }
-
-    return result;
+    return hVarServer;
 }
 
 /*============================================================================*/
@@ -492,17 +288,21 @@ int VARSERVER_CreateClientQueue( VARSERVER_HANDLE hVarServer,
 int VARSERVER_Close( VARSERVER_HANDLE hVarServer )
 {
     int result = EINVAL;
+    VarServerAPI *pAPI;
+
     VarClient *pVarClient = ValidateHandle( hVarServer );
     if( pVarClient != NULL )
     {
-        pVarClient->rr.requestType = VARREQUEST_CLOSE;
-        ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+        result = ENOTSUP;
 
-        /* clean up the Var client */
-        ClientCleanup( pVarClient );
-
-        /* indicate success */
-        result = EOK;
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
+        {
+            if ( pAPI->close != NULL )
+            {
+                result = pAPI->close( pVarClient );
+            }
+        }
     }
 
     return result;
@@ -618,25 +418,22 @@ int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,
 {
     int result = EINVAL;
     int rc;
+    VarServerAPI *pAPI;
     VarClient *pVarClient = ValidateHandle( hVarServer );
 
     if( ( pVarClient != NULL ) &&
         ( pVarInfo != NULL ) )
     {
-        /* copy the variable information */
-        memcpy( &pVarClient->rr.variableInfo, pVarInfo, sizeof( VarInfo ) );
+        result = ENOTSUP;
 
-        pVarClient->rr.requestType = VARREQUEST_NEW;
-        rc = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( rc == EOK )
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
         {
-            result = pVarClient->rr.responseVal;
+            if ( pAPI->createvar != NULL )
+            {
+                result = pAPI->createvar( pVarClient, pVarInfo );
+            }
         }
-        else
-        {
-            result = rc;
-        }
-
     }
 
     return result;
@@ -664,23 +461,20 @@ int VARSERVER_Test( VARSERVER_HANDLE hVarServer )
     int result = EINVAL;
     int i;
     VarClient *pVarClient = ValidateHandle( hVarServer );
+    VarServerAPI *pAPI;
+
     if( pVarClient != NULL )
     {
-        for(i=0;i<100;i++)
+        result = ENOTSUP;
+
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
         {
-            pVarClient->rr.requestVal = i;
-            pVarClient->rr.requestType = VARREQUEST_ECHO;
-            ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-            if( pVarClient->debug >= LOG_DEBUG )
+            if ( pAPI->test != NULL )
             {
-                printf("Client %d sent %d and received %d\n",
-                    pVarClient->rr.clientid,
-                    pVarClient->rr.requestVal,
-                    pVarClient->rr.responseVal);
+                result = pAPI->test( pVarClient );
             }
         }
-
-        result = EOK;
     }
 
     return result;
@@ -843,6 +637,7 @@ int VARSERVER_WaitSignalfd( int fd, int32_t *sigval )
 
     return sig;
 }
+
 /*============================================================================*/
 /*  VARSERVER_SigMask                                                         */
 /*!
@@ -1402,26 +1197,17 @@ VAR_HANDLE VAR_FindByName( VARSERVER_HANDLE hVarServer, char *pName )
 {
     VAR_HANDLE hVar = VAR_INVALID;
     VarClient *pVarClient = ValidateHandle( hVarServer );
-    int rc;
-    size_t len;
+    VarServerAPI *pAPI;
 
     if( ( pVarClient != NULL ) &&
         ( pName != NULL ) )
     {
-        len = strlen(pName);
-        if( len < MAX_NAME_LEN )
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
         {
-            /* copy the name to the variable info request */
-            strcpy(pVarClient->rr.variableInfo.name, pName );
-            pVarClient->rr.variableInfo.instanceID = 0;
-
-            /* specify the request type */
-            pVarClient->rr.requestType = VARREQUEST_FIND;
-
-            rc = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-            if( rc == EOK )
+            if ( pAPI->findByName != NULL )
             {
-                hVar = (VAR_HANDLE)pVarClient->rr.responseVal;
+                hVar = pAPI->findByName( pVarClient, pName );
             }
         }
     }
@@ -1450,6 +1236,7 @@ VAR_HANDLE VAR_FindByName( VARSERVER_HANDLE hVarServer, char *pName )
             specifies the location where the variable value should be stored
 
     @retval EOK - the variable was retrieved ok
+    @retval ENOTSUP - operation not supported
     @retval EINVAL - invalid arguments
 
 ==============================================================================*/
@@ -1459,18 +1246,20 @@ int VAR_Get( VARSERVER_HANDLE hVarServer,
 {
     int result = EINVAL;
     VarClient *pVarClient = ValidateHandle( hVarServer );
-    int n;
+    VarServerAPI *pAPI;
 
     if( ( pVarClient != NULL ) &&
         ( pVarObject != NULL ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_GET;
-        pVarClient->rr.variableInfo.hVar = hVar;
+        result = ENOTSUP;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
         {
-            result = var_GetVarObject( pVarClient, pVarObject );
+            if ( pAPI->get != NULL )
+            {
+                result = pAPI->get( pVarClient, hVar, pVarObject );
+            }
         }
     }
 
@@ -1659,22 +1448,23 @@ int VAR_GetValidationRequest( VARSERVER_HANDLE hVarServer,
 {
     int result = EINVAL;
     VarClient *pVarClient = ValidateHandle( hVarServer );
+    VarServerAPI *pAPI;
 
     if( ( pVarClient != NULL ) &&
         ( pVarObject != NULL ) &&
         ( hVar != NULL ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_GET_VALIDATION_REQUEST;
-        pVarClient->rr.requestVal = id;
+        result = ENOTSUP;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
         {
-            result = var_GetVarObject( pVarClient, pVarObject );
-            if( result == EOK )
+            if ( pAPI->getvalidationrequest != NULL )
             {
-                /* get the handle of the variable to be validated */
-                *hVar = pVarClient->rr.variableInfo.hVar;
+                result = pAPI->getvalidationrequest( pVarClient,
+                                                     id,
+                                                     hVar,
+                                                     pVarObject );
             }
         }
     }
@@ -1713,14 +1503,22 @@ int VAR_SendValidationResponse( VARSERVER_HANDLE hVarServer,
 {
     int result = EINVAL;
     VarClient *pVarClient = ValidateHandle( hVarServer );
+    VarServerAPI *pAPI;
 
     if( pVarClient != NULL )
     {
-        pVarClient->rr.requestType = VARREQUEST_SEND_VALIDATION_RESPONSE;
-        pVarClient->rr.requestVal = id;
-        pVarClient->rr.responseVal = response;
+        result = ENOTSUP;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
+        {
+            if ( pAPI->sendvalidationresponse != NULL )
+            {
+                result = pAPI->sendvalidationresponse( pVarClient,
+                                                       id,
+                                                       response );
+            }
+        }
     }
 
     return result;
@@ -2026,19 +1824,25 @@ int VAR_GetLength( VARSERVER_HANDLE hVarServer,
 {
     int result = EINVAL;
     VarClient *pVarClient = ValidateHandle( hVarServer );
+    VarServerAPI *pAPI;
 
     if( ( pVarClient != NULL ) &&
         ( len != NULL ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_LENGTH;
-        pVarClient->rr.variableInfo.hVar = hVar;
+        result = ENOTSUP;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
         {
-            *len = pVarClient->rr.variableInfo.var.len;
+            if ( pAPI->getlength != NULL )
+            {
+                result = pAPI->getlength( pVarClient, hVar, len );
+            }
         }
     }
+
+    return result;
+
 }
 
 /*============================================================================*/
@@ -2071,21 +1875,20 @@ int VAR_GetType( VARSERVER_HANDLE hVarServer,
 {
     int result = EINVAL;
     VarClient *pVarClient = ValidateHandle( hVarServer );
+    VarServerAPI *pAPI;
 
     if( ( pVarClient != NULL ) &&
         ( pVarType != NULL ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_TYPE;
-        pVarClient->rr.variableInfo.hVar = hVar;
+        result = ENOTSUP;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
         {
-            *pVarType = pVarClient->rr.variableInfo.var.type;
-        }
-        else
-        {
-            *pVarType = VARTYPE_INVALID;
+            if ( pAPI->gettype != NULL )
+            {
+                result = pAPI->gettype( pVarClient, hVar, pVarType );
+            }
         }
     }
 
@@ -2117,6 +1920,7 @@ int VAR_GetType( VARSERVER_HANDLE hVarServer,
             the length of the buffer to store the variable name
 
     @retval EOK - the variable name was retrieved ok
+    @retval ENOTSUP - unsupported operation
     @retval E2BIG - the variable name is too big for the specified buffer
     @retval EINVAL - invalid arguments
 
@@ -2128,32 +1932,21 @@ int VAR_GetName( VARSERVER_HANDLE hVarServer,
 {
     int result = EINVAL;
     VarClient *pVarClient = ValidateHandle( hVarServer );
+    VarServerAPI *pAPI;
 
     if( ( pVarClient != NULL ) &&
         ( buf != NULL ) &&
         ( buflen > 0 ) &&
         ( hVar != VAR_INVALID ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_NAME;
-        pVarClient->rr.variableInfo.hVar = hVar;
+        result = ENOTSUP;
 
-        /* make a request to the server to get the variable name */
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
         {
-            /* check if the specified buffer is large enough for the name */
-            if ( buflen >= strlen( pVarClient->rr.variableInfo.name ) )
+            if ( pAPI->getname != NULL )
             {
-                /* copy the variable name into the supplied buffer */
-                strcpy( buf, pVarClient->rr.variableInfo.name );
-
-                /* indicate success */
-                result = EOK;
-            }
-            else
-            {
-                /* the buffer is not big enough for the variable name */
-                result = E2BIG;
+                result = pAPI->getname( pVarClient, hVar, buf, buflen );
             }
         }
     }
@@ -2290,6 +2083,7 @@ int VAR_SetStr( VARSERVER_HANDLE hVarServer,
             pointer to the variable value object to set
 
     @retval EOK - the variable was set ok
+    @retval ENOTSUP - unsupported operation
     @retval EINVAL - invalid arguments
 
 ==============================================================================*/
@@ -2298,36 +2092,21 @@ int VAR_Set( VARSERVER_HANDLE hVarServer,
              VarObject *pVarObject )
 {
     int result = EINVAL;
-    char *p;
-    size_t len;
-
     VarClient *pVarClient = ValidateHandle( hVarServer );
+    VarServerAPI *pAPI;
 
     if( ( pVarClient != NULL ) &&
         ( pVarObject != NULL ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_SET;
-        pVarClient->rr.variableInfo.hVar = hVar;
-        pVarClient->rr.variableInfo.var.type = pVarObject->type;
-        pVarClient->rr.variableInfo.var.val = pVarObject->val;
-        pVarClient->rr.variableInfo.var.len = pVarObject->len;
+        result = ENOTSUP;
 
-        /* strings have to be transferred via the working buffer */
-        if( pVarObject->type == VARTYPE_STR )
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
         {
-            var_CopyStringVarObjectToWorkbuf( pVarClient, pVarObject );
-        }
-
-        if ( pVarObject->type == VARTYPE_BLOB )
-        {
-            var_CopyBlobVarObjectToWorkbuf( pVarClient, pVarObject );
-        }
-
-        /* send the request to the server */
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
-        {
-            result = pVarClient->rr.responseVal;
+            if ( pAPI->set != NULL )
+            {
+                result = pAPI->set( pVarClient, hVar, pVarObject );
+            }
         }
     }
 
@@ -2378,6 +2157,9 @@ static int var_CopyStringVarObjectToWorkbuf( VarClient *pVarClient,
 
                 /* NUL terminate the string */
                 p[len] = 0;
+
+                /* specify the current working buffer useage in bytes */
+                pVarClient->rr.len = len+1;
 
                 result = EOK;
             }
@@ -2433,6 +2215,8 @@ static int var_CopyBlobVarObjectToWorkbuf( VarClient *pVarClient,
                 p = &pVarClient->workbuf;
                 memcpy( p, pVarObject->val.blob, len );
 
+                /* specify the current working buffer usage in bytes */
+                pVarClient->rr.len = len;
                 result = EOK;
             }
         }
@@ -2475,6 +2259,7 @@ static int var_CopyBlobVarObjectToWorkbuf( VarClient *pVarClient,
 
     @retval EOK - a match was found
     @retval EINVAL - invalid arguments
+    @retval ENOTSUP - unsupported operation
     @retval ENOENT - no matching variable was found
 
 ==============================================================================*/
@@ -2483,59 +2268,21 @@ int VAR_GetFirst( VARSERVER_HANDLE hVarServer,
                   VarObject *obj )
 {
     int result = EINVAL;
-    char *p;
-    size_t len;
-
     VarClient *pVarClient = ValidateHandle( hVarServer );
+    VarServerAPI *pAPI;
 
     if( ( pVarClient != NULL ) &&
         ( query != NULL ) &&
         ( obj != NULL ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_GET_FIRST;
-        pVarClient->rr.requestVal = query->type;
-        pVarClient->rr.variableInfo.instanceID = query->instanceID;
-        pVarClient->rr.variableInfo.flags = query->flags;
-        memcpy( &pVarClient->rr.variableInfo.tagspec,
-                &query->tagspec,
-                MAX_TAGSPEC_LEN );
+        result = ENOTSUP;
 
-        if ( query->match != NULL )
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
         {
-            len = strlen(query->match);
-            if( ( len > 0 ) && ( len < pVarClient->workbufsize ) )
+            if ( pAPI->first != NULL )
             {
-                /* copy the search string into the working buffer */
-                p = &pVarClient->workbuf;
-                memcpy( p, query->match, len );
-
-                /* NUL terminate the string */
-                p[len] = 0;
-
-                /* set the length of the data in the working buffer */
-                pVarClient->rr.len = len;
-            }
-        }
-
-        /* send the request to the server */
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
-        {
-            query->context = pVarClient->rr.responseVal;
-            if( query->context > 0 )
-            {
-                /* get the name of the variable we found */
-                memcpy( query->name,
-                        pVarClient->rr.variableInfo.name,
-                        MAX_NAME_LEN+1 );
-
-                /* get the handle of the variable we found */
-                query->hVar = pVarClient->rr.variableInfo.hVar;
-            }
-            else
-            {
-                /* nothing found which matches the query */
-                result = ENOENT;
+                result = pAPI->first( pVarClient, query, obj );
             }
         }
     }
@@ -2576,37 +2323,21 @@ int VAR_GetNext( VARSERVER_HANDLE hVarServer,
                  VarObject *obj )
 {
     int result = EINVAL;
-    char *p;
-    size_t len;
-
     VarClient *pVarClient = ValidateHandle( hVarServer );
+    VarServerAPI *pAPI;
 
     if( ( pVarClient != NULL ) &&
         ( query != NULL ) &&
         ( obj != NULL ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_GET_NEXT;
-        pVarClient->rr.requestVal = query->context;
+        result = ENOTSUP;
 
-        /* send the request to the server */
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
         {
-            query->context = pVarClient->rr.responseVal;
-            if( query->context > 0 )
+            if ( pAPI->next != NULL )
             {
-                /* get the name of the variable we found */
-                memcpy( query->name,
-                        pVarClient->rr.variableInfo.name,
-                        MAX_NAME_LEN+1 );
-
-                /* get the handle of the variable we found */
-                query->hVar = pVarClient->rr.variableInfo.hVar;
-            }
-            else
-            {
-                /* nothing found which matches the query */
-                result = ENOENT;
+                result = pAPI->next( pVarClient, query, obj );
             }
         }
     }
@@ -2636,6 +2367,7 @@ int VAR_GetNext( VARSERVER_HANDLE hVarServer,
 
 
     @retval EOK - the notification request was registered successfully
+    @retval ENOTSUP - operation not supported
     @retval EINVAL - invalid arguments
 
 ==============================================================================*/
@@ -2645,19 +2377,24 @@ int VAR_Notify( VARSERVER_HANDLE hVarServer,
 {
     int result = EINVAL;
     VarClient *pVarClient = ValidateHandle( hVarServer );
+    VarServerAPI *pAPI;
 
     if( pVarClient != NULL )
     {
-        pVarClient->rr.requestType = VARREQUEST_NOTIFY;
-        pVarClient->rr.variableInfo.hVar = hVar;
-        pVarClient->rr.variableInfo.notificationType = notificationType;
+        result = ENOTSUP;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
+        {
+            if ( pAPI->notify != NULL )
+            {
+                result = pAPI->notify( pVarClient, hVar, notificationType );
+            }
+        }
     }
 
     return result;
 }
-
 
 /*============================================================================*/
 /*  VAR_Print                                                                 */
@@ -2680,7 +2417,7 @@ int VAR_Notify( VARSERVER_HANDLE hVarServer,
             specifies the output file descriptor to print to
 
     @retval EOK - the variable was printed ok
-    @retval ENOTSUP - the variable data type is not supported for printing
+    @retval ENOTSUP - operation not supported
     @retval EINVAL - invalid arguments
 
 ==============================================================================*/
@@ -2689,45 +2426,20 @@ int VAR_Print( VARSERVER_HANDLE hVarServer,
                int fd )
 {
     int result = EINVAL;
-    pid_t responderPID;
-    int sock;
-
     VarClient *pVarClient = ValidateHandle( hVarServer );
+    VarServerAPI *pAPI;
 
     if( pVarClient != NULL )
     {
-        pVarClient->rr.requestType = VARREQUEST_PRINT;
-        pVarClient->rr.variableInfo.hVar = hVar;
+        result = ENOTSUP;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( pVarClient->rr.responseVal == ESTRPIPE)
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
         {
-            /* get the PID of the client doing the printing */
-            responderPID = (pid_t)(pVarClient->rr.peer_pid);
-
-            /* send the file descriptor to the responder */
-            result = VARPRINT_SendFileDescriptor( responderPID, fd );
-
-            if( result == EOK )
+            if ( pAPI->print != NULL )
             {
-                /* block client until printing is complete */
-                pVarClient->blocked = 1;
-                do
-                {
-                    result = sem_wait( &pVarClient->sem );
-                    if ( result == -1 )
-                    {
-                        result = errno;
-                    }
-                } while ( result != EOK );
-                pVarClient->blocked = 0;
+                result = pAPI->print( pVarClient, hVar, fd );
             }
-        }
-        else
-        {
-            result = var_PrintValue( fd,
-                                     &pVarClient->rr.variableInfo,
-                                     &pVarClient->workbuf );
         }
     }
 
@@ -2761,6 +2473,7 @@ int VAR_Print( VARSERVER_HANDLE hVarServer,
             pointer to the location to store the fd for the output stream
 
     @retval EOK - the print session was successfully created
+    @retval ENOTSUP - operation not supported
     @retval EINVAL - invalid arguments
 
 ==============================================================================*/
@@ -2771,35 +2484,21 @@ int VAR_OpenPrintSession( VARSERVER_HANDLE hVarServer,
 {
     int result = EINVAL;
     VarClient *pVarClient = ValidateHandle( hVarServer );
-    int sock;
-    pid_t pid;
+    VarServerAPI *pAPI;
 
     if( ( pVarClient != NULL ) &&
         ( hVar != NULL ) &&
         ( fd != NULL ) )
     {
-        /* set up a socket to get the file descriptor to print to */
-        pid = pVarClient->rr.client_pid;
-        result = VARPRINT_SetupListener( pid, &sock );
-        if( result == EOK )
+        result = ENOTSUP;
+
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
         {
-            pVarClient->rr.requestType = VARREQUEST_OPEN_PRINT_SESSION;
-            pVarClient->rr.requestVal = id;
-
-            result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-            if( result == EOK )
+            if ( pAPI->ops != NULL )
             {
-                /* get a handle to the variable we are printing */
-                *hVar = pVarClient->rr.variableInfo.hVar;
-
-                /* get the file descriptor we are printing to */
-                result = VARPRINT_GetFileDescriptor( pVarClient->rr.peer_pid,
-                                                     sock,
-                                                     fd );
+                result = pAPI->ops( pVarClient, id, hVar, fd );
             }
-
-            /* shut down the listener */
-            VARPRINT_ShutdownListener( pid, sock );
         }
     }
 
@@ -2827,6 +2526,7 @@ int VAR_OpenPrintSession( VARSERVER_HANDLE hVarServer,
             file descriptor for the print session output stream
 
     @retval EOK - the print session was successfully completed
+    @retval ENOTSUP - operation not supported
     @retval EINVAL - invalid arguments
 
 ==============================================================================*/
@@ -2836,16 +2536,19 @@ int VAR_ClosePrintSession( VARSERVER_HANDLE hVarServer,
 {
     int result = EINVAL;
     VarClient *pVarClient = ValidateHandle( hVarServer );
+    VarServerAPI *pAPI;
 
     if( pVarClient != NULL )
     {
-        pVarClient->rr.requestType = VARREQUEST_CLOSE_PRINT_SESSION;
-        pVarClient->rr.requestVal = id;
+        result = ENOTSUP;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
+        pAPI = (VarServerAPI *)pVarClient->pAPI;
+        if ( pAPI != NULL )
         {
-            close( fd );
+            if ( pAPI->cps != NULL )
+            {
+                result = pAPI->cps( pVarClient, id, fd );
+            }
         }
     }
 
@@ -2996,569 +2699,13 @@ static VarClient *ValidateHandle( VARSERVER_HANDLE hVarServer )
                 printf("CLIENT: Invalid VARSERVER handle\n");
             }
             pVarClient = NULL;
+            printf("CLIENT: Invalid VARSERVER handle\n");
         }
     }
 
     return pVarClient;
 }
 
-/*============================================================================*/
-/*  InitServerInfo                                                            */
-/*!
-    Initialize the VarServer information
-
-    The InitServerInfo function opens a shared memory block owned by the
-    variable server in which public variable server status is stored.
-    The shared memory block is opened in a read-only mode to allow clients
-    to get information about the server including the server's process
-    identifier which is used to send signals from the client to the server.
-
-    @retval pointer to the Variable Server's ServerInfo object
-    @retval NULL - the Variable Server's ServerInfo object could not be read
-
-==============================================================================*/
-static int InitServerInfo( VarClient *pVarClient )
-{
-    int fd;
-    int result = EINVAL;
-    ServerInfo *pServerInfo = NULL;
-
-    if( pVarClient != NULL )
-    {
-        /* get shared memory file descriptor (NOT a file) */
-        fd = shm_open( SERVER_SHAREDMEM, O_RDONLY, S_IRUSR | S_IWUSR);
-        if (fd != -1)
-        {
-            /* map shared memory to process address space */
-            pServerInfo = (ServerInfo *)mmap( NULL,
-                                            sizeof(ServerInfo),
-                                            PROT_READ,
-                                            MAP_SHARED,
-                                            fd,
-                                            0);
-            if (pServerInfo != MAP_FAILED)
-            {
-                pVarClient->pServerInfo = pServerInfo;
-                if( pVarClient->debug >= LOG_INFO )
-                {
-                    printf("CLIENT: Server PID: %d\n", pServerInfo->pid);
-                }
-
-                result = EOK;
-            }
-            else if( pVarClient->debug >= LOG_ERR )
-            {
-                perror("mmap");
-            }
-        }
-        else if( pVarClient->debug >= LOG_ERR )
-        {
-            perror("shm_open");
-        }
-    }
-
-    return result;
-}
-
-/*============================================================================*/
-/*  ClientRequest                                                             */
-/*!
-    Send a request from the client to the server
-
-    The ClientRequest function is used to send a client request from a
-    client to the Variable Server.
-
-    This is a blocking call.  The client will wait until explicitly
-    released by the server.  If the server dies, the client will hang!
-
-    @param[in]
-        pVarClient
-            pointer to the VarClient object belonging to the client
-
-    @param[in]
-        request
-            specifies the request to be sent from the client to the server
-
-    @retval EOK - the client request was handled successfully by the server
-    @retval EINVAL - an invalid client was specified
-    @retval other - error code returned by sigqueue, or sem_wait
-
-==============================================================================*/
-static int ClientRequest( VarClient *pVarClient, int request )
-{
-    int result = EINVAL;
-
-    if ( pVarClient != NULL )
-    {
-        if ( pVarClient->sd > 0 )
-        {
-            return ClientRequestSd( pVarClient, request );
-        }
-        else
-        {
-            return ClientRequestSig( pVarClient, request );
-        }
-    }
-
-    return result;
-}
-
-/*============================================================================*/
-/*  ClientRequestSig                                                          */
-/*!
-    Send a request signal from the client to the server
-
-    The ClientRequestSig function is used to send a client request signal from a
-    client to the Variable Server.
-
-    This is a blocking call.  The client will wait until explicitly
-    released by the server.  If the server dies, the client will hang!
-
-    @param[in]
-        pVarClient
-            pointer to the VarClient object belonging to the client
-
-    @param[in]
-        signal
-            specifies the real-time signal to be sent
-            from the client to the server
-
-    @retval EOK - the client request was handled successfully by the server
-    @retval EINVAL - an invalid client was specified
-    @retval other - error code returned by sigqueue, or sem_wait
-
-==============================================================================*/
-static int ClientRequestSig( VarClient *pVarClient, int request )
-{
-    int result = EINVAL;
-    union sigval val;
-    ServerInfo *pServerInfo = NULL;
-
-    if( pVarClient != NULL )
-    {
-         /* get a pointer to the server info */
-        pServerInfo = pVarClient->pServerInfo;
-        if( pServerInfo != NULL )
-        {
-            /* provide the client identifier to the var server */
-            val.sival_int = pVarClient->rr.clientid;
-
-            if( pVarClient->debug >= LOG_DEBUG )
-            {
-                printf("CLIENT: Sending client request signal (%d) to %d\n",
-                       request,
-                       pServerInfo->pid );
-            }
-
-            result = sigqueue( pServerInfo->pid, request, val );
-            if( result == EOK )
-            {
-                do
-                {
-                    pVarClient->blocked = 1;
-                    result = sem_wait( &pVarClient->sem );
-                    if( result == EOK )
-                    {
-                        if( pVarClient->debug >= LOG_DEBUG )
-                        {
-                            printf("CLIENT: Received response\n");
-                        }
-                    }
-                    else
-                    {
-                        printf("sem_wait failed\n");
-                        result = errno;
-                    }
-                    pVarClient->blocked = 0;
-                }
-                while ( result != EOK );
-            }
-            else
-            {
-                result = errno;
-            }
-        }
-    }
-
-    if( ( result != EOK ) &&
-        ( pVarClient->debug >= LOG_ERR ) )
-    {
-        printf("%s failed: (%d) %s\n", __func__, result, strerror(result));
-    }
-
-    if (result != EOK )
-    {
-        printf("%s failed: (%d) %s\n", __func__, result, strerror(result));
-    }
-
-    return result;
-}
-
-/*============================================================================*/
-/*  ClientRequestSd                                                           */
-/*!
-    Send a request from the client to the server
-
-    The ClientRequestSd function is used to send a client request signal from a
-    client to the Variable Server via a socket descriptor.
-
-    This is a blocking call.  The client will wait until explicitly
-    released by the server.
-
-    @param[in]
-        pVarClient
-            pointer to the VarClient object belonging to the client
-
-    @param[in]
-        request
-            specifies the request to be sent from the client to the server
-
-    @retval EOK - the client request was handled successfully by the server
-    @retval EINVAL - an invalid client was specified
-    @retval other - error code
-
-==============================================================================*/
-static int ClientRequestSd( VarClient *pVarClient, int request )
-{
-    int result = EINVAL;
-    int rc;
-    char *p;
-    size_t len;
-    int sd;
-
-    if( pVarClient != NULL )
-    {
-        if( pVarClient->debug >= LOG_DEBUG )
-        {
-            printf("CLIENT: Sending client request (%d)\n", request );
-        }
-
-        /* get the socket descriptor */
-        sd = pVarClient->sd;
-
-        /* send request */
-        rc = writesd( sd, (char *)&pVarClient->rr, sizeof( RequestResponse ) );
-        if ( rc == EOK )
-        {
-            len = pVarClient->rr.len;
-            if ( len > 0 )
-            {
-                /* write data from the working buffer */
-                rc = writesd( sd, (char *)&pVarClient->workbuf, len );
-            }
-
-            pVarClient->blocked = 1;
-
-            rc = readsd( sd,
-                         (char *)&pVarClient->rr,
-                         sizeof( RequestResponse ) );
-            if ( rc == EOK )
-            {
-                len = pVarClient->rr.len;
-                if ( len > 0 )
-                {
-                    /* read data into the working buffer */
-                    rc = readsd( sd,
-                                 (char *)&pVarClient->workbuf,
-                                len );
-                }
-            }
-
-            pVarClient->blocked = 0;
-        }
-
-        result = rc;
-    }
-
-    if( ( result != EOK ) &&
-        ( pVarClient->debug >= LOG_ERR ) )
-    {
-        printf("%s failed: (%d) %s\n", __func__, result, strerror(result));
-    }
-
-    if (result != EOK )
-    {
-        printf("%s failed: (%d) %s\n", __func__, result, strerror(result));
-    }
-
-    return result;
-}
-
-/*============================================================================*/
-/*  writesd                                                                   */
-/*!
-    Write a buffer to a socket descriptor
-
-    The writesd function is used to send a buffer of data to the
-    server via a socket descriptor.
-
-    @param[in]
-        sd
-            socket descriptor to send data on
-
-    @param[in]
-        p
-            pointer to the data to send
-
-    @param[in]
-        len
-            length of data to send
-
-    @retval EOK - the data as sent successfully
-    @retval EINVAL - invalid arguments
-    @retval other - error code from write()
-
-==============================================================================*/
-static int writesd( int sd, char *p, size_t len )
-{
-    size_t n = 0;
-    size_t sent = 0;
-    size_t remaining = len;
-    int result = EINVAL;
-
-    if ( ( p != NULL ) &&
-         ( len > 0 ) )
-    {
-        do
-        {
-            n = write( sd,
-                    &p[sent],
-                    remaining );
-            if ( n < 0 )
-            {
-                result = errno;
-                if ( result != EINTR )
-                {
-                    break;
-                }
-            }
-            else
-            {
-                sent += n;
-                remaining -= n;
-            }
-        }
-        while ( remaining > 0 );
-
-        if ( remaining == 0 )
-        {
-            result = EOK;
-        }
-    }
-
-    return result;
-}
-
-/*============================================================================*/
-/*  readsd                                                                    */
-/*!
-    Read a buffer from a socket descriptor
-
-    The readsd function is used to read a buffer of data from the
-    server via a socket descriptor.
-
-    @param[in]
-        sd
-            socket descriptor to receive data on
-
-    @param[in]
-        p
-            pointer to a buffer to store the data
-
-    @param[in]
-        len
-            length of data to receive
-
-    @retval EOK - the data as received successfully
-    @retval EINVAL - invalid arguments
-    @retval other - error code from read()
-
-==============================================================================*/
-static int readsd( int sd, char *p, size_t len )
-{
-    size_t n = 0;
-    size_t rcvd = 0;
-    size_t remaining = len;
-    int result = EINVAL;
-
-    if ( ( p != NULL ) && ( len > 0 ) )
-    {
-        do
-        {
-            n = read( sd,
-                    &p[rcvd],
-                    remaining );
-            if ( n < 0 )
-            {
-                result = errno;
-                if ( result != EINTR )
-                {
-                    break;
-                }
-            }
-            else
-            {
-                rcvd += n;
-                remaining -= n;
-            }
-        }
-        while ( remaining > 0 );
-
-        if ( remaining == 0 )
-        {
-            result = EOK;
-        }
-    }
-
-    return result;
-}
-
-/*============================================================================*/
-/*  NewClient                                                                 */
-/*!
-    Create a new Variable Server client
-
-    The NewClient function creates a shared memory VarClient object
-    and semaphore used to communicate with the Variable Server.
-    The semaphore is used to block the client while it is awaiting a
-    response from the server.  The VarClient object is used to
-    send data to the variable server, and receive responses from the
-    variable server.
-
-    The variable client shared memory object is accessible via
-    /varclient_<client pid>
-
-    @param[in]
-        workbufsize
-            specifies the size of the working buffer interface
-            between the client and the server
-
-    @retval pointer to the newly created VarClient object
-    @retval NULL if the VarClient object could not be created
-
-==============================================================================*/
-static VarClient *NewClient( size_t workbufsize )
-{
-    int res;
-	int fd;
-	int len;
-	pid_t pid;
-    char clientname[BUFSIZ];
-    VarClient *pVarClient = NULL;
-    size_t sharedMemSize;
-
-    /* calculate the size of the client-server interface working buffer */
-    sharedMemSize = sizeof(VarClient) + workbufsize;
-
-    /* build the varclient identifier */
-	pid = getpid();
-	sprintf(clientname, "/varclient_%d", pid);
-
-
-	/* get shared memory file descriptor (NOT a file) */
-	fd = shm_open(clientname, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-
-	if (fd != -1)
-	{
-    	/* extend shared memory object as by default
-           it is initialized with size 0 */
-	    res = ftruncate(fd, sharedMemSize );
-	    if (res != -1)
-	    {
-            /* map shared memory to process address space */
-            pVarClient = mmap( NULL,
-                               sharedMemSize ,
-                               PROT_WRITE,
-                               MAP_SHARED,
-                               fd,
-                               0);
-
-            if( pVarClient != NULL )
-            {
-                /* populate the VarClient object */
-                pVarClient->rr.id = VARSERVER_ID;
-                pVarClient->rr.version = VARSERVER_VERSION;
-                pVarClient->rr.client_pid = pid;
-                pVarClient->workbufsize = workbufsize + 1;
-
-                /* clear the working buffer */
-                memset( &pVarClient->workbuf, 0, pVarClient->workbufsize );
-
-                /* initialize the VarClient semaphore */
-                NewClientSemaphore( pVarClient );
-            }
-            else
-            {
-                perror("mmap");
-            }
-        }
-        else
-        {
-            perror("ftruncate");
-        }
-
-        /* close the file descriptor since we don't need it for anything */
-        close( fd );
-	}
-    else
-    {
-        perror("shm_open");
-    }
-
-    return pVarClient;
-}
-
-/*============================================================================*/
-/*  NewClientSemaphore                                                        */
-/*!
-    Initialize a new Variable Client semaphore
-
-    The NewClientSemaphore function initializes the Variable Client
-    semaphore before it is first used.
-
-    The semaphore is used to block the client while it is awaiting a
-    response from the server.
-
-    @retval EOK the new client semaphore was successfully initialized
-    @retval EINVAL an invalid variable client was specified
-
-==============================================================================*/
-static int NewClientSemaphore( VarClient *pVarClient )
-{
-    char semname[BUFSIZ];
-    int result = EINVAL;
-
-    if( pVarClient != NULL )
-    {
-        sem_init( &pVarClient->sem, 1, 0 );
-        result = EOK;
-    }
-
-    return result;
-}
-
-/*============================================================================*/
-/*  DeleteClientQueue                                                         */
-/*!
-    Delete a client notification queue
-
-    The DeleteClientQueue function deletes a client notification
-    queue.
-
-==============================================================================*/
-static void DeleteClientQueue( VarClient *pVarClient )
-{
-    char clientname[BUFSIZ];
-
-    if ( pVarClient != NULL )
-    {
-        /* build the varclient identifier */
-        sprintf(clientname, "/varclient_%d", pVarClient->rr.client_pid);
-
-        mq_close( pVarClient->notificationQ );
-        mq_unlink( clientname );
-    }
-}
 
 /*============================================================================*/
 /*  VAR_GetFromQueue                                                          */
@@ -3678,111 +2825,6 @@ int VAR_GetFromQueue( VARSERVER_HANDLE hVarServer,
         else
         {
             result = errno;
-        }
-    }
-
-    return result;
-}
-
-/*============================================================================*/
-/*  DeleteClientSemaphore                                                     */
-/*!
-    Delete the Variable Client semaphore
-
-    The DeleteClientSemaphore function destroyes the Variable Client
-    semaphore when it is no longer needed.
-
-    @retval EOK the client semaphore was successfully destroyed
-    @retval EINVAL an invalid variable client was specified
-    @retval other error response returned from sem_destroy
-
-==============================================================================*/
-static int DeleteClientSemaphore( VarClient *pVarClient )
-{
-    int result = EINVAL;
-    char semname[BUFSIZ];
-
-    if( pVarClient != NULL )
-    {
-        result = sem_destroy( &pVarClient->sem );
-        if( result != EOK )
-        {
-            result = errno;
-        }
-
-        if( ( result != EOK ) &&
-            ( pVarClient->debug >= LOG_ERR ) )
-        {
-            printf("%s failed: (%d) %s\n", __func__, result, strerror(result));
-        }
-    }
-
-    return result;
-}
-
-/*============================================================================*/
-/*  ClientCleanup                                                             */
-/*!
-    Clean up the Variable Client when it is no longer needed
-
-    The ClientCleanup function cleans up the Variable Client when it is
-    no longer needed.  The client semaphore is deleted, and the
-    shared memory VarClient object is unmapped and unlinked.
-    The Variable Server's ServerInfo shared memory object is also unmapped.
-
-    @retval EOK the client was successfully shut down
-    @retval EINVAL an invalid variable client was specified
-
-==============================================================================*/
-static int ClientCleanup( VarClient *pVarClient )
-{
-    char clientname[BUFSIZ];
-    int fd;
-    int res;
-    int result = EINVAL;
-    ServerInfo *pServerInfo = NULL;
-
-    if( pVarClient != NULL )
-    {
-        /* delete the client semaphore */
-        DeleteClientSemaphore( pVarClient );
-
-        /* delete the client notification queue */
-        DeleteClientQueue( pVarClient );
-
-        /* build the varclient identifier */
-        sprintf(clientname, "/varclient_%d", pVarClient->rr.client_pid);
-
-        /* clean up the server info structure */
-        pServerInfo = pVarClient->pServerInfo;
-        if( pServerInfo != NULL )
-        {
-            res = munmap( pServerInfo, sizeof(ServerInfo) );
-            if( ( res == -1 ) &&
-                ( pVarClient->debug >= LOG_ERR ) )
-            {
-                printf("CLIENT: unable to clean up server info\n");
-            }
-        }
-
-        /* mmap cleanup */
-        res = munmap( pVarClient, sizeof(VarClient) );
-        if ( res != -1 )
-        {
-            /* shm_open cleanup */
-            fd = shm_unlink( clientname );
-            if (fd != -1)
-            {
-                result = EOK;
-            }
-            else if( pVarClient->debug >= LOG_ERR )
-            {
-                perror("CLIENT: unlink");
-            }
-        }
-        else if( pVarClient->debug >= LOG_ERR )
-        {
-            perror("CLIENT: munmap");
         }
     }
 

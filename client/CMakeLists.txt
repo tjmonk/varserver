@@ -17,6 +17,8 @@ add_library( ${PROJECT_NAME} SHARED
     src/varfp.c
     src/varquery.c
     src/vartemplate.c
+    src/sockapi.c
+    src/shmapi.c
 )
 
 set_target_properties( ${PROJECT_NAME} PROPERTIES
@@ -35,7 +37,9 @@ set(VARSERVER_HEADERS
     inc/varserver/varcache.h
     inc/varserver/varfp.h
     inc/varserver/varquery.h
-    inc/varserver/vartemplate.h)
+    inc/varserver/vartemplate.h
+    inc/varserver/sockapi.h
+    inc/varserver/shmapi.h )
 
 set_target_properties(${PROJECT_NAME}
     PROPERTIES

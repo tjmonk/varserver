@@ -40,6 +40,6 @@ SOFTWARE.
 ============================================================================*/
 
 int SOCKSERVER_Init( void );
-int SOCKSERVE_Run( int sock );
+int SOCKSERVER_Run( int sock );
 
 #endif

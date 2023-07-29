@@ -46,6 +46,7 @@ int HandleRequest( VarClient *pVarClient );
 int UnblockClient( VarClient *pVarClient );
 int ValidateClient( VarClient *pVarClient );
 int ProcessVarRequestInvalid( VarClient *pVarClient );
+int ProcessVarRequestOpen( VarClient *pVarClient );
 int ProcessVarRequestClose( VarClient *pVarClient );
 int ProcessVarRequestEcho( VarClient *pVarClient );
 int ProcessVarRequestNew( VarClient *pVarClient );
