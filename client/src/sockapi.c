@@ -151,14 +151,6 @@ static int var_GetBlobObjectFromWorkbuf( VarClient *pVarClient,
                                          VarObject *pVarObject );
 static int var_GetStringObjectFromWorkbuf( VarClient *pVarClient,
                                            VarObject *pVarObject );
-static int var_CopyStringVarObjectToWorkbuf( VarClient *pVarClient,
-                                             VarObject *pVarObject );
-static int var_CopyBlobVarObjectToWorkbuf( VarClient *pVarClient,
-                                        VarObject *pVarObject );
-
-
-static VARSERVER_HANDLE varserver_OpenRemote( size_t workbufsize );
-static VARSERVER_HANDLE varserver_OpenLocal( size_t workbufsize );
 
 static int writesd( int sd, char *p, size_t len );
 static int readsd( int sd, char *p, size_t len );
@@ -216,7 +208,9 @@ static VARSERVER_HANDLE open_varserver( size_t workbufsize )
     VarserverAddress vsa;
     VarClient *pVarClient = NULL;
     SockRequest req;
-    size_t len = sizeof(SockRequest);
+    SockResponse resp;
+    size_t reqLen = sizeof(SockRequest);
+    size_t respLen = sizeof(SockResponse);
     int sd;
     int rc;
 
@@ -244,6 +238,7 @@ static VARSERVER_HANDLE open_varserver( size_t workbufsize )
                 pVarClient = calloc( 1, sizeof( VarClient ) + workbufsize );
                 if ( pVarClient != NULL )
                 {
+
                     pVarClient->sd = sd;
                     pVarClient->rr.id = VARSERVER_ID;
                     pVarClient->rr.version = VARSERVER_VERSION;
@@ -252,7 +247,17 @@ static VARSERVER_HANDLE open_varserver( size_t workbufsize )
                     pVarClient->pAPI = &sockapi;
                     pVarClient->rr.requestType = VARREQUEST_OPEN;
                     pVarClient->rr.len = workbufsize;
-                    ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+
+                    req.id = VARSERVER_ID;
+                    req.version = VARSERVER_VERSION;
+                    req.requestType = VARREQUEST_OPEN;
+                    req.requestVal = workbufsize;
+
+                    rc = writesd( sd, (char *)&req, reqLen );
+                    if ( rc == EOK )
+                    {
+                        rc = readsd( sd, (char *)&resp, respLen );
+                    }
                 }
                 else
                 {
@@ -438,6 +443,10 @@ static int createVar( VarClient *pVarClient, VarInfo *pVarInfo )
 ==============================================================================*/
 static int test( VarClient *pVarClient )
 {
+    SockRequest req;
+    SockResponse resp;
+    ssize_t len;
+    ssize_t n;
     int result = EINVAL;
     int i;
 
@@ -445,17 +454,21 @@ static int test( VarClient *pVarClient )
     {
         for(i=0;i<100;i++)
         {
-            pVarClient->rr.requestVal = i;
-            pVarClient->rr.requestType = VARREQUEST_ECHO;
-            pVarClient->rr.len = 0;
+            req.id = VARSERVER_ID;
+            req.version = VARSERVER_VERSION;
+            req.requestType = VARREQUEST_ECHO;
+            req.requestVal = i;
 
-            ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-            if( pVarClient->debug >= LOG_DEBUG )
+            len = sizeof( SockRequest );
+            n = write( pVarClient->sd, (char *)&req, len );
+            if ( n == len )
             {
-                printf("Client %d sent %d and received %d\n",
-                    pVarClient->rr.clientid,
-                    pVarClient->rr.requestVal,
-                    pVarClient->rr.responseVal);
+                len = sizeof( SockResponse );
+                n = read( pVarClient->sd, (char *)&resp, len );
+                if ( n == len )
+                {
+                    pVarClient->rr.responseVal = resp.responseVal;
+                }
             }
         }
 
@@ -488,27 +501,38 @@ static int test( VarClient *pVarClient )
 static VAR_HANDLE findByName( VarClient *pVarClient, char *pName )
 {
     VAR_HANDLE hVar = VAR_INVALID;
-    int rc;
     size_t len;
+    struct iovec iov[2];
+    SockRequest req;
+    SockResponse resp;
+    ssize_t n;
 
     if( ( pVarClient != NULL ) &&
         ( pName != NULL ) )
     {
+        iov[0].iov_base = &req;
+        iov[0].iov_len = sizeof(SockRequest);
+        iov[1].iov_base = pName;
+        iov[1].iov_len = strlen( pName ) + 1;
+
         len = strlen(pName);
         if( len < MAX_NAME_LEN )
         {
-            /* copy the name to the variable info request */
-            strcpy(pVarClient->rr.variableInfo.name, pName );
-            pVarClient->rr.variableInfo.instanceID = 0;
+            req.id = VARSERVER_ID;
+            req.version = VARSERVER_VERSION;
+            req.requestType = VARREQUEST_FIND;
+            req.requestVal = 0;
 
-            /* specify the request type */
-            pVarClient->rr.requestType = VARREQUEST_FIND;
-            pVarClient->rr.len = 0;
-
-            rc = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-            if( rc == EOK )
+            len = iov[0].iov_len + iov[1].iov_len;
+            n = writev( pVarClient->sd, iov, 2);
+            if ( n == len )
             {
-                hVar = (VAR_HANDLE)pVarClient->rr.responseVal;
+                len = sizeof( SockResponse );
+                n = read( pVarClient->sd, (char *)&resp, len );
+                if ( n == len )
+                {
+                    hVar = (VAR_HANDLE)resp.responseVal;
+                }
             }
         }
     }
@@ -543,19 +567,68 @@ static VAR_HANDLE findByName( VarClient *pVarClient, char *pName )
 static int get( VarClient *pVarClient, VAR_HANDLE hVar, VarObject *pVarObject )
 {
     int result = EINVAL;
-    int n;
+    SockRequest req;
+    SockResponse resp;
+    struct iovec iov[2];
+
+    ssize_t n;
+    ssize_t len;
 
     if( ( pVarClient != NULL ) &&
         ( pVarObject != NULL ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_GET;
-        pVarClient->rr.variableInfo.hVar = hVar;
-        pVarClient->rr.len = 0;
+        req.id = VARSERVER_ID;
+        req.version = VARSERVER_VERSION;
+        req.requestType = VARREQUEST_GET;
+        req.requestVal = hVar;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
+        len = sizeof( SockRequest );
+        n = write(pVarClient->sd, (char *)&req, len );
+        if ( n == len )
         {
-            result = var_GetVarObject( pVarClient, pVarObject );
+            iov[0].iov_base = &resp;
+            iov[0].iov_len = sizeof(SockResponse);
+            iov[1].iov_base = pVarObject;
+            iov[1].iov_len = sizeof(VarObject);
+
+            len = iov[0].iov_len + iov[1].iov_len;
+
+            n = readv( pVarClient->sd, iov, 2 );
+            if ( n == len )
+            {
+                if ( pVarObject->type == VARTYPE_BLOB )
+                {
+                    len = pVarObject->len;
+                    pVarObject->val.blob = &pVarClient->workbuf;
+                }
+
+                if ( pVarObject->type == VARTYPE_STR )
+                {
+                    len = pVarObject->len + 1;
+                    pVarObject->val.blob = &pVarClient->workbuf;
+                }
+
+                if ( len > 0 )
+                {
+                    n = read( pVarClient->sd, &pVarClient->workbuf, len );
+                    if ( len == n )
+                    {
+                        result = EOK;
+                    }
+                    else
+                    {
+                        result = errno;
+                    }
+                }
+            }
+            else
+            {
+                result = errno;
+            }
+        }
+        else
+        {
+            result = errno;
         }
     }
 
@@ -966,20 +1039,41 @@ static int getLength( VarClient *pVarClient,
                       size_t *len )
 {
     int result = EINVAL;
+    SockRequest req;
+    SockResponse resp;
+    ssize_t n;
+    ssize_t length;
 
     if( ( pVarClient != NULL ) &&
         ( len != NULL ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_LENGTH;
-        pVarClient->rr.variableInfo.hVar = hVar;
-        pVarClient->rr.len = 0;
+        req.id = VARSERVER_ID;
+        req.version = VARSERVER_VERSION;
+        req.requestType = VARREQUEST_LENGTH;
+        req.requestVal = hVar;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
+        length = sizeof( SockRequest );
+        n = write( pVarClient->sd, (char *)&req, length );
+        if ( n == length )
         {
-            *len = pVarClient->rr.variableInfo.var.len;
+            length = sizeof( SockResponse );
+            n = read( pVarClient->sd, (char *)&resp, length );
+            if ( n == length )
+            {
+                *len = resp.responseVal;
+            }
+            else
+            {
+                result = errno;
+            }
+        }
+        else
+        {
+            result = errno;
         }
     }
+
+    return result;
 }
 
 /*============================================================================*/
@@ -1011,22 +1105,37 @@ static int getType( VarClient *pVarClient,
                     VarType *pVarType )
 {
     int result = EINVAL;
+    SockRequest req;
+    SockResponse resp;
+    ssize_t n;
+    ssize_t length;
 
     if( ( pVarClient != NULL ) &&
         ( pVarType != NULL ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_TYPE;
-        pVarClient->rr.variableInfo.hVar = hVar;
-        pVarClient->rr.len = 0;
+        req.id = VARSERVER_ID;
+        req.version = VARSERVER_VERSION;
+        req.requestType = VARREQUEST_TYPE;
+        req.requestVal = hVar;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
+        length = sizeof( SockRequest );
+        n = write( pVarClient->sd, (char *)&req, length );
+        if ( n == length )
         {
-            *pVarType = pVarClient->rr.variableInfo.var.type;
+            length = sizeof( SockResponse );
+            n = read( pVarClient->sd, (char *)&resp, length );
+            if ( n == length )
+            {
+                *pVarType = (VarType)resp.responseVal;
+            }
+            else
+            {
+                result = errno;
+            }
         }
         else
         {
-            *pVarType = VARTYPE_INVALID;
+            result = errno;
         }
     }
 
@@ -1068,34 +1177,43 @@ static int getName( VarClient *pVarClient,
                     size_t buflen )
 {
     int result = EINVAL;
+    SockRequest req;
+    SockResponse resp;
+    ssize_t n;
+    ssize_t length;
 
     if( ( pVarClient != NULL ) &&
         ( buf != NULL ) &&
-        ( buflen > 0 ) &&
-        ( hVar != VAR_INVALID ) )
+        ( buflen > 0 ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_NAME;
-        pVarClient->rr.variableInfo.hVar = hVar;
-        pVarClient->rr.len = 0;
+        req.id = VARSERVER_ID;
+        req.version = VARSERVER_VERSION;
+        req.requestType = VARREQUEST_NAME;
+        req.requestVal = hVar;
 
-        /* make a request to the server to get the variable name */
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
+        length = sizeof( SockRequest );
+        n = write( pVarClient->sd, (char *)&req, length );
+        if ( n == length )
         {
-            /* check if the specified buffer is large enough for the name */
-            if ( buflen >= strlen( pVarClient->rr.variableInfo.name ) )
+            length = sizeof( SockResponse );
+            n = read( pVarClient->sd, (char *)&resp, length );
+            if ( n == length )
             {
-                /* copy the variable name into the supplied buffer */
-                strcpy( buf, pVarClient->rr.variableInfo.name );
-
-                /* indicate success */
-                result = EOK;
+                length = (ssize_t)resp.responseVal;
+                n = read( pVarClient->sd, buf, length );
+                if ( n == length )
+                {
+                    result = EOK;
+                }
             }
             else
             {
-                /* the buffer is not big enough for the variable name */
-                result = E2BIG;
+                result = errno;
             }
+        }
+        else
+        {
+            result = errno;
         }
     }
 
@@ -1131,156 +1249,66 @@ static int set( VarClient *pVarClient,
                 VarObject *pVarObject )
 {
     int result = EINVAL;
-    char *p;
-    size_t len;
+    struct iovec iov[3];
+    SockRequest req;
+    SockResponse resp;
+    ssize_t n;
+    ssize_t len;
+    int vec_count = 2;
 
     if( ( pVarClient != NULL ) &&
         ( pVarObject != NULL ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_SET;
-        pVarClient->rr.variableInfo.hVar = hVar;
-        pVarClient->rr.variableInfo.var.type = pVarObject->type;
-        pVarClient->rr.variableInfo.var.val = pVarObject->val;
-        pVarClient->rr.variableInfo.var.len = pVarObject->len;
+        req.id = VARSERVER_ID;
+        req.version = VARSERVER_VERSION;
+        req.requestType = VARREQUEST_SET;
+        req.requestVal = hVar;
 
-        /* strings have to be transferred via the working buffer */
-        if( pVarObject->type == VARTYPE_STR )
-        {
-            var_CopyStringVarObjectToWorkbuf( pVarClient, pVarObject );
-        }
+        iov[0].iov_base = &req;
+        iov[0].iov_len = sizeof(SockRequest);
+        iov[1].iov_base = pVarObject;
+        iov[1].iov_len = sizeof(VarObject);
+        iov[2].iov_base = NULL;
+        iov[2].iov_len = 0;
 
-        if ( pVarObject->type == VARTYPE_BLOB )
-        {
-            var_CopyBlobVarObjectToWorkbuf( pVarClient, pVarObject );
-        }
-
-        /* send the request to the server */
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
-        {
-            result = pVarClient->rr.responseVal;
-        }
-    }
-
-    return result;
-}
-
-/*============================================================================*/
-/*  var_CopyStringVarObjectToWorkbuf                                          */
-/*!
-    Copy a string object to the working buffer
-
-    The var_CopyStringVarObjectToWorkbuf function copies the string
-    object into the client's working buffer for transfer to the server.
-
-    @param[in]
-        pVarClient
-            pointer to the VarClient object containing the working buffer
-
-    @param[in]
-        pVarObject
-            pointer to the VarObject containing the string to copy
-
-    @retval EOK - the string was copied successfully
-    @retval EINVAL - invalid arguments
-    @retval ENOTSUP - not a string object
-
-==============================================================================*/
-static int var_CopyStringVarObjectToWorkbuf( VarClient *pVarClient,
-                                             VarObject *pVarObject )
-{
-    int result = EINVAL;
-    size_t len;
-    char *p;
-
-    if ( ( pVarClient != NULL ) &&
-         ( pVarObject != NULL ) )
-    {
         if ( pVarObject->type == VARTYPE_STR )
         {
-            /* get the string length */
-            len = pVarObject->len;
-            if( ( len > 0 ) &&
-                ( len < pVarClient->workbufsize ) )
+            iov[2].iov_base = pVarObject->val.str;
+            iov[2].iov_len = strlen( pVarObject->val.str ) + 1;
+            vec_count = 3;
+        }
+        else if ( pVarObject->type == VARTYPE_BLOB )
+        {
+            iov[2].iov_base = pVarObject->val.blob;
+            iov[2].iov_len = pVarObject->len;
+            vec_count = 3;
+        }
+
+        /* calculate the total length we are sending */
+        len = iov[0].iov_len + iov[1].iov_len + iov[2].iov_len;
+        n = writev( pVarClient->sd, iov, vec_count );
+        if ( n == len )
+        {
+            /* get the response */
+            len = sizeof( SockResponse );
+            n = read( pVarClient->sd, (char *)&resp, len );
+            if ( n == len )
             {
-                /* copy the string into the working buffer */
-                p = &pVarClient->workbuf;
-                memcpy( p, pVarObject->val.str, len );
-
-                /* NUL terminate the string */
-                p[len] = 0;
-
-                /* specify the current working buffer useage in bytes */
-                pVarClient->rr.len = len+1;
-
-                result = EOK;
+                result = resp.responseVal;
+            }
+            else
+            {
+                result = errno;
             }
         }
         else
         {
-            result = ENOTSUP;
+            result = errno;
         }
     }
 
     return result;
 }
-
-/*============================================================================*/
-/*  var_CopyBlobVarObjectToWorkbuf                                            */
-/*!
-    Copy a blob object to the working buffer
-
-    The var_CopyBlobVarObjectToWorkbuf function copies the blob
-    object into the client's working buffer for transfer to the server.
-
-    @param[in]
-        pVarClient
-            pointer to the VarClient object containing the working buffer
-
-    @param[in]
-        pVarObject
-            pointer to the VarObject containing the blob to copy
-
-    @retval EOK - the blob was copied successfully
-    @retval EINVAL - invalid arguments
-    @retval ENOTSUP - not a string object
-
-==============================================================================*/
-static int var_CopyBlobVarObjectToWorkbuf( VarClient *pVarClient,
-                                           VarObject *pVarObject )
-{
-    int result = EINVAL;
-    size_t len;
-    char *p;
-
-    if ( ( pVarClient != NULL ) &&
-         ( pVarObject != NULL ) )
-    {
-        if ( pVarObject->type == VARTYPE_BLOB )
-        {
-            /* get the blob length */
-            len = pVarObject->len;
-            if( ( len > 0 ) &&
-                ( len < pVarClient->workbufsize ) )
-            {
-                /* copy the blob into the working buffer */
-                p = &pVarClient->workbuf;
-                memcpy( p, pVarObject->val.blob, len );
-
-                /* specify the current working buffer usage in bytes */
-                pVarClient->rr.len = len;
-                result = EOK;
-            }
-        }
-        else
-        {
-            result = ENOTSUP;
-        }
-    }
-
-    return result;
-}
-
 
 /*============================================================================*/
 /*  getFirst                                                                  */
@@ -1319,58 +1347,69 @@ static int getFirst( VarClient *pVarClient,
                      VarObject *obj )
 {
     int result = EINVAL;
-    char *p;
-    size_t len;
+    struct iovec iov[3];
+    SockRequest req;
+    SockResponse resp;
+    ssize_t n;
+    ssize_t len;
+    int vec_count = 2;
 
     if( ( pVarClient != NULL ) &&
         ( query != NULL ) &&
         ( obj != NULL ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_GET_FIRST;
-        pVarClient->rr.requestVal = query->type;
-        pVarClient->rr.variableInfo.instanceID = query->instanceID;
-        pVarClient->rr.variableInfo.flags = query->flags;
-        memcpy( &pVarClient->rr.variableInfo.tagspec,
-                &query->tagspec,
-                MAX_TAGSPEC_LEN );
+        req.id = VARSERVER_ID;
+        req.version = VARSERVER_VERSION;
+        req.requestType = VARREQUEST_GET_FIRST;
+        req.requestVal = query->type;
+
+        iov[0].iov_base = &req;
+        iov[0].iov_len = sizeof(SockRequest);
+        iov[1].iov_base = query;
+        iov[1].iov_len = sizeof(VarQuery);
+        iov[2].iov_base = NULL;
+        iov[2].iov_len = 0;
 
         if ( query->match != NULL )
         {
-            len = strlen(query->match);
-            if( ( len > 0 ) && ( len < pVarClient->workbufsize ) )
-            {
-                /* copy the search string into the working buffer */
-                p = &pVarClient->workbuf;
-                memcpy( p, query->match, len );
-
-                /* NUL terminate the string */
-                p[len] = 0;
-
-                /* set the length of the data in the working buffer */
-                pVarClient->rr.len = len+1;
-            }
+            iov[2].iov_base = query->match;
+            iov[2].iov_len = strlen( query->match + 1 );
+            vec_count = 3;
         }
 
         /* send the request to the server */
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
+        len = iov[0].iov_len + iov[1].iov_len + iov[2].iov_len;
+        n = writev( pVarClient->sd, iov, vec_count );
+        if ( n == len )
         {
-            query->context = pVarClient->rr.responseVal;
-            if( query->context > 0 )
-            {
-                /* get the name of the variable we found */
-                memcpy( query->name,
-                        pVarClient->rr.variableInfo.name,
-                        MAX_NAME_LEN+1 );
+            iov[0].iov_base = &resp;
+            iov[0].iov_len = sizeof(SockResponse);
+            iov[1].iov_base = query;
+            iov[1].iov_len = sizeof(VarQuery);
+            iov[2].iov_base = obj;
+            iov[2].iov_len = sizeof(VarObject);
 
-                /* get the handle of the variable we found */
-                query->hVar = pVarClient->rr.variableInfo.hVar;
+            len = iov[0].iov_len + iov[1].iov_len;
+            n = readv( pVarClient->sd, iov, 2 );
+            if ( n == len )
+            {
+                if ( query->context > 0 )
+                {
+                    result = EOK;
+                }
+                else
+                {
+                    result = ENOENT;
+                }
             }
             else
             {
-                /* nothing found which matches the query */
-                result = ENOENT;
+                result = errno;
             }
+        }
+        else
+        {
+            result = errno;
         }
     }
 

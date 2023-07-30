@@ -86,6 +86,13 @@ SOFTWARE.
         Private types
 ==============================================================================*/
 
+typedef struct _RequestReceiver
+{
+    VarRequest requestType;
+
+    int (*handler)( VarClient *pVarClient, SockRequest *pReq );
+} RequestReceiver;
+
 /*==============================================================================
         Private function declarations
 ==============================================================================*/
@@ -100,9 +107,52 @@ static int ReadPayload( int sd, VarClient *pVarClient );
 static int writesd( int sd, char *p, size_t len );
 static int readsd( int sd, char *p, size_t len );
 
+static int RxRequest( VarClient *pVarClient, SockRequest *pReq );
+static int RxOpen( VarClient *pVarClient, SockRequest *pReq );
+static int RxClose( VarClient *pVarClient, SockRequest *pReq );
+static int RxEcho( VarClient *pVarClient, SockRequest *pReq );
+static int RxNew( VarClient *pVarClient, SockRequest *pReq );
+static int RxFind( VarClient *pVarClient, SockRequest *pReq );
+static int RxGet( VarClient *pVarClient, SockRequest *pReq );
+static int RxPrint( VarClient *pVarClient, SockRequest *pReq );
+static int RxSet( VarClient *pVarClient, SockRequest *pReq );
+static int RxType( VarClient *pVarClient, SockRequest *pReq );
+static int RxName( VarClient *pVarClient, SockRequest *pReq );
+static int RxLength( VarClient *pVarClient, SockRequest *pReq );
+static int RxNotify( VarClient *pVarClient, SockRequest *pReq );
+static int RxGetValidationRequest( VarClient *pVarClient, SockRequest *pReq );
+static int RxSendValidationResponse( VarClient *pVarClient, SockRequest *pReq );
+static int RxOpenPrintSession( VarClient *pVarClient, SockRequest *pReq );
+static int RxClosePrintSession( VarClient *pVarClient, SockRequest *pReq );
+static int RxGetFirst( VarClient *pVarClient, SockRequest *pReq );
+static int RxGetNext( VarClient *pVarClient, SockRequest *pReq );
+
 /*==============================================================================
         Private file scoped variables
 ==============================================================================*/
+
+static RequestReceiver RequestReceivers[] =
+{
+    { VARREQUEST_INVALID, NULL },
+    { VARREQUEST_OPEN, RxOpen },
+    { VARREQUEST_CLOSE, RxClose },
+    { VARREQUEST_ECHO, RxEcho },
+    { VARREQUEST_NEW, RxNew },
+    { VARREQUEST_FIND, RxFind },
+    { VARREQUEST_GET, RxGet },
+    { VARREQUEST_PRINT, RxPrint },
+    { VARREQUEST_SET, RxSet },
+    { VARREQUEST_TYPE, RxType },
+    { VARREQUEST_NAME, RxName },
+    { VARREQUEST_LENGTH, RxLength },
+    { VARREQUEST_NOTIFY, RxNotify },
+    { VARREQUEST_GET_VALIDATION_REQUEST, RxGetValidationRequest },
+    { VARREQUEST_SEND_VALIDATION_RESPONSE, RxSendValidationResponse },
+    { VARREQUEST_OPEN_PRINT_SESSION, RxOpenPrintSession },
+    { VARREQUEST_CLOSE_PRINT_SESSION, RxClosePrintSession },
+    { VARREQUEST_GET_FIRST, RxGetFirst },
+    { VARREQUEST_GET_NEXT, RxGetNext }
+};
 
 /*==============================================================================
         Public function definitions
@@ -313,7 +363,7 @@ static int HandleClientRequest( int sock, fd_set *pfds )
     int *pSDMap = GetClientSDMap();
     VarClient *pVarClient;
     int clientid;
-    RequestResponse rr;
+    SockRequest req;
 
     if ( pfds != NULL )
     {
@@ -334,7 +384,7 @@ static int HandleClientRequest( int sock, fd_set *pfds )
                                                       : -1;
 
                     /* read incoming message */
-                    n = read( sd, &rr, sizeof(RequestResponse) );
+                    n = read( sd, &req, sizeof(SockRequest) );
                     if ( n == 0 )
                     {
                         /* client disconnected */
@@ -360,16 +410,10 @@ static int HandleClientRequest( int sock, fd_set *pfds )
                     {
                         printf("SERVER: Invalid read: n=%ld\n", n );
                     }
-                    else if ( ( rr.id == VARSERVER_ID ) &&
-                              ( rr.version == VARSERVER_VERSION ) )
+                    else if ( ( req.id == VARSERVER_ID ) &&
+                              ( req.version == VARSERVER_VERSION ) )
                     {
-                        rr.clientid = clientid;
-                        memcpy( &pVarClient->rr, &rr, sizeof( RequestResponse));
-
-                        if ( pVarClient->rr.requestType != VARREQUEST_OPEN )
-                        {
-                            ReadPayload( sd, pVarClient );
-                        }
+                        RxRequest( pVarClient, &req );
 
 //                        printf("SERVER: Handling Request\n");
 //                        printf("SERVER:    id: %d\n", pVarClient->rr.id );
@@ -392,6 +436,29 @@ static int HandleClientRequest( int sock, fd_set *pfds )
 
     return result;
 }
+
+static int RxRequest( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+    int (*handler)( VarClient *, SockRequest *);
+    if ( ( pVarClient != NULL ) && ( pReq != NULL ) )
+    {
+        if ( pReq->requestType < VARREQUEST_END_MARKER )
+        {
+            pVarClient->rr.requestVal = pReq->requestVal;
+
+            handler = RequestReceivers[pReq->requestType].handler;
+            if ( handler != NULL )
+            {
+                /* execute the handler to receive the data */
+                result = handler( pVarClient, pReq );
+            }
+        }
+    }
+
+    return result;
+}
+
 
 /*============================================================================*/
 /*  SendClientResponse                                                        */
@@ -712,6 +779,258 @@ static int ReadPayload( int sd, VarClient *pVarClient )
 
     return result;
 }
+
+static int RxOpen( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+        pVarClient->rr.requestVal = pReq->requestVal;
+    }
+
+    return result;
+}
+
+static int RxClose( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxEcho( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxNew( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxFind( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxGet( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxPrint( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxSet( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxType( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxName( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxLength( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxNotify( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxGetValidationRequest( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxSendValidationResponse( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxOpenPrintSession( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxClosePrintSession( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxGetFirst( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
+static int RxGetNext( VarClient *pVarClient, SockRequest *pReq )
+{
+    int result = EINVAL;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
+    {
+
+    }
+
+    return result;
+
+}
+
 
 /*! @}
  * end of sockserver group */

@@ -52,6 +52,22 @@ typedef struct _SockRequest
 
 } SockRequest;
 
+typedef struct _SockResponse
+{
+    /*! identifier of the var client */
+    uint32_t id;
+
+    /*! varserver version */
+    uint16_t version;
+
+    /*! type of request */
+    VarRequest requestType;
+
+    /*! request Value */
+    int responseVal;
+
+} SockResponse;
+
 /*============================================================================
         Public function declarations
 ============================================================================*/
