@@ -56,6 +56,7 @@ SOFTWARE.
 #include <sys/syslog.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <time.h>
@@ -1455,66 +1456,52 @@ int ProcessVarRequestInvalid( VarClient *pVarClient, SockRequest *pReq  )
 int ProcessVarRequestPrint( VarClient *pVarClient, SockRequest *pReq )
 {
     int result = EINVAL;
-    int rc;
-    char *pStr = NULL;
     pid_t handler;
-    RenderHandler *pRenderHandler = pRenderHandlers;
-    int (*fn)(VarInfo *pVarInfo, char *buf, size_t len);
-    bool handled = false;
+    VarInfo varInfo;
+    ssize_t len;
+    ssize_t n;
+    PrintResponse resp;
+    struct iovec iov[2];
+    int vec_count = 1;
 
     /* validate the client object */
-    result = ValidateClient( pVarClient );
-    if( result == EOK)
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
     {
-        while( pRenderHandler != NULL )
+        varInfo.hVar = (VAR_HANDLE)pReq->requestVal;
+
+        result = VARLIST_PrintByHandle( pVarClient->rr.client_pid,
+                                        &varInfo,
+                                        &pVarClient->workbuf,
+                                        pVarClient->workbufsize,
+                                        &len,
+                                        pVarClient,
+                                        &handler );
+
+        resp.hVar = varInfo.hVar;
+        memcpy( resp.formatspec, varInfo.formatspec, MAX_FORMATSPEC_LEN );
+        memcpy( &resp.obj, &varInfo.var, sizeof( VarObject ));
+        resp.responseVal = result;
+
+        iov[0].iov_base = &resp;
+        iov[0].iov_len = sizeof( PrintResponse );
+        iov[1].iov_base = NULL;
+        iov[1].iov_len = 0;
+
+        // TODO: Add EINPROGRESS (calc) and ESTRPIPE (print) handling
+        if ( len > 0 )
         {
-            if ( pRenderHandler->hVar == pVarClient->rr.variableInfo.hVar )
-            {
-                if ( pRenderHandler->fn != NULL )
-                {
-                    fn = pRenderHandler->fn;
-                    result = fn( &pVarClient->rr.variableInfo,
-                                 &pVarClient->workbuf,
-                                 pVarClient->workbufsize );
-
-                    handled = true;
-                    break;
-                }
-            }
-
-            /* select the next render handler */
-            pRenderHandler = pRenderHandler->pNext;
+            iov[1].iov_base = &pVarClient->workbuf;
+            iov[1].iov_len = len;
+            vec_count = 2;
         }
 
-        if ( handled == false )
+        /* send the PrintResponse to the client */
+        len = iov[0].iov_len + iov[1].iov_len;
+        n = writev( pVarClient->sd, iov, vec_count );
+        if ( n != len )
         {
-            result = VARLIST_PrintByHandle( pVarClient->rr.client_pid,
-                                            &pVarClient->rr.variableInfo,
-                                            &pVarClient->workbuf,
-                                            pVarClient->workbufsize,
-                                            &pVarClient->rr.len,
-                                            pVarClient,
-                                            &handler );
-        }
-
-        /* capture the result */
-        pVarClient->rr.responseVal = result;
-
-        if( result == EINPROGRESS )
-        {
-            /* another client needs to calculate the value before
-               we can print it */
-            /* add the client to the blocked clients list */
-            BlockClient( pVarClient, NOTIFY_CALC );
-        }
-        else if(  result == ESTRPIPE )
-        {
-            /* printing is being handled by another client */
-            /* get the PID of the client handling the printing */
-            pVarClient->rr.peer_pid = handler;
-
-            /* don't unblock the requesting client */
-            result = EINPROGRESS;
+            result = errno;
         }
     }
 
@@ -1627,18 +1614,18 @@ int ProcessVarRequestClosePrintSession( VarClient *pVarClient,
         pRequestor = (VarClient *)TRANSACTION_Remove( pReq->requestVal );
         if( pRequestor != NULL )
         {
+            result = EOK;
+
             resp.id = VARSERVER_ID;
             resp.version = VARSERVER_VERSION;
             resp.transaction_id = pReq->transaction_id;
-            resp.responseVal = EOK;
+            resp.responseVal = result;
 
             n = write( pRequestor->sd, &resp, len );
             if ( n != len )
             {
                 result = errno;
             }
-
-            result = EOK;
         }
         else
         {
@@ -1677,32 +1664,71 @@ int ProcessVarRequestClosePrintSession( VarClient *pVarClient,
 int ProcessVarRequestSet( VarClient *pVarClient, SockRequest *pReq )
 {
     int result = EINVAL;
+    VAR_HANDLE hVar;
+    VarInfo varInfo;
+    SockResponse resp;
+    ssize_t len;
+    ssize_t n;
 
-    /* validate the client object */
-    result = ValidateClient( pVarClient );
-    if( result == EOK)
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
     {
-        /* check if we are dealing with a string */
-        if( pVarClient->rr.variableInfo.var.type == VARTYPE_STR )
+        result = EOK;
+        hVar = (VAR_HANDLE)pReq->requestVal;
+
+        /* get the VarObject */
+        len = sizeof( VarObject );
+        n = read( pVarClient->sd, &varInfo.var, len );
+        if ( n == len )
         {
-            /* for strings, the data is transferred via the working buffer */
-            pVarClient->rr.variableInfo.var.val.str = &pVarClient->workbuf;
+            if ( ( varInfo.var.type == VARTYPE_STR ) ||
+                 ( varInfo.var.type == VARTYPE_BLOB ) )
+            {
+                len = varInfo.var.len;
+                if ( len < pVarClient->workbufsize )
+                {
+                    n = read( pVarClient->sd, &pVarClient->workbuf, len );
+                    if ( n != len )
+                    {
+                        result = errno;
+                    }
+                    else
+                    {
+                        varInfo.var.val.blob = &pVarClient->workbuf;
+                    }
+                }
+                else
+                {
+                    result = E2BIG;
+                }
+            }
+        }
+        else
+        {
+            result = errno;
         }
 
-        /* check if we are dealing with a blob */
-        if( pVarClient->rr.variableInfo.var.type == VARTYPE_BLOB )
+        if ( result == EOK )
         {
-            /* for strings, the data is transferred via the working buffer */
-            pVarClient->rr.variableInfo.var.val.blob = &pVarClient->workbuf;
+            result = VARLIST_Set( pVarClient->rr.client_pid,
+                                &varInfo,
+                                &pVarClient->validationInProgress,
+                                (void *)pVarClient );
+
         }
 
-        /* set the variable value */
-        result = VARLIST_Set( pVarClient->rr.client_pid,
-                              &pVarClient->rr.variableInfo,
-                              &pVarClient->validationInProgress,
-                              (void *)pVarClient );
+        resp.id = VARSERVER_ID;
+        resp.version = VARSERVER_VERSION;
+        resp.requestType = pReq->requestType;
+        resp.transaction_id = pReq->transaction_id;
+        resp.responseVal = result;
 
-        pVarClient->rr.responseVal = result;
+        len = sizeof(SockResponse);
+        n = write( pVarClient->sd, &resp, len );
+        if ( n != len )
+        {
+            result = errno;
+        }
     }
 
     if( ( result != EOK ) &&
@@ -1740,13 +1766,31 @@ int ProcessVarRequestSet( VarClient *pVarClient, SockRequest *pReq )
 int ProcessVarRequestType( VarClient *pVarClient, SockRequest *pReq )
 {
     int result = EINVAL;
+    SockResponse resp;
+    VarInfo varInfo;
+    ssize_t n;
+    ssize_t len;
 
     /* validate the client object */
-    result = ValidateClient( pVarClient );
-    if( result == EOK)
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
     {
-        /* fet the variable type */
-        result = VARLIST_GetType( &pVarClient->rr.variableInfo );
+        varInfo.hVar = (VAR_HANDLE)pReq->requestVal;
+
+        result = VARLIST_GetType( &varInfo );
+
+        resp.id = VARSERVER_ID;
+        resp.version = VARSERVER_VERSION;
+        resp.requestType = pReq->requestType;
+        resp.transaction_id = pReq->transaction_id;
+        resp.responseVal = result == EOK ? varInfo.var.type : VARTYPE_INVALID;
+
+        len = sizeof( SockResponse );
+        n = write( pVarClient->sd, &resp, len );
+        if ( n != len )
+        {
+            result = errno;
+        }
     }
 
     return result;
@@ -1778,13 +1822,37 @@ int ProcessVarRequestType( VarClient *pVarClient, SockRequest *pReq )
 int ProcessVarRequestName( VarClient *pVarClient, SockRequest *pReq )
 {
     int result = EINVAL;
+    VarInfo varInfo;
+    ssize_t len;
+    ssize_t n;
+    struct iovec iov[2];
+    SockResponse resp;
 
-    /* validate the client object */
-    result = ValidateClient( pVarClient );
-    if( result == EOK)
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
     {
+        varInfo.hVar = (VAR_HANDLE)pReq->requestVal;
+
         /* fetch the variable name */
-        result = VARLIST_GetName( &pVarClient->rr.variableInfo );
+        result = VARLIST_GetName( &varInfo );
+
+        resp.id = VARSERVER_ID;
+        resp.version = VARSERVER_VERSION;
+        resp.requestType = pReq->requestType;
+        resp.transaction_id = pReq->transaction_id;
+        resp.responseVal = result;
+
+        iov[0].iov_base = &resp;
+        iov[0].iov_len = sizeof(SockResponse);
+        iov[1].iov_base = varInfo.name;
+        iov[1].iov_len = MAX_NAME_LEN+1;
+
+        len = iov[0].iov_len + iov[1].iov_len;
+        n = writev( pVarClient->sd, iov, 2 );
+        if ( n != len )
+        {
+            result = errno;
+        }
     }
 
     return result;
@@ -1817,17 +1885,34 @@ int ProcessVarRequestName( VarClient *pVarClient, SockRequest *pReq )
 int ProcessVarRequestLength( VarClient *pVarClient, SockRequest *pReq )
 {
     int result = EINVAL;
+    SockResponse resp;
+    VarInfo varInfo;
+    ssize_t n;
+    ssize_t len;
 
     /* validate the client object */
-    result = ValidateClient( pVarClient );
-    if( result == EOK)
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
     {
-        /* get the variable length */
-        result = VARLIST_GetLength( &(pVarClient->rr.variableInfo) );
+        varInfo.hVar = (VAR_HANDLE)pReq->requestVal;
+
+        result = VARLIST_GetLength( &varInfo );
+
+        resp.id = VARSERVER_ID;
+        resp.version = VARSERVER_VERSION;
+        resp.requestType = pReq->requestType;
+        resp.transaction_id = pReq->transaction_id;
+        resp.responseVal = result == EOK ? varInfo.var.len : -1;
+
+        len = sizeof( SockResponse );
+        n = write( pVarClient->sd, &resp, len );
+        if ( n != len )
+        {
+            result = errno;
+        }
     }
 
-    return result;
-}
+    return result;}
 
 /*============================================================================*/
 /*  ProcessVarRequestNotify                                                   */
@@ -1868,14 +1953,31 @@ int ProcessVarRequestLength( VarClient *pVarClient, SockRequest *pReq )
 int ProcessVarRequestNotify( VarClient *pVarClient, SockRequest *pReq )
 {
     int result = EINVAL;
+    SockResponse resp;
+    ssize_t len;
+    ssize_t n;
+    VarInfo varInfo;
 
-    /* validate the client object */
-    result = ValidateClient( pVarClient );
-    if( result == EOK)
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
     {
+        varInfo.hVar = pReq->requestVal;
+        varInfo.notificationType = pReq->requestVal2;
+
         /* register the notification request */
-        result = VARLIST_RequestNotify( &(pVarClient->rr.variableInfo),
+        result = VARLIST_RequestNotify( &varInfo,
                                         pVarClient->rr.client_pid );
+
+        resp.id = VARSERVER_ID;
+        resp.version = VARSERVER_VERSION;
+        resp.transaction_id = pReq->transaction_id;
+        resp.responseVal = result;
+
+        n = write( pVarClient->sd, &resp, len );
+        if ( n != len )
+        {
+            result = errno;
+        }
     }
 
     return result;
@@ -1908,22 +2010,44 @@ int ProcessVarRequestNotify( VarClient *pVarClient, SockRequest *pReq )
 int ProcessVarRequestGet( VarClient *pVarClient, SockRequest *pReq )
 {
     int result = EINVAL;
-    int rc;
-    char *pStr = NULL;
+    SockResponse resp;
+    ssize_t len;
+    ssize_t n;
+    struct iovec iov[3];
+    VarInfo varInfo;
+    int vec_count = 2;
 
-    /* validate the client object */
-    result = ValidateClient( pVarClient );
-    if( result == EOK)
+    if ( ( pVarClient != NULL ) &&
+         ( pReq != NULL ) )
     {
+        varInfo.hVar = (VAR_HANDLE)pReq->requestVal;
+
+        iov[0].iov_base = &resp;
+        iov[0].iov_len = sizeof(SockResponse);
+        iov[1].iov_base = &varInfo.var;
+        iov[1].iov_len = sizeof(VarObject);
+        iov[2].iov_base = NULL;
+        iov[2].iov_len = 0;
+
+        len = 0;
         result = VARLIST_GetByHandle( pVarClient->rr.client_pid,
-                                      &pVarClient->rr.variableInfo,
+                                      &varInfo,
                                       &pVarClient->workbuf,
                                       pVarClient->workbufsize,
-                                      &pVarClient->rr.len );
-        if( result == EINPROGRESS )
+                                      &len );
+
+        if ( len != 0 )
         {
-            /* add the client to the blocked clients list */
-            BlockClient( pVarClient, NOTIFY_CALC );
+            iov[2].iov_base = &pVarClient->workbuf;
+            iov[2].iov_len = len;
+            vec_count = 3;
+        }
+
+        len = iov[0].iov_len + iov[1].iov_len + iov[2].iov_len;
+        n = writev( pVarClient->sd, iov, 3 );
+        if ( n != len )
+        {
+            result = errno;
         }
     }
 

@@ -1311,6 +1311,7 @@ static int getName( VarClient *pVarClient,
     SockResponse resp;
     ssize_t n;
     ssize_t length;
+    char name[MAX_NAME_LEN+1];
 
     if( ( pVarClient != NULL ) &&
         ( buf != NULL ) &&
@@ -1329,11 +1330,24 @@ static int getName( VarClient *pVarClient,
             n = read( pVarClient->sd, (char *)&resp, length );
             if ( n == length )
             {
-                length = (ssize_t)resp.responseVal;
-                n = read( pVarClient->sd, buf, length );
+                length = MAX_NAME_LEN+1;
+                n = read( pVarClient->sd, name, length );
                 if ( n == length )
                 {
-                    result = EOK;
+                    length = strlen(name);
+                    if( length < buflen )
+                    {
+                        strcpy( buf, name );
+                        result = EOK;
+                    }
+                    else
+                    {
+                        result = E2BIG;
+                    }
+                }
+                else
+                {
+                    result = errno;
                 }
             }
             else
@@ -1739,6 +1753,7 @@ static int print( VarClient *pVarClient,
     {
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
+        req.requestType = VARREQUEST_PRINT;
         req.requestVal = hVar;
 
         len = sizeof( SockRequest );
@@ -1749,6 +1764,21 @@ static int print( VarClient *pVarClient,
             n = read( pVarClient->sd, &resp, len );
             if ( n == len )
             {
+                if ( resp.obj.type == VARTYPE_STR )
+                {
+                    len = resp.obj.len;
+
+                    if ( len < pVarClient->workbufsize )
+                    {
+                        /* read the string value */
+                        n = read( pVarClient->sd, &pVarClient->workbuf, len );
+                        if ( n != len )
+                        {
+                            result = errno;
+                        }
+                    }
+                }
+
                 if ( resp.responseVal == ESTRPIPE )
                 {
                     /* get the PID of the client doing the printing */
