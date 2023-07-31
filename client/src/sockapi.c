@@ -145,7 +145,11 @@ static int closePrintSession( VarClient *pVarClient,
 static int ClientRequest( VarClient *pVarClient, int request );
 
 static int ClientCleanup( VarClient *pVarClient );
-static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf );
+
+static int PrintValue( int fd,
+                       VarClient *pVarClient,
+                       PrintResponse *pPrintResp );
+
 static int var_GetVarObject( VarClient *pVarClient, VarObject *pVarObject );
 static int var_GetBlobObjectFromWorkbuf( VarClient *pVarClient,
                                          VarObject *pVarObject );
@@ -352,13 +356,32 @@ static int varserver_GetAddress( VarserverAddress *pVarserverAddress )
 static int close_varserver( VarClient *pVarClient )
 {
     int result = EINVAL;
+    SockRequest req;
+    SockResponse resp;
+    ssize_t len;
+    ssize_t n;
 
     if( pVarClient != NULL )
     {
-        pVarClient->rr.requestType = VARREQUEST_CLOSE;
-        pVarClient->rr.len = 0;
+        req.id = VARSERVER_ID;
+        req.version = VARSERVER_VERSION;
+        req.requestType = VARREQUEST_CLOSE;
+        req.requestVal = 0;
 
-        ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+        len = sizeof( SockRequest );
+        n = write( pVarClient->sd, &req, len );
+        if ( n == len )
+        {
+            len = sizeof(SockResponse);
+            if ( n == len )
+            {
+                result = resp.responseVal;
+            }
+            else
+            {
+                result = errno;
+            }
+        }
 
         /* clean up the Var client */
         ClientCleanup( pVarClient );
@@ -399,26 +422,55 @@ static int createVar( VarClient *pVarClient, VarInfo *pVarInfo )
 {
     int result = EINVAL;
     int rc;
+    ssize_t n;
+    ssize_t len;
+    SockRequest req;
+    SockResponse resp;
+    struct iovec iov[3];
+    int vec_count = 2;
 
     if( ( pVarClient != NULL ) &&
         ( pVarInfo != NULL ) )
     {
-        /* copy the variable information */
-        memcpy( &pVarClient->rr.variableInfo, pVarInfo, sizeof( VarInfo ) );
+        req.id = VARSERVER_ID;
+        req.version = VARSERVER_VERSION;
+        req.requestType = VARREQUEST_NEW;
+        req.requestVal = 0;
 
-        pVarClient->rr.requestType = VARREQUEST_NEW;
-        pVarClient->rr.len = 0;
+        iov[0].iov_base = &req;
+        iov[0].iov_len = sizeof(SockRequest);
+        iov[1].iov_base = pVarInfo;
+        iov[1].iov_len = sizeof( VarInfo );
+        iov[2].iov_base = NULL;
+        iov[2].iov_len = 0;
 
-        rc = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( rc == EOK )
+        if ( ( pVarInfo->var.type == VARTYPE_STR ) ||
+             ( pVarInfo->var.type == VARTYPE_BLOB ) )
         {
-            result = pVarClient->rr.responseVal;
+            iov[2].iov_base = pVarInfo->var.val.blob;
+            iov[2].iov_len = pVarInfo->var.len;
+            vec_count = 3;
+        }
+
+        len = iov[0].iov_len + iov[1].iov_len + iov[2].iov_len;
+        n = writev( pVarClient->sd, iov, vec_count );
+        if ( n == len )
+        {
+            len = sizeof(SockResponse);
+            n = read( pVarClient->sd, &resp, len);
+            if ( n == len )
+            {
+                result = resp.responseVal;
+            }
+            else
+            {
+                result = errno;
+            }
         }
         else
         {
-            result = rc;
+            result = errno;
         }
-
     }
 
     return result;
@@ -510,18 +562,19 @@ static VAR_HANDLE findByName( VarClient *pVarClient, char *pName )
     if( ( pVarClient != NULL ) &&
         ( pName != NULL ) )
     {
+        len = strlen(pName) + 1;
+
         iov[0].iov_base = &req;
         iov[0].iov_len = sizeof(SockRequest);
         iov[1].iov_base = pName;
-        iov[1].iov_len = strlen( pName ) + 1;
+        iov[1].iov_len = len;
 
-        len = strlen(pName);
         if( len < MAX_NAME_LEN )
         {
             req.id = VARSERVER_ID;
             req.version = VARSERVER_VERSION;
             req.requestType = VARREQUEST_FIND;
-            req.requestVal = 0;
+            req.requestVal = len;
 
             len = iov[0].iov_len + iov[1].iov_len;
             n = writev( pVarClient->sd, iov, 2);
@@ -570,7 +623,6 @@ static int get( VarClient *pVarClient, VAR_HANDLE hVar, VarObject *pVarObject )
     SockRequest req;
     SockResponse resp;
     struct iovec iov[2];
-
     ssize_t n;
     ssize_t len;
 
@@ -672,23 +724,87 @@ static int getValidationRequest( VarClient *pVarClient,
                                  VarObject *pVarObject )
 {
     int result = EINVAL;
+    SockRequest req;
+    SockResponse resp;
+    VarObject obj;
+    struct iovec iov[2];
+    ssize_t n;
+    ssize_t len;
+
+
+    //
+    // THIS FUNCTION NEEDS MORE THOUGHT
+    //
 
     if( ( pVarClient != NULL ) &&
         ( pVarObject != NULL ) &&
         ( hVar != NULL ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_GET_VALIDATION_REQUEST;
-        pVarClient->rr.requestVal = id;
-        pVarClient->rr.len = 0;
+        req.id = VARSERVER_ID;
+        req.version = VARSERVER_VERSION;
+        req.requestType = VARREQUEST_GET_VALIDATION_REQUEST;
+        req.requestVal = id;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
+        len = sizeof( SockRequest );
+        n = write(pVarClient->sd, (char *)&req, len );
+        if ( n == len )
         {
-            result = var_GetVarObject( pVarClient, pVarObject );
-            if( result == EOK )
+            iov[0].iov_base = &resp;
+            iov[0].iov_len = sizeof(SockResponse);
+            iov[1].iov_base = &obj;
+            iov[1].iov_len = sizeof( obj );
+
+            len = iov[0].iov_len + iov[1].iov_len;
+            n = readv( pVarClient->sd, iov, 2 );
+            if ( n == len )
             {
-                /* get the handle of the variable to be validated */
-                *hVar = pVarClient->rr.variableInfo.hVar;
+                *hVar = resp.responseVal;
+
+                if ( ( obj.type == VARTYPE_STR ) ||
+                     ( obj.type == VARTYPE_BLOB ) )
+                {
+                    if ( obj.len < pVarClient->workbufsize )
+                    {
+                        n = read( pVarClient->sd,
+                                  &pVarClient->workbuf,
+                                  obj.len );
+                        if ( n == obj.len )
+                        {
+                            if ( pVarObject->val.blob == NULL )
+                            {
+                                pVarObject->val.blob = calloc( 1, obj.len );
+                                if ( pVarObject->val.blob != NULL )
+                                {
+                                    result = EOK;
+                                }
+                                else
+                                {
+                                    result = ENOMEM;
+                                }
+                            }
+
+                            if ( pVarObject->val.blob )
+                            {
+                                memcpy( pVarObject->val.blob,
+                                        &pVarClient->workbuf,
+                                        obj.len );
+                            }
+                        }
+                        else
+                        {
+                            result = errno;
+                        }
+                    }
+                    else
+                    {
+                        result = E2BIG;
+
+                    }
+                }
+                else
+                {
+                    result = EOK;
+                }
             }
         }
     }
@@ -726,15 +842,29 @@ static int sendValidationResponse( VarClient *pVarClient,
                                    int response  )
 {
     int result = EINVAL;
+    SockRequest req;
+    SockResponse resp;
+    ssize_t n;
+    ssize_t len;
 
     if( pVarClient != NULL )
     {
-        pVarClient->rr.requestType = VARREQUEST_SEND_VALIDATION_RESPONSE;
-        pVarClient->rr.requestVal = id;
-        pVarClient->rr.responseVal = response;
-        pVarClient->rr.len = 0;
+        req.id = VARSERVER_ID;
+        req.version = VARSERVER_VERSION;
+        req.requestVal = id;
+        req.requestVal2 = response;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+        len = sizeof(SockRequest);
+        n = write( pVarClient->sd, &req, len );
+        if ( n == len )
+        {
+            len = sizeof(SockResponse);
+            n = read( pVarClient->sd, &resp, len );
+            if ( n == len )
+            {
+                result = EOK;
+            }
+        }
     }
 
     return result;
@@ -1386,8 +1516,6 @@ static int getFirst( VarClient *pVarClient,
             iov[0].iov_len = sizeof(SockResponse);
             iov[1].iov_base = query;
             iov[1].iov_len = sizeof(VarQuery);
-            iov[2].iov_base = obj;
-            iov[2].iov_len = sizeof(VarObject);
 
             len = iov[0].iov_len + iov[1].iov_len;
             n = readv( pVarClient->sd, iov, 2 );
@@ -1449,37 +1577,53 @@ static int getNext( VarClient *pVarClient,
                     VarObject *obj )
 {
     int result = EINVAL;
-    char *p;
-    size_t len;
+    struct iovec iov[3];
+    SockRequest req;
+    SockResponse resp;
+    ssize_t n;
+    ssize_t len;
+    int vec_count = 2;
 
     if( ( pVarClient != NULL ) &&
         ( query != NULL ) &&
         ( obj != NULL ) )
     {
-        pVarClient->rr.requestType = VARREQUEST_GET_NEXT;
-        pVarClient->rr.requestVal = query->context;
-        pVarClient->rr.len = 0;
+        req.id = VARSERVER_ID;
+        req.version = VARSERVER_VERSION;
+        req.requestType = VARREQUEST_GET_NEXT;
+        req.requestVal = query->context;
 
         /* send the request to the server */
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( result == EOK )
+        len = sizeof(SockRequest);
+        n = write( pVarClient->sd, &req, len );
+        if ( n == len )
         {
-            query->context = pVarClient->rr.responseVal;
-            if( query->context > 0 )
-            {
-                /* get the name of the variable we found */
-                memcpy( query->name,
-                        pVarClient->rr.variableInfo.name,
-                        MAX_NAME_LEN+1 );
+            iov[0].iov_base = &resp;
+            iov[0].iov_len = sizeof(SockResponse);
+            iov[1].iov_base = query;
+            iov[1].iov_len = sizeof(VarQuery);
 
-                /* get the handle of the variable we found */
-                query->hVar = pVarClient->rr.variableInfo.hVar;
+            len = iov[0].iov_len + iov[1].iov_len;
+            n = readv( pVarClient->sd, iov, 2 );
+            if ( n == len )
+            {
+                if ( query->context > 0 )
+                {
+                    result = EOK;
+                }
+                else
+                {
+                    result = ENOENT;
+                }
             }
             else
             {
-                /* nothing found which matches the query */
-                result = ENOENT;
+                result = errno;
             }
+        }
+        else
+        {
+            result = errno;
         }
     }
 
@@ -1516,15 +1660,38 @@ static int notify( VarClient *pVarClient,
                    NotificationType notificationType )
 {
     int result = EINVAL;
+    SockRequest req;
+    SockResponse resp;
+    ssize_t len;
+    ssize_t n;
 
     if( pVarClient != NULL )
     {
-        pVarClient->rr.requestType = VARREQUEST_NOTIFY;
-        pVarClient->rr.variableInfo.hVar = hVar;
-        pVarClient->rr.variableInfo.notificationType = notificationType;
-        pVarClient->rr.len = 0;
+        req.id = VARSERVER_ID;
+        req.version = VARSERVER_VERSION;
+        req.requestType = VARREQUEST_NOTIFY;
+        req.requestVal = (int)hVar;
+        req.requestVal2 = (int)notificationType;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+        len = sizeof(SockRequest);
+        n = write( pVarClient->sd, &req, len );
+        if ( n == len )
+        {
+            len = sizeof(SockResponse);
+            n = read( pVarClient->sd, &resp, len );
+            if ( n == len )
+            {
+                result = resp.responseVal;
+            }
+            else
+            {
+                result = errno;
+            }
+        }
+        else
+        {
+            result = errno;
+        }
     }
 
     return result;
@@ -1563,42 +1730,61 @@ static int print( VarClient *pVarClient,
     int result = EINVAL;
     pid_t responderPID;
     int sock;
+    SockRequest req;
+    PrintResponse resp;
+    ssize_t len;
+    ssize_t n;
 
     if( pVarClient != NULL )
     {
-        pVarClient->rr.requestType = VARREQUEST_PRINT;
-        pVarClient->rr.variableInfo.hVar = hVar;
-        pVarClient->rr.len = 0;
+        req.id = VARSERVER_ID;
+        req.version = VARSERVER_VERSION;
+        req.requestVal = hVar;
 
-        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( pVarClient->rr.responseVal == ESTRPIPE)
+        len = sizeof( SockRequest );
+        n = write( pVarClient->sd, &req, len );
+        if ( n == len )
         {
-            /* get the PID of the client doing the printing */
-            responderPID = (pid_t)(pVarClient->rr.peer_pid);
-
-            /* send the file descriptor to the responder */
-            result = VARPRINT_SendFileDescriptor( responderPID, fd );
-
-            if( result == EOK )
+            len = sizeof( PrintResponse );
+            n = read( pVarClient->sd, &resp, len );
+            if ( n == len )
             {
-                /* block client until printing is complete */
-                pVarClient->blocked = 1;
-                do
+                if ( resp.responseVal == ESTRPIPE )
                 {
-                    result = sem_wait( &pVarClient->sem );
-                    if ( result == -1 )
+                    /* get the PID of the client doing the printing */
+                    responderPID = (pid_t)(pVarClient->rr.peer_pid);
+
+                    /* send the file descriptor to the responder */
+                    result = VARPRINT_SendFileDescriptor( responderPID, fd );
+
+                    if( result == EOK )
                     {
-                        result = errno;
+                        /* block client until printing is complete */
+                        pVarClient->blocked = 1;
+                        do
+                        {
+                            result = sem_wait( &pVarClient->sem );
+                            if ( result == -1 )
+                            {
+                                result = errno;
+                            }
+                        } while ( result != EOK );
+                        pVarClient->blocked = 0;
                     }
-                } while ( result != EOK );
-                pVarClient->blocked = 0;
+                }
+                else
+                {
+                    result = PrintValue( fd, pVarClient, &resp );
+                }
+            }
+            else
+            {
+                result = errno;
             }
         }
         else
         {
-            result = var_PrintValue( fd,
-                                     &pVarClient->rr.variableInfo,
-                                     &pVarClient->workbuf );
+            result = errno;
         }
     }
 
@@ -1724,12 +1910,12 @@ static int closePrintSession( VarClient *pVarClient,
 }
 
 /*============================================================================*/
-/*  var_PrintValue                                                            */
+/*  PrintValue                                                                */
 /*!
     Print a variable value to the specified output stream
 
-    The var_PrintValue function prints out the value specified in
-    the VarInfo structure.  It uses the format specifier associated
+    The PrintValue function prints out the value specified in
+    the PrintResponse structure.  It uses the format specifier associated
     with the variable (if it exists), or a generic %f, %ul, %d etc
     if it does not.
 
@@ -1738,91 +1924,94 @@ static int closePrintSession( VarClient *pVarClient,
             file descriptor to print to
 
     @param[in]
-        pInfo
-            pointer to the VarInfo object that contains the variable
-            value to be printed
+        pVarClient
+            pointer to the VarClient requesting the print
 
     @param[in]
-        workbuf
-            pointer to the working buffer where string to be
-            printed is located.  Only applicable if the variable
-            type is VARTYPE_STR
+        pPrintResp
+            pointer to the print response from the server
 
     @retval EOK - the variable was printed ok
     @retval ENOTSUP - the variable data type is not supported for printing
     @retval EINVAL - invalid arguments
 
 ==============================================================================*/
-static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf )
+static int PrintValue( int fd,
+                       VarClient *pVarClient,
+                       PrintResponse *pPrintResp )
 {
     char *fmt;
     int result = EINVAL;
+    char *fmtspec;
+    VarType type;
+    ssize_t len;
+    ssize_t n;
 
     if( ( fd >= 0 ) &&
-        ( pInfo != NULL ) &&
-        ( workbuf != NULL ) )
+        ( pVarClient != NULL ) &&
+        ( pPrintResp != NULL ) )
     {
-        switch( pInfo->var.type )
+        type = pPrintResp->obj.type;
+        fmtspec = pPrintResp->formatspec;
+
+        switch( type )
         {
             case VARTYPE_FLOAT:
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%f"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, pInfo->var.val.f );
+                fmt = ( fmtspec[0] == 0 ) ? "%f" : fmtspec;
+                dprintf(fd, fmt, pPrintResp->obj.val.f );
                 result = EOK;
                 break;
 
             case VARTYPE_BLOB:
-                dprintf(fd, "%s len=%ld>", "<object:", pInfo->var.len);
+                dprintf(fd, "%s len=%ld>", "<object:", pPrintResp->obj.len);
                 result = EOK;
                 break;
 
             case VARTYPE_STR:
-                /* string variable values are transferred via the workbuf */
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%s"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, workbuf );
-                result = EOK;
+                len = pPrintResp->obj.len;
+                n = read( pVarClient->sd, &pVarClient->workbuf, len );
+                if ( n == len )
+                {
+                    /* string variable values are transferred via the workbuf */
+                    fmt = ( fmtspec[0] == 0 ) ? "%s" : fmtspec;
+                    dprintf(fd, fmt, &(pVarClient->workbuf) );
+                    result = EOK;
+                }
                 break;
 
             case VARTYPE_UINT16:
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%u"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, pInfo->var.val.ui );
+                fmt = ( fmtspec[0] == 0 ) ? "%u" : fmtspec;
+                dprintf(fd, fmt, pPrintResp->obj.val.ui );
                 result = EOK;
                 break;
 
             case VARTYPE_INT16:
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%d"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, pInfo->var.val.i );
+                fmt = ( fmtspec[0] == 0 ) ? "%d" : fmtspec;
+                dprintf(fd, fmt, pPrintResp->obj.val.i );
                 result = EOK;
                 break;
 
             case VARTYPE_UINT32:
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%lu"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, pInfo->var.val.ul );
+                fmt = ( fmtspec[0] == 0 ) ? "%lu" : fmtspec;
+                dprintf(fd, fmt, pPrintResp->obj.val.ul );
                 result = EOK;
                 break;
 
             case VARTYPE_INT32:
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%d"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, pInfo->var.val.l );
+                fmt = ( fmtspec[0] == 0 ) ? "%d" : fmtspec;
+                dprintf(fd, fmt, pPrintResp->obj.val.l );
                 result = EOK;
                 break;
 
             case VARTYPE_UINT64:
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%llu"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, pInfo->var.val.ull );
+                fmt = ( fmtspec[0] == 0 ) ? "%llu" : fmtspec;
+                dprintf(fd, fmt, pPrintResp->obj.val.ull );
                 result = EOK;
                 break;
 
             case VARTYPE_INT64:
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%lld"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, pInfo->var.val.ll );
+                fmt = ( fmtspec[0] == 0 ) ? "%lld" : fmtspec;
+                dprintf(fd, fmt, pPrintResp->obj.val.ll );
                 result = EOK;
                 break;
 

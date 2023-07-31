@@ -44,11 +44,17 @@ typedef struct _SockRequest
     /*! varserver version */
     uint16_t version;
 
+    /*! transaction identifier */
+    uint32_t transaction_id;
+
     /*! type of request */
     VarRequest requestType;
 
     /*! request Value */
     int requestVal;
+
+    /*! request Value 2 */
+    int requestVal2;
 
 } SockRequest;
 
@@ -63,10 +69,25 @@ typedef struct _SockResponse
     /*! type of request */
     VarRequest requestType;
 
+    /*! transaction identifier */
+    uint32_t transaction_id;
+
     /*! request Value */
     int responseVal;
 
 } SockResponse;
+
+typedef struct _PrintResponse
+{
+    VAR_HANDLE hVar;
+
+    char formatspec[MAX_FORMATSPEC_LEN];
+
+    VarObject obj;
+
+    int responseVal;
+
+} PrintResponse;
 
 /*============================================================================
         Public function declarations
