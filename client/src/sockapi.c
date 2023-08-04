@@ -435,8 +435,6 @@ static int createVar( VarClient *pVarClient, VarInfo *pVarInfo )
     if( ( pVarClient != NULL ) &&
         ( pVarInfo != NULL ) )
     {
-        printf("createVar\n");
-
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
         req.requestType = VARREQUEST_NEW;
@@ -472,8 +470,6 @@ static int createVar( VarClient *pVarClient, VarInfo *pVarInfo )
         }
 
         len = iov[0].iov_len + iov[1].iov_len + iov[2].iov_len;
-        printf("len = %ld, vec_count = %d\n", len, vec_count );
-
         n = writev( pVarClient->sd, iov, vec_count );
         if ( n == len )
         {
@@ -482,7 +478,6 @@ static int createVar( VarClient *pVarClient, VarInfo *pVarInfo )
             if ( n == len )
             {
                 result = resp.responseVal;
-                printf("result=%d\n", result);
             }
             else
             {
@@ -1705,48 +1700,9 @@ static int handleIterateResponse(  VarClient *pVarClient,
         n = readv( pVarClient->sd, iov, 2 );
         if ( n == len )
         {
-/*
-            printf("CLIENT: resp.id: %04X\n", resp.id );
-            printf("CLIENT: resp.version: %d\n", resp.version );
-            printf("CLIENT: resp.requestType: %d\n", resp.requestType);
-            printf("CLIENT: resp.responseVal: %d\n", resp.responseVal);
-            p = (char *)&varInfo;
-            for (i=0;i<sizeof(VarInfo);i++)
-            {
-                printf("%02X ", p[i]);
-
-                if ( i % 16 == 15 )
-                {
-                    for ( j = i-15; j<=i ; j++ )
-                    {
-                        if ( j > 0 )
-                        {
-                            c = p[j];
-                            if ( c < 0x20 || c > 0x7F ) c = '.';
-                            printf( "%c ", c );
-                        }
-                    }
-                    printf("\n");
-                }
-            }
-            printf("\n");
-*/
             query->context = resp.responseVal;
             query->hVar = varInfo.hVar;
             strcpy(query->name, varInfo.name );
-
-            if ( varInfo.var.type == VARTYPE_STR )
-            {
-                varInfo.var.val.str = &pVarClient->workbuf;
-            }
-
-            if ( varInfo.var.type == VARTYPE_BLOB )
-            {
-                varInfo.var.val.blob = &pVarClient->workbuf;
-            }
-
-            memcpy(&pVarClient->rr.variableInfo, &varInfo, sizeof(VarInfo ));
-            memcpy( obj, &varInfo.var, sizeof( VarObject ) );
 
             if ( query->context > 0 )
             {
@@ -1760,6 +1716,7 @@ static int handleIterateResponse(  VarClient *pVarClient,
         else
         {
             result = errno;
+            printf("why am I here?\n");
             printf("n = %ld\n", n );
 
             fprintf(stderr, "%s result = %s\n", __func__, strerror(result));

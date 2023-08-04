@@ -2063,11 +2063,10 @@ int ProcessVarRequestGetFirst( VarClient *pVarClient, SockRequest *pReq )
     SockResponse resp;
     ssize_t len;
     ssize_t n;
-    struct iovec iov[3];
+    struct iovec iov[2];
     VarInfo varInfo;
     VarQuery query;
     int context = -1;
-    int vec_count = 1;
 
     if ( ( pVarClient != NULL ) &&
          ( pReq != NULL ) )
@@ -2119,23 +2118,12 @@ int ProcessVarRequestGetFirst( VarClient *pVarClient, SockRequest *pReq )
                 iov[0].iov_len = sizeof(SockResponse);
                 iov[1].iov_base = &varInfo;
                 iov[1].iov_len = sizeof(VarInfo);
-                iov[2].iov_base = NULL;
-                iov[2].iov_len = 0;
-                vec_count = 2;
-
-                /* add variable length part of the response if necessary */
-                if ( len != 0 )
-                {
-                    iov[2].iov_base = &pVarClient->workbuf;
-                    iov[2].iov_len = len;
-                    vec_count = 3;
-                }
 
                 /* calculate the length of the response */
-                len = iov[0].iov_len + iov[1].iov_len + iov[2].iov_len;
+                len = iov[0].iov_len + iov[1].iov_len;
 
                 /* send the response */
-                n = writev( pVarClient->sd, iov, vec_count );
+                n = writev( pVarClient->sd, iov, 2 );
                 if ( n != len )
                 {
                     result = errno;
@@ -2177,8 +2165,7 @@ int ProcessVarRequestGetNext( VarClient *pVarClient, SockRequest *pReq )
     char *pStr = NULL;
     int context = -1;
     VarInfo varInfo;
-    struct iovec iov[3];
-    int vec_count = 1;
+    struct iovec iov[2];
     SockResponse resp;
     ssize_t len;
     ssize_t n;
@@ -2218,23 +2205,12 @@ int ProcessVarRequestGetNext( VarClient *pVarClient, SockRequest *pReq )
             iov[0].iov_len = sizeof(SockResponse);
             iov[1].iov_base = &varInfo;
             iov[1].iov_len = sizeof(VarInfo);
-            iov[2].iov_base = NULL;
-            iov[2].iov_len = 0;
-            vec_count = 2;
-
-            /* add variable length part of the response if necessary */
-            if ( len != 0 )
-            {
-                iov[2].iov_base = &pVarClient->workbuf;
-                iov[2].iov_len = len;
-                vec_count = 3;
-            }
 
             /* calculate the length of the response */
-            len = iov[0].iov_len + iov[1].iov_len + iov[2].iov_len;
+            len = iov[0].iov_len + iov[1].iov_len;
 
             /* send the response */
-            n = writev( pVarClient->sd, iov, vec_count );
+            n = writev( pVarClient->sd, iov, 2 );
             if ( n != len )
             {
                 result = errno;
