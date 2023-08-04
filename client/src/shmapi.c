@@ -1308,7 +1308,7 @@ static int getFirst( VarClient *pVarClient,
                 &query->tagspec,
                 MAX_TAGSPEC_LEN );
 
-        if ( query->match != NULL )
+        if ( query->match[0] != '\0' )
         {
             len = strlen(query->match);
             if( ( len > 0 ) && ( len < pVarClient->workbufsize ) )
@@ -1323,6 +1323,10 @@ static int getFirst( VarClient *pVarClient,
                 /* set the length of the data in the working buffer */
                 pVarClient->rr.len = len+1;
             }
+        }
+        else
+        {
+            pVarClient->workbuf = '\0';
         }
 
         /* send the request to the server */

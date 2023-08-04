@@ -209,6 +209,7 @@ void handler(int sig, siginfo_t *info, void *ucontext)
     else
     {
         printf("SERVER: unhandled signal: %d\n", sig);
+        exit(1);
     }
 }
 

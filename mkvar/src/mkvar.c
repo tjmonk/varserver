@@ -202,6 +202,7 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
         {
             /* set up defaults to create a 256 char string variable */
             pState->variableInfo.var.type = VARTYPE_STR;
+            pState->variableInfo.var.val.str = NULL;
             pState->variableInfo.var.len = 256;
 
             while( ( c = getopt( argc, argv, options ) ) != -1 )

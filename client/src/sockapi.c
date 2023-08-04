@@ -125,6 +125,10 @@ static int getNext( VarClient *pVarClient,
                     VarQuery *query,
                     VarObject *obj );
 
+static int handleIterateResponse(  VarClient *pVarClient,
+                                   VarQuery *query,
+                                   VarObject *obj );
+
 static int notify( VarClient *pVarClient,
                    VAR_HANDLE hVar,
                    NotificationType notificationType );
@@ -242,7 +246,6 @@ static VARSERVER_HANDLE open_varserver( size_t workbufsize )
                 pVarClient = calloc( 1, sizeof( VarClient ) + workbufsize );
                 if ( pVarClient != NULL )
                 {
-
                     pVarClient->sd = sd;
                     pVarClient->rr.id = VARSERVER_ID;
                     pVarClient->rr.version = VARSERVER_VERSION;
@@ -432,6 +435,8 @@ static int createVar( VarClient *pVarClient, VarInfo *pVarInfo )
     if( ( pVarClient != NULL ) &&
         ( pVarInfo != NULL ) )
     {
+        printf("createVar\n");
+
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
         req.requestType = VARREQUEST_NEW;
@@ -444,15 +449,31 @@ static int createVar( VarClient *pVarClient, VarInfo *pVarInfo )
         iov[2].iov_base = NULL;
         iov[2].iov_len = 0;
 
-        if ( ( pVarInfo->var.type == VARTYPE_STR ) ||
-             ( pVarInfo->var.type == VARTYPE_BLOB ) )
+        if ( pVarInfo->var.type == VARTYPE_STR )
         {
-            iov[2].iov_base = pVarInfo->var.val.blob;
-            iov[2].iov_len = pVarInfo->var.len;
-            vec_count = 3;
+            if ( pVarInfo->var.val.str != NULL )
+            {
+                req.requestVal = pVarInfo->var.len;
+                iov[2].iov_base = pVarInfo->var.val.str;
+                iov[2].iov_len = pVarInfo->var.len;
+                vec_count = 3;
+            }
+        }
+
+        if ( pVarInfo->var.type == VARTYPE_BLOB )
+        {
+            if ( pVarInfo->var.val.blob != NULL )
+            {
+                req.requestVal = pVarInfo->var.len;
+                iov[2].iov_base = pVarInfo->var.val.blob;
+                iov[2].iov_len = pVarInfo->var.len;
+                vec_count = 3;
+            }
         }
 
         len = iov[0].iov_len + iov[1].iov_len + iov[2].iov_len;
+        printf("len = %ld, vec_count = %d\n", len, vec_count );
+
         n = writev( pVarClient->sd, iov, vec_count );
         if ( n == len )
         {
@@ -461,6 +482,7 @@ static int createVar( VarClient *pVarClient, VarInfo *pVarInfo )
             if ( n == len )
             {
                 result = resp.responseVal;
+                printf("result=%d\n", result);
             }
             else
             {
@@ -470,6 +492,7 @@ static int createVar( VarClient *pVarClient, VarInfo *pVarInfo )
         else
         {
             result = errno;
+            printf("result = %d %s\n", result, strerror(result));
         }
     }
 
@@ -625,6 +648,7 @@ static int get( VarClient *pVarClient, VAR_HANDLE hVar, VarObject *pVarObject )
     struct iovec iov[2];
     ssize_t n;
     ssize_t len;
+    VarObject obj;
 
     if( ( pVarClient != NULL ) &&
         ( pVarObject != NULL ) )
@@ -640,7 +664,7 @@ static int get( VarClient *pVarClient, VAR_HANDLE hVar, VarObject *pVarObject )
         {
             iov[0].iov_base = &resp;
             iov[0].iov_len = sizeof(SockResponse);
-            iov[1].iov_base = pVarObject;
+            iov[1].iov_base = &obj;
             iov[1].iov_len = sizeof(VarObject);
 
             len = iov[0].iov_len + iov[1].iov_len;
@@ -648,29 +672,55 @@ static int get( VarClient *pVarClient, VAR_HANDLE hVar, VarObject *pVarObject )
             n = readv( pVarClient->sd, iov, 2 );
             if ( n == len )
             {
-                if ( pVarObject->type == VARTYPE_BLOB )
+                len = 0;
+                if ( obj.type == VARTYPE_BLOB )
                 {
-                    len = pVarObject->len;
-                    pVarObject->val.blob = &pVarClient->workbuf;
+                    len = obj.len;
+                    obj.val.blob = &pVarClient->workbuf;
                 }
 
                 if ( pVarObject->type == VARTYPE_STR )
                 {
-                    len = pVarObject->len + 1;
-                    pVarObject->val.blob = &pVarClient->workbuf;
+                    len = obj.len + 1;
+                    obj.val.blob = &pVarClient->workbuf;
                 }
 
                 if ( len > 0 )
                 {
+                    /* read variable length data (string or blob)
+                       into working buffer */
                     n = read( pVarClient->sd, &pVarClient->workbuf, len );
                     if ( len == n )
                     {
+                        if ( pVarObject->val.blob == NULL )
+                        {
+                            /* allocate blob/string memory */
+                            pVarObject->val.blob = calloc( 1, obj.len );
+                            if ( pVarObject->val.blob != NULL )
+                            {
+                                pVarObject->len = obj.len;
+                            }
+                        }
+
+                        if ( ( len <= pVarObject->len ) &&
+                             ( pVarObject->val.blob != NULL ) )
+                        {
+                            pVarObject->type = obj.type;
+                            memcpy( pVarObject->val.blob, obj.val.blob, len );
+                        }
+
                         result = EOK;
                     }
                     else
                     {
                         result = errno;
                     }
+                }
+                else
+                {
+                    /* copy primitive data type */
+                    memcpy( pVarObject, &obj, sizeof( VarObject ));
+                    result = EOK;
                 }
             }
             else
@@ -1257,6 +1307,7 @@ static int getType( VarClient *pVarClient,
             if ( n == length )
             {
                 *pVarType = (VarType)resp.responseVal;
+                result = EOK;
             }
             else
             {
@@ -1491,12 +1542,10 @@ static int getFirst( VarClient *pVarClient,
                      VarObject *obj )
 {
     int result = EINVAL;
-    struct iovec iov[3];
+    struct iovec iov[2];
     SockRequest req;
-    SockResponse resp;
     ssize_t n;
     ssize_t len;
-    int vec_count = 2;
 
     if( ( pVarClient != NULL ) &&
         ( query != NULL ) &&
@@ -1505,53 +1554,26 @@ static int getFirst( VarClient *pVarClient,
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
         req.requestType = VARREQUEST_GET_FIRST;
-        req.requestVal = query->type;
+        req.requestVal = 0;
 
         iov[0].iov_base = &req;
         iov[0].iov_len = sizeof(SockRequest);
         iov[1].iov_base = query;
         iov[1].iov_len = sizeof(VarQuery);
-        iov[2].iov_base = NULL;
-        iov[2].iov_len = 0;
-
-        if ( query->match != NULL )
-        {
-            iov[2].iov_base = query->match;
-            iov[2].iov_len = strlen( query->match + 1 );
-            vec_count = 3;
-        }
 
         /* send the request to the server */
-        len = iov[0].iov_len + iov[1].iov_len + iov[2].iov_len;
-        n = writev( pVarClient->sd, iov, vec_count );
+        len = iov[0].iov_len + iov[1].iov_len;
+        n = writev( pVarClient->sd, iov, 2 );
         if ( n == len )
         {
-            iov[0].iov_base = &resp;
-            iov[0].iov_len = sizeof(SockResponse);
-            iov[1].iov_base = query;
-            iov[1].iov_len = sizeof(VarQuery);
-
-            len = iov[0].iov_len + iov[1].iov_len;
-            n = readv( pVarClient->sd, iov, 2 );
-            if ( n == len )
-            {
-                if ( query->context > 0 )
-                {
-                    result = EOK;
-                }
-                else
-                {
-                    result = ENOENT;
-                }
-            }
-            else
-            {
-                result = errno;
-            }
+            /* handle the server response */
+            result = handleIterateResponse( pVarClient, query, obj );
         }
         else
         {
             result = errno;
+            fprintf(stderr, "%s: result = %s\n", __func__, strerror(result));
+
         }
     }
 
@@ -1591,12 +1613,9 @@ static int getNext( VarClient *pVarClient,
                     VarObject *obj )
 {
     int result = EINVAL;
-    struct iovec iov[3];
     SockRequest req;
-    SockResponse resp;
     ssize_t n;
     ssize_t len;
-    int vec_count = 2;
 
     if( ( pVarClient != NULL ) &&
         ( query != NULL ) &&
@@ -1606,38 +1625,145 @@ static int getNext( VarClient *pVarClient,
         req.version = VARSERVER_VERSION;
         req.requestType = VARREQUEST_GET_NEXT;
         req.requestVal = query->context;
+        req.transaction_id = 0;
 
         /* send the request to the server */
-        len = sizeof(SockRequest);
+        len = sizeof( SockRequest );
         n = write( pVarClient->sd, &req, len );
         if ( n == len )
         {
-            iov[0].iov_base = &resp;
-            iov[0].iov_len = sizeof(SockResponse);
-            iov[1].iov_base = query;
-            iov[1].iov_len = sizeof(VarQuery);
+            result = handleIterateResponse( pVarClient, query, obj );
+        }
+        else
+        {
+            result = errno;
+            fprintf(stderr, "%s: result = %s\n", __func__, strerror(result));
+        }
+    }
 
-            len = iov[0].iov_len + iov[1].iov_len;
-            n = readv( pVarClient->sd, iov, 2 );
-            if ( n == len )
+    return result;
+}
+
+/*============================================================================*/
+/*  handleIterateResponse                                                     */
+/*
+    Handle an iterator response
+
+    The handleIterateResponse function handles responses for the getFirst
+    and getNext requests. It receives the query response and populates
+    the VarObject with the data.
+
+    @param[in]
+        pVarClient
+            pointer to the varserver client
+
+    @param[in]
+        query
+            pointer to the query to be made.  This must be the same
+            object that was passed to VAR_GetFirst as it refers to the
+            query context established when the search was initiated.
+
+    @param[in]
+        obj
+            pointer to the found variable information
+
+    @retval EOK - a match was found
+    @retval EINVAL - invalid arguments
+    @retval ENOENT - no matching variable was found. Search is terminated.
+
+==============================================================================*/
+static int handleIterateResponse(  VarClient *pVarClient,
+                                   VarQuery *query,
+                                   VarObject *obj )
+{
+    int result = EINVAL;
+    struct iovec iov[2];
+    SockResponse resp;
+    ssize_t n;
+    ssize_t len;
+    VarInfo *pVarInfo;
+    char *p;
+    size_t i;
+    size_t j;
+    char c;
+    VarInfo varInfo;
+
+    if ( ( pVarClient != NULL ) &&
+         ( query != NULL ) &&
+         ( obj != NULL ) )
+    {
+        pVarInfo = &(pVarClient->rr.variableInfo);
+
+        iov[0].iov_base = &resp;
+        iov[0].iov_len = sizeof(SockResponse);
+        iov[1].iov_base = &varInfo;
+        iov[1].iov_len = sizeof(VarInfo);
+
+        memset(&varInfo, 0, sizeof( VarInfo ));
+
+        len = iov[0].iov_len + iov[1].iov_len;
+        n = readv( pVarClient->sd, iov, 2 );
+        if ( n == len )
+        {
+/*
+            printf("CLIENT: resp.id: %04X\n", resp.id );
+            printf("CLIENT: resp.version: %d\n", resp.version );
+            printf("CLIENT: resp.requestType: %d\n", resp.requestType);
+            printf("CLIENT: resp.responseVal: %d\n", resp.responseVal);
+            p = (char *)&varInfo;
+            for (i=0;i<sizeof(VarInfo);i++)
             {
-                if ( query->context > 0 )
+                printf("%02X ", p[i]);
+
+                if ( i % 16 == 15 )
                 {
-                    result = EOK;
+                    for ( j = i-15; j<=i ; j++ )
+                    {
+                        if ( j > 0 )
+                        {
+                            c = p[j];
+                            if ( c < 0x20 || c > 0x7F ) c = '.';
+                            printf( "%c ", c );
+                        }
+                    }
+                    printf("\n");
                 }
-                else
-                {
-                    result = ENOENT;
-                }
+            }
+            printf("\n");
+*/
+            query->context = resp.responseVal;
+            query->hVar = varInfo.hVar;
+            strcpy(query->name, varInfo.name );
+
+            if ( varInfo.var.type == VARTYPE_STR )
+            {
+                varInfo.var.val.str = &pVarClient->workbuf;
+            }
+
+            if ( varInfo.var.type == VARTYPE_BLOB )
+            {
+                varInfo.var.val.blob = &pVarClient->workbuf;
+            }
+
+            memcpy(&pVarClient->rr.variableInfo, &varInfo, sizeof(VarInfo ));
+            memcpy( obj, &varInfo.var, sizeof( VarObject ) );
+
+            if ( query->context > 0 )
+            {
+                result = EOK;
             }
             else
             {
-                result = errno;
+                result = ENOENT;
             }
         }
         else
         {
             result = errno;
+            printf("n = %ld\n", n );
+
+            fprintf(stderr, "%s result = %s\n", __func__, strerror(result));
+
         }
     }
 
@@ -1766,9 +1892,8 @@ static int print( VarClient *pVarClient,
             {
                 if ( resp.obj.type == VARTYPE_STR )
                 {
-                    len = resp.obj.len;
-
-                    if ( len < pVarClient->workbufsize )
+                    len = resp.len;
+                    if ( ( len > 0 ) && ( len < pVarClient->workbufsize ) )
                     {
                         /* read the string value */
                         n = read( pVarClient->sd, &pVarClient->workbuf, len );
@@ -1998,15 +2123,10 @@ static int PrintValue( int fd,
                 break;
 
             case VARTYPE_STR:
-                len = pPrintResp->obj.len;
-                n = read( pVarClient->sd, &pVarClient->workbuf, len );
-                if ( n == len )
-                {
-                    /* string variable values are transferred via the workbuf */
-                    fmt = ( fmtspec[0] == 0 ) ? "%s" : fmtspec;
-                    dprintf(fd, fmt, &(pVarClient->workbuf) );
-                    result = EOK;
-                }
+                /* string variable values are transferred via the workbuf */
+                fmt = ( fmtspec[0] == 0 ) ? "%s" : fmtspec;
+                dprintf(fd, fmt, &(pVarClient->workbuf) );
+                result = EOK;
                 break;
 
             case VARTYPE_UINT16:
@@ -2107,7 +2227,6 @@ static int ClientRequest( VarClient *pVarClient, int request )
             if ( ( len > 0 ) &&
                  ( pVarClient->rr.requestType != VARREQUEST_OPEN ) )
             {
-                printf("CLIENT: write client variable request: len = %ld\n", len);
                 /* write data from the working buffer */
                 rc = writesd( sd, (char *)&pVarClient->workbuf, len );
 

@@ -425,7 +425,7 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                 {
                     /* strings are passed back via the working buffer */
                     n = strlen( pVarStorage->var.val.str );
-                    if( n < workbufsize )
+                    if ( ( n > 0 ) && ( n < workbufsize ) )
                     {
                         /* copy the string */
                         memcpy( workbuf, pVarStorage->var.val.str, n );
@@ -495,6 +495,10 @@ int VARLIST_PrintByHandle( pid_t clientPID,
             specifies the size of the buffer (and therefore
             the maximum string length that can be retrieved).
 
+    @param[in]
+        len
+            pointer to a location to store the blob/string length
+
     @retval EOK the variable get request was handled
     @retval EINVAL invalid arguments
 
@@ -562,7 +566,7 @@ int VARLIST_GetByHandle( pid_t clientPID,
                 {
                     /* strings are passed back via the working buffer */
                     n = strlen( pVarStorage->var.val.str );
-                    if( n < bufsize )
+                    if( ( n > 0 ) && ( n < bufsize ) )
                     {
                         /* copy the string */
                         memcpy( buf, pVarStorage->var.val.str, n );
@@ -2971,6 +2975,7 @@ static SearchContext *varlist_NewSearchContext( pid_t clientPID,
 {
     SearchContext **pp = &pSearchContexts;
     SearchContext *p = NULL;
+    size_t len;
 
     /* find an unused pre-existing context */
     while( *pp != NULL )
@@ -3000,7 +3005,12 @@ static SearchContext *varlist_NewSearchContext( pid_t clientPID,
         p->query.flags = pVarInfo->flags;
         p->query.type = searchType;
         memcpy(&(p->query.tagspec), &(pVarInfo->tagspec), MAX_TAGSPEC_LEN );
-        p->query.match = strdup( searchText );
+        len = strlen( searchText );
+        if ( len <= MAX_MATCH_LEN )
+        {
+            strcpy( p->query.match, searchText );
+        }
+
     }
 
     return p;
@@ -3029,12 +3039,7 @@ static int varlist_DeleteSearchContext( SearchContext *ctx )
 
     if( ctx != NULL )
     {
-        if( ctx->query.match != NULL )
-        {
-            free( ctx->query.match );
-            ctx->query.match = NULL;
-        }
-
+        memset( ctx->query.match, 0, MAX_MATCH_LEN+1 );
         ctx->query.flags = 0;
         memset( ctx->query.tagspec, 0, MAX_TAGSPEC_LEN );
         ctx->query.type = 0;

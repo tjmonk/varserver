@@ -126,12 +126,26 @@ int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
     int result = EINVAL;
     VarQuery query;
     VarObject obj;
+    size_t len;
 
     memset( &query, 0, sizeof( VarQuery ) );
 
     query.type = searchType;
     query.instanceID = instanceID;
-    query.match = match;
+
+    if ( match != NULL )
+    {
+        len = strlen(match);
+        if ( len <= MAX_MATCH_LEN )
+        {
+            strcpy( query.match, match );
+        }
+    }
+    else
+    {
+        query.match[0] = '\0';
+    }
+
     query.flags = flags;
 
     result = VAR_GetFirst( hVarServer, &query, &obj );

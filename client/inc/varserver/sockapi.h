@@ -87,6 +87,8 @@ typedef struct _PrintResponse
 
     int responseVal;
 
+    size_t len;
+
 } PrintResponse;
 
 /*============================================================================

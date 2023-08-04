@@ -50,6 +50,11 @@ SOFTWARE.
 #define MAX_UIDS     ( 4 )
 #endif
 
+/*! maximum query match length */
+#ifndef MAX_MATCH_LEN
+#define MAX_MATCH_LEN       ( 128 )
+#endif
+
 /*! maximum format specifier length */
 #ifndef MAX_FORMATSPEC_LEN
 #define MAX_FORMATSPEC_LEN  ( 8 )
@@ -210,7 +215,7 @@ typedef struct _VarQuery
     uint32_t instanceID;
 
     /*! search match string */
-    char *match;
+    char match[MAX_MATCH_LEN+1];
 
     /*! search results must contain all these flags */
     VarFlags flags;
