@@ -449,6 +449,7 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                     }
                     else
                     {
+                        printf("n = %ld, workbugsize=%ld\n", n, workbufsize);
                         result = E2BIG;
                     }
                 }
@@ -566,16 +567,19 @@ int VARLIST_GetByHandle( pid_t clientPID,
                 {
                     /* strings are passed back via the working buffer */
                     n = strlen( pVarStorage->var.val.str );
-                    if( ( n > 0 ) && ( n < bufsize ) )
+                    if ( n > 0 )
                     {
-                        /* copy the string */
-                        memcpy( buf, pVarStorage->var.val.str, n );
-                        buf[n] = '\0';
-                        n++;
-                    }
-                    else
-                    {
-                        result = E2BIG;
+                        if ( n < bufsize )
+                        {
+                            /* copy the string */
+                            memcpy( buf, pVarStorage->var.val.str, n );
+                            buf[n] = '\0';
+                            n++;
+                        }
+                        else
+                        {
+                            result = E2BIG;
+                        }
                     }
                 }
 

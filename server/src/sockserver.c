@@ -1468,7 +1468,7 @@ int ProcessVarRequestPrint( VarClient *pVarClient, SockRequest *pReq )
         iov[1].iov_len = 0;
 
         // TODO: Add EINPROGRESS (calc) and ESTRPIPE (print) handling
-        if ( len > 0 )
+        if ( ( len > 0 ) && ( varInfo.var.type == VARTYPE_STR ) )
         {
             iov[1].iov_base = &pVarClient->workbuf;
             iov[1].iov_len = len;

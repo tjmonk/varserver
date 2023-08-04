@@ -1716,9 +1716,6 @@ static int handleIterateResponse(  VarClient *pVarClient,
         else
         {
             result = errno;
-            printf("why am I here?\n");
-            printf("n = %ld\n", n );
-
             fprintf(stderr, "%s result = %s\n", __func__, strerror(result));
 
         }
