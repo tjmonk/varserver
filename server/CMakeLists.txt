@@ -27,6 +27,7 @@ add_executable( ${PROJECT_NAME}
     src/handlers.c
     src/metric.c
     src/clientlist.c
+    src/connection.c
 )
 
 target_include_directories( ${PROJECT_NAME}

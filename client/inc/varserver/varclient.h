@@ -204,6 +204,9 @@ typedef struct _varClient
     /*! client socket descriptor */
     int sd;
 
+    /*! client notification descriptor */
+    int notify_sd;
+
     /*! indicate if client is active */
     bool active;
 

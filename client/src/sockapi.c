@@ -264,6 +264,10 @@ static VARSERVER_HANDLE open_varserver( size_t workbufsize )
                     if ( rc == EOK )
                     {
                         rc = readsd( sd, (char *)&resp, respLen );
+                        if ( rc == EOK )
+                        {
+                            pVarClient->rr.clientid = resp.responseVal;
+                        }
                     }
                 }
                 else

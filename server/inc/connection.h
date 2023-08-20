@@ -22,15 +22,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ============================================================================*/
 
-#ifndef CLIENTLIST_H
-#define CLIENTLIST_H
+#ifndef CONNECTION_H
+#define CONNECTION_H
 
 /*============================================================================
         Includes
 ============================================================================*/
 
-#include <sys/select.h>
 #include <varserver/varclient.h>
+#include <varserver/sockapi.h>
 
 /*============================================================================
         Public definitions
@@ -40,9 +40,7 @@ SOFTWARE.
         Public function declarations
 ============================================================================*/
 
-VarClient *NewClient( int sd, size_t workbufsize );
-void DeleteClient( VarClient *pVarClient );
-int GetActiveClients(void);
-VarClient *FindClient( int clientid );
+int ConnectionProcessor( int sock,
+                         int (*fn)( VarClient *pVarClient, SockRequest *pReq ));
 
 #endif
