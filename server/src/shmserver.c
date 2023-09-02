@@ -59,6 +59,7 @@ SOFTWARE.
 #include <string.h>
 #include <varserver/varclient.h>
 #include <varserver/varserver.h>
+#include "clientlist.h"
 #include "varlist.h"
 #include "taglist.h"
 #include "blocklist.h"
@@ -71,9 +72,6 @@ SOFTWARE.
 /*==============================================================================
         Private definitions
 ==============================================================================*/
-
-/*! Maximum number of clients */
-#define MAX_VAR_CLIENTS                 ( 4096 )
 
 /*! Timer Signal */
 #define SIG_TIMER                       ( SIGRTMIN + 5 )
@@ -103,7 +101,6 @@ static int UnblockShmClient( VarClient *pVarClient );
 ==============================================================================*/
 
 /*! variable clients */
-static VarClient *VarClients[MAX_VAR_CLIENTS+1] = {0};
 static ServerInfo *pServerInfo = NULL;
 
 /*==============================================================================
@@ -206,6 +203,10 @@ void handler(int sig, siginfo_t *info, void *ucontext)
     {
         STATS_Process();
     }
+    else if ( sig == SIGPIPE )
+    {
+        /* ignore SIG_PIPE */
+    }
     else
     {
         printf("SERVER: unhandled signal: %d\n", sig);
@@ -272,35 +273,6 @@ static ServerInfo *InitServerInfo( void )
 }
 
 /*============================================================================*/
-/*  GetClientID                                                               */
-/*!
-    Get an available client identifier
-
-    The GetClientID function searches the variable server client list
-    and returns the first available client identifier
-
-    @retval an available client identifier
-    @retval 0 if no client identifiers are available
-
-==============================================================================*/
-static int GetClientID( void )
-{
-    int i;
-    int clientId = 0;
-
-    for(i=1;i<MAX_VAR_CLIENTS;i++)
-    {
-        if( VarClients[i] == NULL )
-        {
-            clientId=i;
-            break;
-        }
-    }
-
-    return clientId;
-}
-
-/*============================================================================*/
 /*  ProcessRequest                                                            */
 /*!
 
@@ -331,19 +303,15 @@ static int ProcessRequest( siginfo_t *pInfo )
         /* get the client id */
         clientid = pInfo->si_value.sival_int;
 
-        if( clientid < MAX_VAR_CLIENTS )
-        {
-            /* get a pointer to the client information object */
-            pVarClient = VarClients[clientid];
-            result = HandleRequest( pVarClient );
-        }
+        pVarClient = GetClientByID( clientid );
+        result = HandleRequest( pVarClient );
     }
 
     return result;
 }
 
 /*============================================================================*/
-/*  NewShmClient                                                                 */
+/*  NewShmClient                                                              */
 /*!
     Registers a new client
 
@@ -367,6 +335,7 @@ static int NewShmClient( pid_t pid )
     VarClient *pVarClient;
     int result = EINVAL;
     int clientId;
+    int rc;
 
     sprintf(clientname, "/varclient_%d", pid);
 
@@ -383,11 +352,10 @@ static int NewShmClient( pid_t pid )
                                         0);
         if (pVarClient != MAP_FAILED)
         {
-            clientId=GetClientID();
-            if ( clientId != 0 )
+            pVarClient->pFnClose = CloseClient;
+            rc = SetNewClient( pVarClient );
+            if ( rc == EOK )
             {
-                VarClients[clientId] = pVarClient;
-                pVarClient->rr.clientid = clientId;
                 pVarClient->pFnClose = CloseClient;
                 pVarClient->pFnUnblock = UnblockShmClient;
             }
@@ -402,7 +370,7 @@ static int NewShmClient( pid_t pid )
             /* unblock the client */
             UnblockShmClient( pVarClient );
 
-            if ( clientId == 0 )
+            if ( pVarClient->rr.clientid == 0 )
             {
                 munmap( pVarClient, sizeof(VarClient));
             }
@@ -449,10 +417,6 @@ static int NewShmClient( pid_t pid )
 ==============================================================================*/
 int PrintClientInfo( VarInfo *pVarInfo, char *buf, size_t len )
 {
-    size_t i;
-    size_t offset = 0;
-    size_t n;
-    VarClient *pVarClient;
     int result = EINVAL;
 
     if ( ( pVarInfo != NULL ) &&
@@ -463,28 +427,7 @@ int PrintClientInfo( VarInfo *pVarInfo, char *buf, size_t len )
         pVarInfo->var.len = len;
         strcpy(pVarInfo->formatspec, "%s");
 
-        buf[0] = '\n';
-        offset = 1;
-
-        for(i=1;i<MAX_VAR_CLIENTS;i++)
-        {
-            pVarClient = VarClients[i];
-            if( pVarClient != NULL )
-            {
-                n = snprintf( &buf[offset],
-                            len,
-                            "id: %d, blk: %d, txn: %lu, pid: %d\n",
-                            pVarClient->rr.clientid,
-                            pVarClient->blocked,
-                            pVarClient->transactionCount,
-                            pVarClient->rr.client_pid );
-
-                offset += n;
-                len -= n;
-            }
-        }
-
-        buf[offset]=0;
+        (void)GetClientInfo( buf, len );
 
         result = EOK;
     }
@@ -507,19 +450,11 @@ int PrintClientInfo( VarInfo *pVarInfo, char *buf, size_t len )
 ==============================================================================*/
 static int CloseClient( VarClient *pVarClient )
 {
-    int clientid;
     int result = EINVAL;
 
     if ( pVarClient != NULL )
     {
-        /* get the client id */
-        clientid = pVarClient->rr.clientid;
-
-        if( ( clientid > 0 ) && ( clientid < MAX_VAR_CLIENTS ) )
-        {
-            /* clear the client entry in the VAR clients table */
-            VarClients[clientid] = NULL;
-        }
+        (void)ClearClient( pVarClient );
 
         /* unmap the memory */
         result = munmap( pVarClient, sizeof(VarClient));

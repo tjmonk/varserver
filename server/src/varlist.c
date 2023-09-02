@@ -64,6 +64,7 @@ SOFTWARE.
 #include "taglist.h"
 #include "notify.h"
 #include "blocklist.h"
+#include "connection.h"
 #include "transaction.h"
 
 /*==============================================================================
@@ -86,7 +87,7 @@ typedef struct _searchContext
     int contextId;
 
     /*! client process identifier */
-    pid_t clientPID;
+    int client_id;
 
     /*! last variable found */
     VAR_HANDLE hVar;
@@ -133,12 +134,12 @@ static int varlist_SetStr( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int varlist_SetBlob( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int varlist_Calc( VarClient *pVarClient, void *arg );
 
-static SearchContext *varlist_NewSearchContext( pid_t clientPID,
+static SearchContext *varlist_NewSearchContext( int client_id,
                                                 int searchType,
                                                 VarInfo *pVarInfo,
                                                 char *searchText );
 static int varlist_DeleteSearchContext( SearchContext *ctx );
-static SearchContext *varlist_FindSearchContext( pid_t clientPID,
+static SearchContext *varlist_FindSearchContext( int client_id,
                                                  int context );
 
 static int varlist_Match( VAR_HANDLE hVar, SearchContext *ctx );
@@ -156,6 +157,7 @@ static void *varlist_GetNotificationPayload( VAR_HANDLE hVar,
                                              size_t *size );
 
 static void varlist_SetDirty( VarStorage *pVarStorage );
+static int varlist_CopyVarToClient( VarClient *pVarClient, VarInfo *pVarInfo );
 
 /*==============================================================================
         Public function definitions
@@ -294,8 +296,8 @@ int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle )
     data is passed via the specified working buffer
 
     @param[in]
-        clientPID
-            process identifier of the requesting client
+        client_id
+            identifier of the requesting client
 
     @param[in,out]
         pVarInfo
@@ -329,13 +331,13 @@ int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle )
     @retval EINVAL invalid arguments
 
 ==============================================================================*/
-int VARLIST_PrintByHandle( pid_t clientPID,
+int VARLIST_PrintByHandle( int client_id,
                            VarInfo *pVarInfo,
                            char *workbuf,
                            size_t workbufsize,
                            size_t *len,
                            void *clientInfo,
-                           pid_t *handler )
+                           int *handler )
 {
     VarStorage *pVarStorage;
     int result = EINVAL;
@@ -358,11 +360,11 @@ int VARLIST_PrintByHandle( pid_t clientPID,
             if( pVarStorage->notifyMask & NOTIFY_MASK_PRINT )
             {
                 /* create a PRINT transaction */
-                result = TRANSACTION_New( clientPID, clientInfo, &printHandle );
+                result = TRANSACTION_New( client_id, clientInfo, &printHandle );
                 if( result == EOK )
                 {
                     /* send a PRINT notification */
-                    result = NOTIFY_Signal( clientPID,
+                    result = NOTIFY_Signal( client_id,
                                             &pVarStorage->pNotifications,
                                             NOTIFY_PRINT,
                                             printHandle,
@@ -386,7 +388,7 @@ int VARLIST_PrintByHandle( pid_t clientPID,
             if( pVarStorage->notifyMask & NOTIFY_MASK_CALC )
             {
                 /* send a calc request to the "owner" of this variable */
-                result = NOTIFY_Signal( clientPID,
+                result = NOTIFY_Signal( client_id,
                                         &pVarStorage->pNotifications,
                                         NOTIFY_CALC,
                                         hVar,
@@ -449,7 +451,7 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                     }
                     else
                     {
-                        printf("n = %ld, workbugsize=%ld\n", n, workbufsize);
+                        printf("n = %ld, workbufsize=%ld\n", n, workbufsize);
                         result = E2BIG;
                     }
                 }
@@ -481,6 +483,10 @@ int VARLIST_PrintByHandle( pid_t clientPID,
     client.  It copies the variable TLV (type-length-value).
     If the variable is a string, its data is passed via the specified buffer
 
+    @param[in]
+        client_id
+            The identifier of the requesting client
+
     @param[in,out]
         pVarInfo
             Pointer to the variable definition containing the handle
@@ -504,7 +510,7 @@ int VARLIST_PrintByHandle( pid_t clientPID,
     @retval EINVAL invalid arguments
 
 ==============================================================================*/
-int VARLIST_GetByHandle( pid_t clientPID,
+int VARLIST_GetByHandle( int client_id,
                          VarInfo *pVarInfo,
                          char *buf,
                          size_t bufsize,
@@ -531,7 +537,7 @@ int VARLIST_GetByHandle( pid_t clientPID,
             if( pVarStorage->notifyMask & NOTIFY_MASK_CALC )
             {
                 /* send a calc request to the "owner" of this variable */
-                result = NOTIFY_Signal( clientPID,
+                result = NOTIFY_Signal( client_id,
                                         &pVarStorage->pNotifications,
                                         NOTIFY_CALC,
                                         hVar,
@@ -638,7 +644,7 @@ int VARLIST_GetByHandle( pid_t clientPID,
     @retval EINVAL invalid arguments
 
 ==============================================================================*/
-int VARLIST_Set( pid_t clientPID,
+int VARLIST_Set( int client_id,
                  VarInfo *pVarInfo,
                  bool *validationInProgress,
                  void *clientInfo )
@@ -668,17 +674,17 @@ int VARLIST_Set( pid_t clientPID,
             {
                 if( NOTIFY_Find( pVarStorage->pNotifications,
                                  NOTIFY_VALIDATE,
-                                 clientPID ) == NULL )
+                                 client_id ) == NULL )
                 {
                     /* create a validation transaction */
-                    result = TRANSACTION_New( clientPID,
+                    result = TRANSACTION_New( client_id,
                                               clientInfo,
                                               &validateHandle );
                     if( result == EOK )
                     {
                         /* send a notification to the validation client with the
                         identifier of the validation request */
-                        result = NOTIFY_Signal( clientPID,
+                        result = NOTIFY_Signal( client_id,
                                                 &pVarStorage->pNotifications,
                                                 NOTIFY_VALIDATE,
                                                 validateHandle,
@@ -770,7 +776,7 @@ int VARLIST_Set( pid_t clientPID,
                 if( ( pVarStorage->notifyMask & NOTIFY_MASK_MODIFIED ) &&
                     ( result == EOK ) )
                 {
-                    NOTIFY_Signal( clientPID,
+                    NOTIFY_Signal( client_id,
                                    &pVarStorage->pNotifications,
                                    NOTIFY_MODIFIED,
                                    hVar,
@@ -786,14 +792,14 @@ int VARLIST_Set( pid_t clientPID,
                                                               &n );
 
                     /* send the notification payloads */
-                    NOTIFY_Payload( clientPID,
+                    NOTIFY_Payload( client_id,
                                     &pVarStorage->pNotifications,
                                     NOTIFY_MODIFIED_QUEUE,
                                     payload,
                                     n );
 
                     /* send notification signals to the clients */
-                    NOTIFY_Signal( clientPID,
+                    NOTIFY_Signal( client_id,
                                    &pVarStorage->pNotifications,
                                    NOTIFY_MODIFIED_QUEUE,
                                    hVar,
@@ -855,10 +861,11 @@ static void varlist_SetDirty( VarStorage *pVarStorage )
 /*!
     Function to be applied while unblocking CALC blocked clients
 
-    The varlist_Calc function copies the VarObject pointed by 'arg'
-    into the specified VarClient's VarObject.
-
-    Strings are copied directly into the client's working buffer
+    The varlist_Calc function is responsible for copying the source VarObject
+    to the specified VarClient.  Data can be copied in one of two ways
+    depending on the type of client.  For sharedmem clients, the data is
+    physically copied into the client's shared memory.  For socket clients,
+    the data is sent via a socket.
 
     @param[in,out]
         pVarClient
@@ -879,6 +886,59 @@ static int varlist_Calc( VarClient *pVarClient, void *arg )
 {
     int result = EINVAL;
     VarInfo *pVarInfo = (VarInfo *)arg;
+
+    printf("varlist_calc\n");
+
+    if( ( pVarClient != NULL ) &&
+        ( pVarInfo != NULL ) )
+    {
+        printf("varlist_Calc\n");
+        if ( pVarClient->sd != -1 )
+        {
+            /* for clients connected via sockets, send the variable data */
+            printf("ConnectionSendVar\n");
+            result = ConnectionSendVar( pVarClient, pVarInfo );
+        }
+        else
+        {
+            /* for clients connected via signals/sharedmem copy the
+               variable data to the shared client object */
+            printf("varlist_CopyVarToClient\n");
+            result = varlist_CopyVarToClient( pVarClient, pVarInfo );
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  varlist_CopyVarToClient                                                   */
+/*!
+    Copy Variable Data to client object
+
+    The varlist_CopyVarToClient function copies the VarObject contained in the
+    supplied VarInfo object into the specified VarClient's VarObject.
+
+    Strings and blobs are copied directly into the client's working buffer.
+
+    @param[in,out]
+        pVarClient
+            Pointer to the VarClient to receive the VarObject
+
+    @param[in]
+        pVarInfo
+            pointer to the source VarInfo to copy
+
+    @retval EOK the variable was successfully copied
+    @retval EINVAL invalid arguments
+    @retval ENOENT no data available in the source VarObject
+    @retval E2BIG the string in the source VarObject will not fit in the
+            client's working buffer
+
+==============================================================================*/
+static int varlist_CopyVarToClient( VarClient *pVarClient, VarInfo *pVarInfo )
+{
+    int result = EINVAL;
     VarType varType;
     size_t len;
     VAR_HANDLE hVar;
@@ -2349,6 +2409,10 @@ int VARLIST_GetLength( VarInfo *pVarInfo )
     from a client.  It registers the specific notification request
     against the specified variable.
 
+    @param[in]
+        client_id
+            the identifier of the client making the notification request
+
     @param[in,out]
         pVarInfo
             Pointer to the variable definition containing the handle
@@ -2357,6 +2421,12 @@ int VARLIST_GetLength( VarInfo *pVarInfo )
     @param[in]
         pid
             process ID of the requester
+            set to -1 if not used
+
+    @param[in]
+        sd
+            notification socket descriptor of the requestor
+            set to -1 if not used
 
     @retval EOK the notification request was successfully registered
     @retval ENOENT the variable does not exist
@@ -2364,7 +2434,10 @@ int VARLIST_GetLength( VarInfo *pVarInfo )
     @retval EINVAL invalid arguments
 
 ==============================================================================*/
-int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
+int VARLIST_RequestNotify( int client_id,
+                           VarInfo *pVarInfo,
+                           pid_t pid,
+                           int sd )
 {
     int result = EINVAL;
     VarStorage *pVarStorage;
@@ -2388,7 +2461,9 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
             {
                 result = NOTIFY_Add( &pVarStorage->pNotifications,
                                      notifyType,
-                                     pid );
+                                     client_id,
+                                     pid,
+                                     sd );
                 if( result == EOK )
                 {
                     pVarStorage->notifyMask |= NOTIFY_MASK_MODIFIED;
@@ -2398,7 +2473,9 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
             {
                 result = NOTIFY_Add( &pVarStorage->pNotifications,
                                      notifyType,
-                                     pid );
+                                     client_id,
+                                     pid,
+                                     sd );
                 if ( result == EOK )
                 {
                     pVarStorage->notifyMask |= NOTIFY_MASK_MODIFIED_QUEUE;
@@ -2408,7 +2485,9 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
             {
                 result = NOTIFY_Add( &pVarStorage->pNotifications,
                                      notifyType,
-                                     pid );
+                                     client_id,
+                                     pid,
+                                     sd );
                 if( result == EOK )
                 {
                     pVarStorage->notifyMask |= NOTIFY_MASK_CALC;
@@ -2418,7 +2497,9 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
             {
                 result = NOTIFY_Add( &pVarStorage->pNotifications,
                                      notifyType,
-                                     pid );
+                                     client_id,
+                                     pid,
+                                     sd );
                 if( result == EOK )
                 {
                     pVarStorage->notifyMask |= NOTIFY_MASK_VALIDATE;
@@ -2428,7 +2509,9 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
             {
                 result = NOTIFY_Add( &pVarStorage->pNotifications,
                                      notifyType,
-                                     pid );
+                                     client_id,
+                                     pid,
+                                     sd );
                 if( result == EOK )
                 {
                     pVarStorage->notifyMask |= NOTIFY_MASK_PRINT;
@@ -2686,8 +2769,8 @@ static int assign_StringVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo )
     variable which matches the search critera.
 
     @param[in]
-        clientPID
-            the process identifier of the requesting client
+        client_id
+            the identifier of the requesting client
 
     @param[in]
         searchType
@@ -2727,7 +2810,7 @@ static int assign_StringVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo )
     @retval ENOMEM no search contexts available
 
 ==============================================================================*/
-int VARLIST_GetFirst( pid_t clientPID,
+int VARLIST_GetFirst( int client_id,
                       int searchType,
                       VarInfo *pVarInfo,
                       char *buf,
@@ -2750,7 +2833,7 @@ int VARLIST_GetFirst( pid_t clientPID,
         result = ENOENT;
 
         /* create a new search context */
-        ctx = varlist_NewSearchContext( clientPID,
+        ctx = varlist_NewSearchContext( client_id,
                                         searchType,
                                         pVarInfo,
                                         buf );
@@ -2781,7 +2864,7 @@ int VARLIST_GetFirst( pid_t clientPID,
 
                     /* get the variable value */
                     pVarInfo->hVar = hVar;
-                    result = VARLIST_GetByHandle( clientPID,
+                    result = VARLIST_GetByHandle( client_id,
                                                   pVarInfo,
                                                   buf,
                                                   bufsize,
@@ -2819,8 +2902,8 @@ int VARLIST_GetFirst( pid_t clientPID,
     context
 
     @param[in]
-        clientPID
-            the process identifier of the requesting client
+        client_id
+            the identifier of the requesting client
 
     @param[in]
         context
@@ -2855,7 +2938,7 @@ int VARLIST_GetFirst( pid_t clientPID,
     @retval ENOMEM no search contexts available
 
 ==============================================================================*/
-int VARLIST_GetNext( pid_t clientPID,
+int VARLIST_GetNext( int client_id,
                      int context,
                      VarInfo *pVarInfo,
                      char *buf,
@@ -2871,7 +2954,7 @@ int VARLIST_GetNext( pid_t clientPID,
     VarStorage *pVarStorage;
 
     /* get the search context */
-    ctx = varlist_FindSearchContext( clientPID, context );
+    ctx = varlist_FindSearchContext( client_id, context );
     if ( ctx != NULL )
     {
         result = ENOENT;
@@ -2902,7 +2985,7 @@ int VARLIST_GetNext( pid_t clientPID,
 
                 /* get the variable value */
                 pVarInfo->hVar = hVar;
-                result = VARLIST_GetByHandle( clientPID,
+                result = VARLIST_GetByHandle( client_id,
                                               pVarInfo,
                                               buf,
                                               bufsize,
@@ -2947,7 +3030,7 @@ int VARLIST_GetNext( pid_t clientPID,
     The search context contains all the details of the requested search
 
     @param[in]
-        clientPID
+        client_id
             process identifier of the client requesting the search context
 
     @param[in]
@@ -2972,7 +3055,7 @@ int VARLIST_GetNext( pid_t clientPID,
     @retval NULL if the requested search context does not exist
 
 ==============================================================================*/
-static SearchContext *varlist_NewSearchContext( pid_t clientPID,
+static SearchContext *varlist_NewSearchContext( int client_id,
                                                 int searchType,
                                                 VarInfo *pVarInfo,
                                                 char *searchText )
@@ -3005,7 +3088,7 @@ static SearchContext *varlist_NewSearchContext( pid_t clientPID,
     {
         ++contextIdent;
         p->contextId = contextIdent;
-        p->clientPID = clientPID;
+        p->client_id = client_id;
         p->query.flags = pVarInfo->flags;
         p->query.type = searchType;
         memcpy(&(p->query.tagspec), &(pVarInfo->tagspec), MAX_TAGSPEC_LEN );
@@ -3048,7 +3131,7 @@ static int varlist_DeleteSearchContext( SearchContext *ctx )
         memset( ctx->query.tagspec, 0, MAX_TAGSPEC_LEN );
         ctx->query.type = 0;
         ctx->contextId = 0;
-        ctx->clientPID = -1;
+        ctx->client_id = -1;
 
         result = EOK;
     }
@@ -3066,8 +3149,8 @@ static int varlist_DeleteSearchContext( SearchContext *ctx )
     owned by the specified client, with the specified context identifier
 
     @param[in]
-        clientPID
-            process identifier of the client requesting the search context
+        client_id
+            identifier of the client requesting the search context
 
     @param[in]
         context
@@ -3077,7 +3160,7 @@ static int varlist_DeleteSearchContext( SearchContext *ctx )
     @retval NULL if the requested search context does not exist
 
 ==============================================================================*/
-static SearchContext *varlist_FindSearchContext( pid_t clientPID,
+static SearchContext *varlist_FindSearchContext( int client_id,
                                                  int context )
 {
     SearchContext *p = pSearchContexts;
@@ -3085,7 +3168,7 @@ static SearchContext *varlist_FindSearchContext( pid_t clientPID,
     while( p != NULL )
     {
         if( ( p->contextId == context ) &&
-            ( p->clientPID == clientPID ) )
+            ( p->client_id == client_id ) )
         {
             /* found it */
             break;

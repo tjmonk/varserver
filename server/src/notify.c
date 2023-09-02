@@ -56,6 +56,7 @@ SOFTWARE.
 #include <string.h>
 #include <mqueue.h>
 #include <varserver/var.h>
+#include <varserver/sockapi.h>
 #include "varstorage.h"
 #include "notify.h"
 #include "stats.h"
@@ -75,6 +76,14 @@ SOFTWARE.
 static int notify_Send( Notification *pNotification,
                         int handle,
                         int signal );
+
+static int notify_SendSD(  Notification *pNotification,
+                           int handle,
+                           int signal );
+
+static int notify_SendPID( Notification *pNotification,
+                           int handle,
+                           int signal );
 
 static mqd_t notify_GetQueue( pid_t pid );
 
@@ -99,8 +108,16 @@ static mqd_t notify_GetQueue( pid_t pid );
             notification type
 
     @param[in]
+        client_id
+            client identifier of the client to be notified
+
+    @param[in]
         pid
             process id of the client to be notified
+
+    @param[in]
+        sd
+            socket descriptor of the client to be notified
 
     @retval EOK the notification was successfully added
     @retval ENOTSUP the notification is not supported
@@ -109,7 +126,9 @@ static mqd_t notify_GetQueue( pid_t pid );
 ==============================================================================*/
 int NOTIFY_Add( Notification **ppNotification,
                 NotificationType type,
-                pid_t pid )
+                int client_id,
+                pid_t pid,
+                int sd )
 {
     int result = EINVAL;
     Notification *pNotification;
@@ -123,7 +142,7 @@ int NOTIFY_Add( Notification **ppNotification,
             case NOTIFY_MODIFIED_QUEUE:
             case NOTIFY_MODIFIED:
                 /* check if we are already registered */
-                pNotification = NOTIFY_Find( pNotification, type, pid );
+                pNotification = NOTIFY_Find( pNotification, type, client_id );
                 break;
 
             case NOTIFY_VALIDATE:
@@ -170,8 +189,16 @@ int NOTIFY_Add( Notification **ppNotification,
                 }
 
                 /* populate the notification structure */
+                pNotification->clientID = client_id;
                 pNotification->pid = pid;
+                pNotification->sd = sd;
                 pNotification->type = type;
+                printf("Registered notification: "
+                        "type: %d, clientID: %d, pid: %d, sd: %d\n",
+                        pNotification->type,
+                        pNotification->clientID,
+                        pNotification->pid,
+                        pNotification->sd );
 
                 /* notification successfully registered */
                 result = EOK;
@@ -205,8 +232,8 @@ int NOTIFY_Add( Notification **ppNotification,
             notification type
 
     @param[in]
-        pid
-            process id of the client to be notified
+        client_id
+            client id of the client to be notified
 
     @retval pointer to the matching notification
     @retval NULL if there was no matching notification
@@ -214,16 +241,16 @@ int NOTIFY_Add( Notification **ppNotification,
 ==============================================================================*/
 Notification *NOTIFY_Find( Notification *pNotification,
                            NotificationType type,
-                           pid_t pid )
+                           int client_id )
 {
     while( pNotification != NULL )
     {
-        if( ( pNotification->type == type ) && ( pid == -1 ) )
+        if( ( pNotification->type == type ) && ( client_id == -1 ) )
         {
             break;
         }
         else if( ( pNotification->type == type ) &&
-                 ( pNotification->pid == pid ) )
+                 ( pNotification->clientID == client_id ) )
         {
             break;
         }
@@ -246,8 +273,8 @@ Notification *NOTIFY_Find( Notification *pNotification,
     each variable can only have one of each of those notification types.
 
     @param[in]
-        pid
-            process identifier of the process which is initiating the signal
+        client_id
+            client identifier of the client which is initiating the signal
 
     @param[in]
         pNotification
@@ -263,18 +290,18 @@ Notification *NOTIFY_Find( Notification *pNotification,
 
     @param[in]
         sentTo
-            location to store PID of the receiving process
+            location to store client_id of the receiving process
 
     @retval EOK all notifications were sent
     @retval ESRCH one or more processed did not exist
     @retval EINVAL invalid arguments
 
 ==============================================================================*/
-int NOTIFY_Signal( pid_t pid,
+int NOTIFY_Signal( int client_id,
                    Notification **ppNotification,
                    NotificationType type,
                    int handle,
-                   pid_t *sentTo )
+                   int *sentTo )
 {
     int result = EINVAL;
     int rc;
@@ -314,7 +341,7 @@ int NOTIFY_Signal( pid_t pid,
                         break;
 
                     case NOTIFY_CALC:
-                        if( pNotification->pid == pid )
+                        if( pNotification->clientID == client_id )
                         {
                             /* don't send a CALC signal to the processs
                             which is registered to perform the calculation */
@@ -328,7 +355,7 @@ int NOTIFY_Signal( pid_t pid,
                         break;
 
                     case NOTIFY_VALIDATE:
-                        if( pNotification->pid == pid )
+                        if( pNotification->clientID == client_id )
                         {
                             /* don't send a VALIDATE signal to the process
                             which is registered to perform the validation */
@@ -342,7 +369,7 @@ int NOTIFY_Signal( pid_t pid,
                         break;
 
                     case NOTIFY_PRINT:
-                        if( pNotification->pid == pid )
+                        if( pNotification->clientID == client_id )
                         {
                             /* don't send a PRINT signal to the process which is
                                registered to perform the PRINT operation */
@@ -367,7 +394,7 @@ int NOTIFY_Signal( pid_t pid,
                     {
                         if( sentTo != NULL )
                         {
-                            *sentTo = pNotification->pid;
+                            *sentTo = pNotification->clientID;
                         }
                     }
                 }
@@ -414,11 +441,67 @@ static int notify_Send( Notification *pNotification,
                         int signal )
 {
     int result = EINVAL;
+
+    if( pNotification != NULL )
+    {
+        if ( pNotification->sd != -1 )
+        {
+            result = notify_SendSD( pNotification, handle, signal );
+        }
+        else if ( pNotification->pid != -1 )
+        {
+            result = notify_SendPID( pNotification, handle, signal );
+        }
+        else
+        {
+            result = ENOTSUP;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  notify_SendPID                                                            */
+/*!
+    Send a notification signal to a process
+
+    The notify_Send function sends out a notification signal
+    to the client PID referenced in the notification object.
+
+    If the client does not exist, the notification object is marked
+    as unused
+
+    @param[in]
+        pNotification
+            pointer to the notification to send
+
+    @param[in]
+        handle
+            notification handle
+
+    @param[in]
+        signal
+            signal to send
+
+    @retval EOK the notifications was sent
+    @retval ESRCH the process which reqeusted the notification does not exist
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+static int notify_SendPID( Notification *pNotification,
+                           int handle,
+                           int signal )
+{
+    int result = EINVAL;
     union sigval val;
     int rc;
 
     if( pNotification != NULL )
     {
+        printf("Notification: pid: %d sig: %d hdl: %d\n",
+                pNotification->pid, signal, handle);
+
         /* provide the signal handle to the var server */
         val.sival_int = handle;
 
@@ -449,6 +532,85 @@ static int notify_Send( Notification *pNotification,
 }
 
 /*============================================================================*/
+/*  notify_SendSD                                                             */
+/*!
+    Send a notification signal to a socket
+
+    The notify_SendSD function sends out a notification signal
+    to the client socket referenced in the notification object.
+
+    If the client does not exist, the notification object is marked
+    as unused
+
+    @param[in]
+        pNotification
+            pointer to the notification to send
+
+    @param[in]
+        handle
+            notification handle
+
+    @param[in]
+        signal
+            signal to send
+
+    @retval EOK the notifications was sent
+    @retval ESRCH the process which reqeusted the notification does not exist
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+static int notify_SendSD(  Notification *pNotification,
+                           int handle,
+                           int signal )
+{
+    SockResponse resp;
+    ssize_t n;
+    ssize_t len = sizeof( SockResponse );
+    int result = EINVAL;
+    bool cleanup = false;
+    int sd;
+
+    if ( pNotification != NULL )
+    {
+        resp.id = VARSERVER_ID;
+        resp.version = VARSERVER_VERSION;
+        resp.requestType = VARREQUEST_NOTIFY;
+        resp.responseVal = signal;
+        resp.responseVal2 = handle;
+
+        sd = pNotification->sd;
+        if ( sd > 0 )
+        {
+            printf("Notification: sd: %d sig: %d hdl: %d", sd, signal, handle);
+            n = write( sd, &resp, len );
+            result = ( n == len ) ? EOK : errno;
+            if ( result == EPIPE )
+            {
+                cleanup = true;
+            }
+        }
+        else
+        {
+            printf("Invalid notification socket descriptor: %d\n", sd );
+            cleanup = true;
+        }
+
+        if ( cleanup == true )
+        {
+            /* the process that registered this signal is gone,
+            mark the signal as unused */
+            close( sd);
+            pNotification->type = NOTIFY_NONE;
+            pNotification->pid = -1;
+            pNotification->sd = -1;
+            result = EPIPE;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
 /*  NOTIFY_Payload                                                            */
 /*!
     Send a notification payload to a client's message queue
@@ -457,8 +619,8 @@ static int notify_Send( Notification *pNotification,
     which has registered to receive it.
 
     @param[in]
-        pid
-            process identifier of the sending client process
+        client_id
+            identifier of the sending client process
 
     @param[in]
         ppNotification
@@ -481,7 +643,7 @@ static int notify_Send( Notification *pNotification,
     @retval ENOENT no notifications registered
 
 ==============================================================================*/
-int NOTIFY_Payload( pid_t pid,
+int NOTIFY_Payload( int client_id,
                     Notification **ppNotification,
                     NotificationType type,
                     void *buf,
@@ -522,6 +684,8 @@ int NOTIFY_Payload( pid_t pid,
                         mark the signal as unused */
                         pNotification->type = NOTIFY_NONE;
                         pNotification->pid = -1;
+                        pNotification->clientID = -1;
+                        pNotification->sd = -1;
                     }
                 }
             }

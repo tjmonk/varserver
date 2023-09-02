@@ -30,6 +30,8 @@ SOFTWARE.
 ============================================================================*/
 
 #include <stdint.h>
+#include "varclient.h"
+#include "varrequest.h"
 #include "var.h"
 
 /*============================================================================
@@ -43,6 +45,9 @@ typedef struct _SockRequest
 
     /*! varserver version */
     uint16_t version;
+
+    /*! client identifier */
+    uint32_t clientID;
 
     /*! transaction identifier */
     uint32_t transaction_id;
@@ -72,8 +77,11 @@ typedef struct _SockResponse
     /*! transaction identifier */
     uint32_t transaction_id;
 
-    /*! request Value */
+    /*! response Value */
     int responseVal;
+
+    /*! response Value 2*/
+    int responseVal2;
 
 } SockResponse;
 

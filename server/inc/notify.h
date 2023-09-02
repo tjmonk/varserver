@@ -30,6 +30,7 @@ SOFTWARE.
 ============================================================================*/
 
 #include <stdint.h>
+#include <unistd.h>
 #include <varserver/var.h>
 
 /*============================================================================
@@ -74,6 +75,9 @@ typedef struct _Notification
     /*! The PID of the process we need to notify */
     pid_t pid;
 
+    /*! The socket descriptor of the process we need to modify */
+    int sd;
+
     /*! the notification queue descriptor */
     mqd_t mq;
 
@@ -92,13 +96,13 @@ typedef struct _Notification
         Public function declarations
 ============================================================================*/
 
-int NOTIFY_Signal( pid_t pid,
+int NOTIFY_Signal( int client_id,
                    Notification **ppNotification,
                    NotificationType type,
                    int handle,
-                   pid_t *sentTo );
+                   int *sentTo );
 
-int NOTIFY_Payload( pid_t pid,
+int NOTIFY_Payload( int client_id,
                     Notification **ppNotification,
                     NotificationType type,
                     void *buf,
@@ -106,10 +110,12 @@ int NOTIFY_Payload( pid_t pid,
 
 Notification *NOTIFY_Find( Notification *pNotification,
                            NotificationType type,
-                           pid_t pid );
+                           int client_id );
 
 int NOTIFY_Add( Notification **ppNotification,
                 NotificationType type,
-                pid_t pid );
+                int client_id,
+                pid_t pid,
+                int sd );
 
 #endif

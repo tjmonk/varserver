@@ -489,11 +489,12 @@ static int ProcessRequest( VarClient *pVarClient, SockRequest *pReq )
                     pVarClient->rr.clientid);
         }
 
+/*
         printf("SERVER: Processing Request\n");
         printf("SERVER:    id: %d\n", pReq->id );
         printf("SERVER:    version: %d\n", pReq->version );
         printf("SERVER:    request: %d\n", pReq->requestType );
-
+*/
         result = EOK;
 
         //printf("SERVER: %s\n", RequestHandlers[requestType].requestName);
@@ -978,7 +979,7 @@ int ProcessVarRequestPrint( VarClient *pVarClient, SockRequest *pReq )
     {
         varInfo.hVar = (VAR_HANDLE)pReq->requestVal;
 
-        result = VARLIST_PrintByHandle( pVarClient->rr.client_pid,
+        result = VARLIST_PrintByHandle( pVarClient->rr.clientid,
                                         &varInfo,
                                         &pVarClient->workbuf,
                                         pVarClient->workbufsize,
@@ -986,31 +987,40 @@ int ProcessVarRequestPrint( VarClient *pVarClient, SockRequest *pReq )
                                         pVarClient,
                                         &handler );
 
-        resp.hVar = varInfo.hVar;
-        memcpy( resp.formatspec, varInfo.formatspec, MAX_FORMATSPEC_LEN );
-        memcpy( &resp.obj, &varInfo.var, sizeof( VarObject ));
-        resp.responseVal = result;
-        resp.len = len;
-
-        iov[0].iov_base = &resp;
-        iov[0].iov_len = sizeof( PrintResponse );
-        iov[1].iov_base = NULL;
-        iov[1].iov_len = 0;
-
-        // TODO: Add EINPROGRESS (calc) and ESTRPIPE (print) handling
-        if ( ( len > 0 ) && ( varInfo.var.type == VARTYPE_STR ) )
+        if( result == EINPROGRESS )
         {
-            iov[1].iov_base = &pVarClient->workbuf;
-            iov[1].iov_len = len;
-            vec_count = 2;
+            printf("Blocking client %d\n", pVarClient->rr.clientid);
+            /* add the client to the blocked clients list */
+            BlockClient( pVarClient, NOTIFY_CALC, varInfo.hVar );
         }
-
-        /* send the PrintResponse to the client */
-        len = iov[0].iov_len + iov[1].iov_len;
-        n = writev( pVarClient->sd, iov, vec_count );
-        if ( n != len )
+        else
         {
-            result = errno;
+            resp.hVar = varInfo.hVar;
+            memcpy( resp.formatspec, varInfo.formatspec, MAX_FORMATSPEC_LEN );
+            memcpy( &resp.obj, &varInfo.var, sizeof( VarObject ));
+            resp.responseVal = result;
+            resp.len = len;
+
+            iov[0].iov_base = &resp;
+            iov[0].iov_len = sizeof( PrintResponse );
+            iov[1].iov_base = NULL;
+            iov[1].iov_len = 0;
+
+            // TODO: Add EINPROGRESS (calc) and ESTRPIPE (print) handling
+            if ( ( len > 0 ) && ( varInfo.var.type == VARTYPE_STR ) )
+            {
+                iov[1].iov_base = &pVarClient->workbuf;
+                iov[1].iov_len = len;
+                vec_count = 2;
+            }
+
+            /* send the PrintResponse to the client */
+            len = iov[0].iov_len + iov[1].iov_len;
+            n = writev( pVarClient->sd, iov, vec_count );
+            if ( n != len )
+            {
+                result = errno;
+            }
         }
     }
 
@@ -1164,6 +1174,10 @@ int ProcessVarRequestClosePrintSession( VarClient *pVarClient,
         pVarClient
             Pointer to the client data structure
 
+    @param[in]
+        pReq
+            pointer to the SockRequest
+
     @retval EOK the variable value was set
     @retval ENOENT the variable was not found
     @retval EINVAL the client is invalid
@@ -1218,7 +1232,7 @@ int ProcessVarRequestSet( VarClient *pVarClient, SockRequest *pReq )
 
         if ( result == EOK )
         {
-            result = VARLIST_Set( pVarClient->rr.client_pid,
+            result = VARLIST_Set( pVarClient->rr.clientid,
                                 &varInfo,
                                 &pVarClient->validationInProgress,
                                 (void *)pVarClient );
@@ -1462,7 +1476,7 @@ int ProcessVarRequestNotify( VarClient *pVarClient, SockRequest *pReq )
 {
     int result = EINVAL;
     SockResponse resp;
-    ssize_t len;
+    ssize_t len = sizeof(SockResponse);
     ssize_t n;
     VarInfo varInfo;
 
@@ -1473,8 +1487,17 @@ int ProcessVarRequestNotify( VarClient *pVarClient, SockRequest *pReq )
         varInfo.notificationType = pReq->requestVal2;
 
         /* register the notification request */
-        result = VARLIST_RequestNotify( &varInfo,
-                                        pVarClient->rr.client_pid );
+        if ( pVarClient->notify_sd > 0 )
+        {
+            result = VARLIST_RequestNotify( pVarClient->rr.clientid,
+                                            &varInfo,
+                                            -1,
+                                            pVarClient->notify_sd );
+        }
+        else
+        {
+            result = EBADF;
+        }
 
         resp.id = VARSERVER_ID;
         resp.version = VARSERVER_VERSION;
@@ -1530,32 +1553,43 @@ int ProcessVarRequestGet( VarClient *pVarClient, SockRequest *pReq )
     {
         varInfo.hVar = (VAR_HANDLE)pReq->requestVal;
 
-        iov[0].iov_base = &resp;
-        iov[0].iov_len = sizeof(SockResponse);
-        iov[1].iov_base = &varInfo.var;
-        iov[1].iov_len = sizeof(VarObject);
-        iov[2].iov_base = NULL;
-        iov[2].iov_len = 0;
-
         len = 0;
-        result = VARLIST_GetByHandle( pVarClient->rr.client_pid,
+        result = VARLIST_GetByHandle( pVarClient->rr.clientid,
                                       &varInfo,
                                       &pVarClient->workbuf,
                                       pVarClient->workbufsize,
                                       &len );
 
-        if ( len != 0 )
+        printf("VARLIST_GetByHandle: result = %s\n", strerror(result));
+        if( result == EINPROGRESS )
         {
-            iov[2].iov_base = &pVarClient->workbuf;
-            iov[2].iov_len = len;
-            vec_count = 3;
+            printf("Blocking client %d\n", pVarClient->rr.clientid);
+            /* add the client to the blocked clients list */
+            BlockClient( pVarClient, NOTIFY_CALC, varInfo.hVar );
         }
-
-        len = iov[0].iov_len + iov[1].iov_len + iov[2].iov_len;
-        n = writev( pVarClient->sd, iov, 3 );
-        if ( n != len )
+        else
         {
-            result = errno;
+            /* build and send the client response */
+            iov[0].iov_base = &resp;
+            iov[0].iov_len = sizeof(SockResponse);
+            iov[1].iov_base = &varInfo.var;
+            iov[1].iov_len = sizeof(VarObject);
+            iov[2].iov_base = NULL;
+            iov[2].iov_len = 0;
+
+            if ( len != 0 )
+            {
+                iov[2].iov_base = &pVarClient->workbuf;
+                iov[2].iov_len = len;
+                vec_count = 3;
+            }
+
+            len = iov[0].iov_len + iov[1].iov_len + iov[2].iov_len;
+            n = writev( pVarClient->sd, iov, 3 );
+            if ( n != len )
+            {
+                result = errno;
+            }
         }
     }
 
@@ -1622,7 +1656,7 @@ int ProcessVarRequestGetFirst( VarClient *pVarClient, SockRequest *pReq )
 
             /* start the query */
             len = 0;
-            result = VARLIST_GetFirst( pVarClient->rr.client_pid,
+            result = VARLIST_GetFirst( pVarClient->rr.clientid,
                                        query.type,
                                        &varInfo,
                                        &pVarClient->workbuf,
@@ -1633,7 +1667,7 @@ int ProcessVarRequestGetFirst( VarClient *pVarClient, SockRequest *pReq )
             if( result == EINPROGRESS )
             {
                 /* add the client to the blocked clients list */
-                BlockClient( pVarClient, NOTIFY_CALC );
+                BlockClient( pVarClient, NOTIFY_CALC, varInfo.hVar );
             }
             else
             {
@@ -1710,7 +1744,7 @@ int ProcessVarRequestGetNext( VarClient *pVarClient, SockRequest *pReq )
         len = 0;
         memset(&varInfo, 0, sizeof(VarInfo));
 
-        result = VARLIST_GetNext( pVarClient->rr.client_pid,
+        result = VARLIST_GetNext( pVarClient->rr.clientid,
                                   pReq->requestVal,
                                   &varInfo,
                                   &pVarClient->workbuf,
@@ -1720,7 +1754,7 @@ int ProcessVarRequestGetNext( VarClient *pVarClient, SockRequest *pReq )
         if( result == EINPROGRESS )
         {
             /* add the client to the blocked clients list */
-            BlockClient( pVarClient, NOTIFY_CALC );
+            BlockClient( pVarClient, NOTIFY_CALC, varInfo.hVar );
         }
         else
         {

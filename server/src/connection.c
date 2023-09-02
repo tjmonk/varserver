@@ -53,6 +53,7 @@ SOFTWARE.
 #include <sys/syslog.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
@@ -331,19 +332,21 @@ static int ConnectionGetfds( int max_sd, fd_set *pfds )
     {
         while( pConnection != NULL )
         {
-            sd = pConnection->sd;
-
-            if ( sd > 0 )
+            if ( pConnection->type != CONNTYPE_NOTIFY )
             {
-                FD_SET( sd, pfds );
+                sd = pConnection->sd;
 
-                /* track highest socket descriptor number */
-                if ( sd > max_sd )
+                if ( sd > 0 )
                 {
-                    max_sd = sd;
+                    FD_SET( sd, pfds );
+
+                    /* track highest socket descriptor number */
+                    if ( sd > max_sd )
+                    {
+                        max_sd = sd;
+                    }
                 }
             }
-
             pConnection = pConnection->pNext;
         }
     }
@@ -492,7 +495,7 @@ static int ConnectionRx( int sock,
                         case CONNTYPE_NOTIFY:
                             /* should not receive data on notify channel */
                             printf("Rx on Notify channel %d!\n", sd);
-                            ConnectionClose( pConnection );
+                            //ConnectionClose( pConnection );
                             break;
 
                         /*! stream for rendering */
@@ -702,16 +705,35 @@ static int ConnectionSetNotificationSocket( Connection *pConnection,
 {
     int result = EINVAL;
     VarClient *pVarClient;
+    SockResponse resp;
+    ssize_t len;
+    ssize_t n;
 
     if ( pConnection != NULL )
     {
         pConnection->type = CONNTYPE_NOTIFY;
-        pVarClient = FindClient( client_id );
+        pVarClient = GetClientByID( client_id );
         if ( pVarClient != NULL )
         {
             pVarClient->notify_sd = pConnection->sd;
             pConnection->pVarClient = pVarClient;
-            result = EOK;
+
+            len = sizeof(SockResponse);
+            resp.id = VARSERVER_ID;
+            resp.version = VARSERVER_VERSION;
+            resp.responseVal = EOK;
+            resp.requestType = VARREQUEST_NOTIFY;
+            resp.responseVal2 = 0;
+            resp.transaction_id = 0;
+            n = write( pVarClient->notify_sd, &resp, len );
+            if ( n == len )
+            {
+                result = EOK;
+            }
+            else
+            {
+                result = errno;
+            }
         }
         else
         {
@@ -845,6 +867,84 @@ static int ConnectionClose( Connection *pConnection )
         freelist = pConnection;
 
         NumConnections--;
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  ConnectionSendVar                                                         */
+/*!
+    Send a Var object to a client connection
+
+    The ConnectionSendVar function sends a Var object to a client connection
+
+    @param[in]
+        pVarClient
+            Pointer to the client data structure
+
+    @param[in]
+        pVarInfo
+            pointer to the VarInfo object containing the Var object to send
+
+    @retval EOK the variable object was sent
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+int ConnectionSendVar( VarClient *pVarClient, VarInfo *pVarInfo )
+{
+    int result = EINVAL;
+    SockResponse resp;
+    ssize_t len;
+    ssize_t n;
+    struct iovec iov[3];
+    VarInfo varInfo;
+    int vec_count = 2;
+    VarType type;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pVarInfo != NULL ) )
+    {
+        printf("Unblocking client: %d\n", pVarClient->rr.clientid);
+        iov[0].iov_base = &resp;
+        iov[0].iov_len = sizeof(SockResponse);
+        iov[1].iov_base = &(pVarInfo->var);
+        iov[1].iov_len = sizeof(VarObject);
+        iov[2].iov_base = NULL;
+        iov[2].iov_len = 0;
+
+        type = pVarInfo->var.type;
+        switch( type )
+        {
+            case VARTYPE_BLOB:
+                len = pVarInfo->var.len;
+                break;
+
+            case VARTYPE_STR:
+                len = strlen( pVarInfo->var.val.str ) + 1;
+                break;
+
+            default:
+                len = 0;
+        }
+
+        if ( len > 0 )
+        {
+            iov[2].iov_base = pVarInfo->var.val.blob;
+            iov[2].iov_len = len;
+            vec_count = 3;
+        }
+
+        len = iov[0].iov_len + iov[1].iov_len + iov[2].iov_len;
+        n = writev( pVarClient->sd, iov, 3 );
+        if ( n == len )
+        {
+            result = EOK;
+        }
+        else
+        {
+            result = errno;
+        }
     }
 
     return result;

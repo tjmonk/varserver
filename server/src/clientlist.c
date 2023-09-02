@@ -61,6 +61,9 @@ SOFTWARE.
         Private definitions
 ==============================================================================*/
 
+/*! Maximum number of clients */
+#define MAX_VAR_CLIENTS                 ( 4096 )
+
 /*==============================================================================
         Private types
 ==============================================================================*/
@@ -69,6 +72,8 @@ SOFTWARE.
 /*==============================================================================
         Private function declarations
 ==============================================================================*/
+
+static int GetClientID( void );
 
 /*==============================================================================
         Private file scoped variables
@@ -80,11 +85,10 @@ static VarClient *clientlist = NULL;
 /*! list of available VarClient objects */
 static VarClient *freelist = NULL;
 
-/*! number of active and inactive clients */
-static int NumClients = 0;
-
 /*! number of active clients */
 static int ActiveClients = 0;
+
+static VarClient *VarClients[MAX_VAR_CLIENTS+1] = {0};
 
 /*==============================================================================
         Public function definitions
@@ -171,9 +175,6 @@ VarClient *NewClient( int sd, size_t workbufsize )
         {
             /* set the workbuf size */
             pVarClient->workbufsize = workbufsize;
-
-            /* allocate new client identifier */
-            pVarClient->rr.clientid = ++NumClients;
         }
     }
 
@@ -188,8 +189,8 @@ VarClient *NewClient( int sd, size_t workbufsize )
         /* initialize the socket descriptor */
         pVarClient->sd = sd;
 
-        /* increment the number of active clients */
-        ActiveClients++;
+        /* allocate new client identifier */
+        SetNewClient( pVarClient );
 
         /* add the VarClient to the client list */
         pVarClient->pNext = clientlist;
@@ -243,13 +244,13 @@ void DeleteClient( VarClient *pVarClient )
             }
         }
 
+        /* mark the client as inactive */
+        ClearClient(pVarClient);
+
         /* put the VarClient on the head of the free list */
         pVarClient->pNext = freelist;
         pVarClient->active = false;
         freelist = pVarClient;
-
-        /* decrement the number of active clients */
-        ActiveClients--;
     }
 }
 
@@ -296,6 +297,212 @@ VarClient *FindClient( int client_id )
     }
 
     return pVarClient;
+}
+
+/*============================================================================*/
+/*  GetClientID                                                               */
+/*!
+    Get an available client identifier
+
+    The GetClientID function searches the variable server client list
+    and returns the first available client identifier
+
+    @retval an available client identifier
+    @retval 0 if no client identifiers are available
+
+==============================================================================*/
+static int GetClientID( void )
+{
+    int i;
+    int clientId = 0;
+
+    for(i=1;i<=MAX_VAR_CLIENTS;i++)
+    {
+        if( VarClients[i] == NULL )
+        {
+            clientId=i;
+            break;
+        }
+    }
+
+    return clientId;
+}
+
+/*============================================================================*/
+/*  GetClientByID                                                             */
+/*!
+    Get a client object given its client id
+
+    The GetClientByID function gets the VarClient object associated
+    with the specified client id. If the client id is invalid or out of
+    range, a NULL pointer will be returned.
+
+    @retval pointer to the VarClient object associated with the client id
+    @retval  NULL invalid client id
+
+==============================================================================*/
+VarClient *GetClientByID( int clientID )
+{
+    VarClient *pVarClient = NULL;
+
+    if ( ( clientID > 0 ) && ( clientID <= MAX_VAR_CLIENTS ) )
+    {
+        pVarClient = VarClients[clientID];
+    }
+
+    return pVarClient;
+}
+
+
+/*============================================================================*/
+/*  GetClientInfo                                                             */
+/*!
+    Get a client debug information
+
+    The GetClientInfo function prints the VarClient debug information
+    into a buffer.
+
+    Information includes;
+        - client id
+        - client blocked status
+        - number of transactions
+        - process identifier (for signal clients)
+        - socket descriptor (for socket clients)
+
+    @retval pointer to the VarClient object associated with the client id
+    @retval  NULL invalid client id
+
+==============================================================================*/
+int GetClientInfo( char *buf, size_t len )
+{
+    VarClient *pVarClient;
+    size_t i;
+    size_t offset = 0;
+    size_t n = 0;
+
+    if ( len > 0 )
+    {
+        buf[0] = '\n';
+        offset = 1;
+
+        for(i=1;i<=MAX_VAR_CLIENTS;i++)
+        {
+            pVarClient = VarClients[i];
+            if( pVarClient != NULL )
+            {
+                n = snprintf( &buf[offset],
+                            len,
+                            "id: %d, blk: %d, txn: %lu, pid: %d sd: %d\n",
+                            pVarClient->rr.clientid,
+                            pVarClient->blocked,
+                            pVarClient->transactionCount,
+                            pVarClient->rr.client_pid,
+                            pVarClient->sd );
+
+                offset += n;
+                len -= n;
+            }
+
+            if ( len <= 0 )
+            {
+                break;
+            }
+        }
+
+        buf[offset]=0;
+    }
+
+    return n;
+}
+
+/*============================================================================*/
+/*  SetNewClient                                                              */
+/*!
+    Store a new VarClient object into the client list
+
+    The SetNewClient function stores the specified client object
+    into the VarClient list and sets its corresponding client identifier.
+
+    @param[in]
+        pVarClient
+            pointer to the VarClient object to store
+
+    @retval EOK client stored ok
+    @retval EINVAL invalid arguments
+    @retval ENOMEM max clients reached
+
+==============================================================================*/
+int SetNewClient( VarClient *pVarClient )
+{
+    int result = EINVAL;
+    int clientID;
+
+    if ( pVarClient != NULL )
+    {
+        clientID = GetClientID();
+        if ( clientID > 0 )
+        {
+            VarClients[clientID] = pVarClient;
+            pVarClient->rr.clientid = clientID;
+            ActiveClients++;
+            result = EOK;
+        }
+        else
+        {
+            result = ENOMEM;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  ClearClient                                                               */
+/*!
+    Remove a client reference from the client list
+
+    The ClearClient function removes the client object reference
+    from the client list.
+
+    @param[in]
+        pVarClient
+            pointer to the VarClient object to remove
+
+    @retval EOK client removed ok
+    @retval EINVAL invalid arguments
+    @retval ENOTSUP client reference and client id do not match
+    @retval ENOENT invalid client ID
+
+==============================================================================*/
+int ClearClient( VarClient *pVarClient )
+{
+    int result = EINVAL;
+    int clientID;
+
+    if ( pVarClient != NULL )
+    {
+        clientID = pVarClient->rr.clientid;
+        if ( ( clientID > 0 ) && ( clientID <= MAX_VAR_CLIENTS ) )
+        {
+            if ( VarClients[clientID] == pVarClient )
+            {
+                VarClients[clientID] = NULL;
+                pVarClient->rr.clientid = 0;
+                ActiveClients--;
+                result = EOK;
+            }
+            else
+            {
+                result = ENOTSUP;
+            }
+        }
+        else
+        {
+            result = ENOENT;
+        }
+    }
+
+    return result;
 }
 
 /*! @}

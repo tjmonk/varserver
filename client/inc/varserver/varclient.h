@@ -35,6 +35,7 @@ SOFTWARE.
 #include <stdbool.h>
 #include <mqueue.h>
 #include "varobject.h"
+#include "varrequest.h"
 #include "var.h"
 
 /*============================================================================
@@ -60,79 +61,6 @@ SOFTWARE.
 
 /*! Name of the server API endpoint */
 #define SERVER_SHAREDMEM "/varserver"
-
-/*! identifier for the var server */
-#define VARSERVER_ID  ( 0x56415253 )
-
-/*! protocol version of the var server to check for library/server mismatch */
-#define VARSERVER_VERSION ( 1 )
-
-/*! the VarRequest enumeration specifies the type of requests that can
-    be made from the client to the server */
-typedef enum _varRequest
-{
-    /*! invalid VAR request */
-    VARREQUEST_INVALID=0,
-
-    /*! A new client is requesting an interface to the variable server */
-    VARREQUEST_OPEN,
-
-    /*! A client is requesting to terminate its interface to the variable server */
-    VARREQUEST_CLOSE,
-
-    /*! echo test */
-    VARREQUEST_ECHO,
-
-    /*! New Variable request */
-    VARREQUEST_NEW,
-
-    /*! Find Variable request */
-    VARREQUEST_FIND,
-
-    /*! Get Variable value */
-    VARREQUEST_GET,
-
-    /*! Print Variable Value */
-    VARREQUEST_PRINT,
-
-    /*! Set Variable Value */
-    VARREQUEST_SET,
-
-    /*! Get Variable Type */
-    VARREQUEST_TYPE,
-
-    /*! Get Variable Name */
-    VARREQUEST_NAME,
-
-    /*! Get Variable Length */
-    VARREQUEST_LENGTH,
-
-    /*! Request Variable Notification */
-    VARREQUEST_NOTIFY,
-
-    /*! Request Validation Request Info */
-    VARREQUEST_GET_VALIDATION_REQUEST,
-
-    /*! Send a Validation Response */
-    VARREQUEST_SEND_VALIDATION_RESPONSE,
-
-    /*! Open a print session */
-    VARREQUEST_OPEN_PRINT_SESSION,
-
-    /*! Close a print session */
-    VARREQUEST_CLOSE_PRINT_SESSION,
-
-    /*! Get the first variable in a search query result */
-    VARREQUEST_GET_FIRST,
-
-    /*! Get the next variable in a search query result */
-    VARREQUEST_GET_NEXT,
-
-    /*! End request type marker */
-    VARREQUEST_END_MARKER
-
-} VarRequest;
-
 
 /*! Server Information shared with clients */
 typedef struct _serverInfo

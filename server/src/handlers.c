@@ -264,7 +264,7 @@ static RequestHandler RequestHandlers[] =
 ==============================================================================*/
 
 /*============================================================================*/
-/*  InitHandlerMetrics                                                            */
+/*  InitHandlerMetrics                                                        */
 /*!
 
     Initiialize the metrics for the request handlers
@@ -742,6 +742,7 @@ int ProcessVarRequestPrint( VarClient *pVarClient )
     RenderHandler *pRenderHandler = pRenderHandlers;
     int (*fn)(VarInfo *pVarInfo, char *buf, size_t len);
     bool handled = false;
+    VAR_HANDLE hVar;
 
     /* validate the client object */
     result = ValidateClient( pVarClient );
@@ -769,7 +770,7 @@ int ProcessVarRequestPrint( VarClient *pVarClient )
 
         if ( handled == false )
         {
-            result = VARLIST_PrintByHandle( pVarClient->rr.client_pid,
+            result = VARLIST_PrintByHandle( pVarClient->rr.clientid,
                                             &pVarClient->rr.variableInfo,
                                             &pVarClient->workbuf,
                                             pVarClient->workbufsize,
@@ -786,7 +787,8 @@ int ProcessVarRequestPrint( VarClient *pVarClient )
             /* another client needs to calculate the value before
                we can print it */
             /* add the client to the blocked clients list */
-            BlockClient( pVarClient, NOTIFY_CALC );
+            hVar = pVarClient->rr.variableInfo.hVar;
+            BlockClient( pVarClient, NOTIFY_CALC, hVar );
         }
         else if(  result == ESTRPIPE )
         {
@@ -951,7 +953,7 @@ int ProcessVarRequestSet( VarClient *pVarClient )
         }
 
         /* set the variable value */
-        result = VARLIST_Set( pVarClient->rr.client_pid,
+        result = VARLIST_Set( pVarClient->rr.clientid,
                               &pVarClient->rr.variableInfo,
                               &pVarClient->validationInProgress,
                               (void *)pVarClient );
@@ -1112,8 +1114,10 @@ int ProcessVarRequestNotify( VarClient *pVarClient )
     if( result == EOK)
     {
         /* register the notification request */
-        result = VARLIST_RequestNotify( &(pVarClient->rr.variableInfo),
-                                        pVarClient->rr.client_pid );
+        result = VARLIST_RequestNotify( pVarClient->rr.clientid,
+                                        &(pVarClient->rr.variableInfo),
+                                        pVarClient->rr.client_pid,
+                                        -1 );
     }
 
     return result;
@@ -1144,20 +1148,23 @@ int ProcessVarRequestGet( VarClient *pVarClient )
     int result = EINVAL;
     int rc;
     char *pStr = NULL;
+    VAR_HANDLE hVar;
 
     /* validate the client object */
     result = ValidateClient( pVarClient );
     if( result == EOK)
     {
-        result = VARLIST_GetByHandle( pVarClient->rr.client_pid,
+        result = VARLIST_GetByHandle( pVarClient->rr.clientid,
                                       &pVarClient->rr.variableInfo,
                                       &pVarClient->workbuf,
                                       pVarClient->workbufsize,
                                       &pVarClient->rr.len );
         if( result == EINPROGRESS )
         {
+            hVar = pVarClient->rr.variableInfo.hVar;
+
             /* add the client to the blocked clients list */
-            BlockClient( pVarClient, NOTIFY_CALC );
+            BlockClient( pVarClient, NOTIFY_CALC, hVar );
         }
     }
 
@@ -1188,12 +1195,13 @@ int ProcessVarRequestGetFirst( VarClient *pVarClient )
     int result = EINVAL;
     int rc;
     char *pStr = NULL;
+    VAR_HANDLE hVar;
 
     /* validate the client object */
     result = ValidateClient( pVarClient );
     if( result == EOK)
     {
-        result = VARLIST_GetFirst( pVarClient->rr.client_pid,
+        result = VARLIST_GetFirst( pVarClient->rr.clientid,
                                    pVarClient->rr.requestVal,
                                    &pVarClient->rr.variableInfo,
                                    &pVarClient->workbuf,
@@ -1202,8 +1210,10 @@ int ProcessVarRequestGetFirst( VarClient *pVarClient )
                                    &pVarClient->rr.responseVal);
         if( result == EINPROGRESS )
         {
+            hVar = pVarClient->rr.variableInfo.hVar;
+
             /* add the client to the blocked clients list */
-            BlockClient( pVarClient, NOTIFY_CALC );
+            BlockClient( pVarClient, NOTIFY_CALC, hVar );
         }
     }
 
@@ -1234,12 +1244,13 @@ int ProcessVarRequestGetNext( VarClient *pVarClient )
     int result = EINVAL;
     int rc;
     char *pStr = NULL;
+    VAR_HANDLE hVar;
 
     /* validate the client object */
     result = ValidateClient( pVarClient );
     if( result == EOK)
     {
-        result = VARLIST_GetNext( pVarClient->rr.client_pid,
+        result = VARLIST_GetNext( pVarClient->rr.clientid,
                                   pVarClient->rr.requestVal,
                                   &pVarClient->rr.variableInfo,
                                   &pVarClient->workbuf,
@@ -1248,8 +1259,10 @@ int ProcessVarRequestGetNext( VarClient *pVarClient )
                                   &pVarClient->rr.responseVal );
         if( result == EINPROGRESS )
         {
+            hVar = pVarClient->rr.variableInfo.hVar;
+
             /* add the client to the blocked clients list */
-            BlockClient( pVarClient, NOTIFY_CALC );
+            BlockClient( pVarClient, NOTIFY_CALC, hVar );
         }
     }
 

@@ -93,6 +93,9 @@ static int var_CopyStringVarObjectToWorkbuf( VarClient *pVarClient,
 static int var_CopyBlobVarObjectToWorkbuf( VarClient *pVarClient,
                                         VarObject *pVarObject );
 
+static int varserver_WaitSignalSd( int sd, int *sigval );
+
+static int varserver_WaitSignalSig( int *sigval );
 
 /*==============================================================================
         File scoped variables
@@ -497,13 +500,53 @@ int VARSERVER_Test( VARSERVER_HANDLE hVarServer )
     It then waits until one of these signals occurs.
 
     @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[in]
         sigval
             pointer to an integer to store the signal sival_int
 
     @return the signal which occurred
 
 ==============================================================================*/
-int VARSERVER_WaitSignal( int *sigval )
+int VARSERVER_WaitSignal( VARSERVER_HANDLE hVarServer, int *sigval )
+{
+    VarClient *pVarClient = ValidateHandle( hVarServer );
+    int sig;
+
+    if ( pVarClient != NULL )
+    {
+        if ( pVarClient->notify_sd > 0 )
+        {
+            sig = varserver_WaitSignalSd(pVarClient->notify_sd,  sigval );
+        }
+        else
+        {
+            sig = varserver_WaitSignalSig( sigval );
+        }
+    }
+
+    return sig;
+}
+
+/*============================================================================*/
+/*  varserver_WaitSignalSig                                                   */
+/*!
+    Wait for a varserver signal using the sigwaitinfo mechanism
+
+    The varserver_WaitSignalSig function is used by the variable server clients
+    to wait for a notification signal from the variable server via a
+    real time signal.
+
+    @param[in]
+        sigval
+            pointer to an integer to store the signal sival_int
+
+    @return the received signal
+
+==============================================================================*/
+static int varserver_WaitSignalSig( int *sigval )
 {
     sigset_t mask;
     siginfo_t info;
@@ -534,6 +577,51 @@ int VARSERVER_WaitSignal( int *sigval )
     if( sigval != NULL )
     {
         *sigval = info.si_value.sival_int;
+    }
+
+    return sig;
+}
+
+/*============================================================================*/
+/*  varserver_WaitSignalSd                                                    */
+/*!
+    Wait for a varserver signal using the socket descriptor mechanism
+
+    The varserver_WaitSignalSd function is used by the variable server clients
+    to wait for a notification signal from the variable server via receiption
+    of a SockResponse object on the client's notification socket descriptor
+
+    @param[in]
+        sd
+            socket descriptor to listen on
+
+    @param[in]
+        sigval
+            pointer to an integer to store the signal sival_int
+
+    @return the received signal
+
+==============================================================================*/
+static int varserver_WaitSignalSd( int sd, int *sigval )
+{
+    int sig = -1;
+    SockResponse resp;
+    ssize_t n;
+    ssize_t len;
+
+    while ( 1 )
+    {
+        len = sizeof( SockResponse );
+        n = read( sd, &resp, len );
+        if ( n == len )
+        {
+            sig = resp.responseVal;
+            if ( sigval != NULL )
+            {
+                *sigval = resp.responseVal2;
+            }
+            break;
+        }
     }
 
     return sig;

@@ -44,5 +44,9 @@ VarClient *NewClient( int sd, size_t workbufsize );
 void DeleteClient( VarClient *pVarClient );
 int GetActiveClients(void);
 VarClient *FindClient( int clientid );
+VarClient *GetClientByID( int clientID );
+int SetNewClient( VarClient *pVarClient );
+int ClearClient( VarClient *pVarClient );
+int GetClientInfo( char *buf, size_t len );
 
 #endif

@@ -163,6 +163,9 @@ static int var_GetStringObjectFromWorkbuf( VarClient *pVarClient,
 static int writesd( int sd, char *p, size_t len );
 static int readsd( int sd, char *p, size_t len );
 
+static int varserver_Connect( void );
+static int SetupNotifyChannel( VarClient *pVarClient );
+
 /*==============================================================================
         File scoped variables
 ==============================================================================*/
@@ -213,7 +216,6 @@ const VarServerAPI *SOCKAPI( void )
 static VARSERVER_HANDLE open_varserver( size_t workbufsize )
 {
     int result = EINVAL;
-    VarserverAddress vsa;
     VarClient *pVarClient = NULL;
     SockRequest req;
     SockResponse resp;
@@ -222,63 +224,89 @@ static VARSERVER_HANDLE open_varserver( size_t workbufsize )
     int sd;
     int rc;
 
+    sd = varserver_Connect();
+    if ( sd < 0 )
+    {
+        result = errno;
+    }
+    else
+    {
+        /* allocate memory for the VarClient */
+        pVarClient = calloc( 1, sizeof( VarClient ) + workbufsize );
+        if ( pVarClient != NULL )
+        {
+            pVarClient->sd = sd;
+            pVarClient->notify_sd = -1;
+            pVarClient->rr.id = VARSERVER_ID;
+            pVarClient->rr.version = VARSERVER_VERSION;
+            pVarClient->rr.client_pid = getpid();
+            pVarClient->workbufsize = workbufsize + 1;
+            pVarClient->pAPI = &sockapi;
+            pVarClient->rr.requestType = VARREQUEST_OPEN;
+            pVarClient->rr.len = workbufsize;
+
+            req.id = VARSERVER_ID;
+            req.version = VARSERVER_VERSION;
+            req.clientID = 0;
+            req.requestType = VARREQUEST_OPEN;
+            req.requestVal = workbufsize;
+
+            rc = writesd( sd, (char *)&req, reqLen );
+            if ( rc == EOK )
+            {
+                rc = readsd( sd, (char *)&resp, respLen );
+                if ( rc == EOK )
+                {
+                    pVarClient->rr.clientid = resp.responseVal;
+                }
+            }
+        }
+        else
+        {
+            close( sd );
+        }
+    }
+
+    return pVarClient;
+}
+
+/*============================================================================*/
+/*  varserver_Connect                                                         */
+/*!
+    create a connection to the variable server
+
+    The varserver_Connect function is used to create a connection to the
+    variable server via a socket.
+
+    @retval connected socket descriptor
+    @retval -1 if no connection could be established
+
+==============================================================================*/
+static int varserver_Connect( void )
+{
+    int rc;
+    int sd = -1;
+    VarserverAddress vsa;
+
     /* get the variable server address information */
-    result = varserver_GetAddress( &vsa );
-    if ( result == EOK )
+    rc = varserver_GetAddress( &vsa );
+    if ( rc == EOK )
     {
         /* create a communication socket */
         sd = socket( AF_INET, SOCK_STREAM, 0 );
-        if ( sd < 0 )
-        {
-            result = errno;
-        }
-        else
+        if ( sd >= 0 )
         {
             /* connect to the remote */
             rc = connect( sd, (struct sockaddr *)&vsa.addr, sizeof(vsa.addr));
             if ( rc < 0 )
             {
-                result = errno;
-            }
-            else
-            {
-                /* allocate memory for the VarClient */
-                pVarClient = calloc( 1, sizeof( VarClient ) + workbufsize );
-                if ( pVarClient != NULL )
-                {
-                    pVarClient->sd = sd;
-                    pVarClient->rr.id = VARSERVER_ID;
-                    pVarClient->rr.version = VARSERVER_VERSION;
-                    pVarClient->rr.client_pid = getpid();
-                    pVarClient->workbufsize = workbufsize + 1;
-                    pVarClient->pAPI = &sockapi;
-                    pVarClient->rr.requestType = VARREQUEST_OPEN;
-                    pVarClient->rr.len = workbufsize;
-
-                    req.id = VARSERVER_ID;
-                    req.version = VARSERVER_VERSION;
-                    req.requestType = VARREQUEST_OPEN;
-                    req.requestVal = workbufsize;
-
-                    rc = writesd( sd, (char *)&req, reqLen );
-                    if ( rc == EOK )
-                    {
-                        rc = readsd( sd, (char *)&resp, respLen );
-                        if ( rc == EOK )
-                        {
-                            pVarClient->rr.clientid = resp.responseVal;
-                        }
-                    }
-                }
-                else
-                {
-                    close( sd );
-                }
+                close( sd );
+                sd = -1;
             }
         }
     }
 
-    return pVarClient;
+    return sd;
 }
 
 /*============================================================================*/
@@ -372,6 +400,7 @@ static int close_varserver( VarClient *pVarClient )
     {
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
+        req.clientID = pVarClient->rr.clientid;
         req.requestType = VARREQUEST_CLOSE;
         req.requestVal = 0;
 
@@ -441,6 +470,7 @@ static int createVar( VarClient *pVarClient, VarInfo *pVarInfo )
     {
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
+        req.clientID = pVarClient->rr.clientid;
         req.requestType = VARREQUEST_NEW;
         req.requestVal = 0;
 
@@ -530,6 +560,7 @@ static int test( VarClient *pVarClient )
         {
             req.id = VARSERVER_ID;
             req.version = VARSERVER_VERSION;
+            req.clientID = pVarClient->rr.clientid;
             req.requestType = VARREQUEST_ECHO;
             req.requestVal = i;
 
@@ -595,6 +626,7 @@ static VAR_HANDLE findByName( VarClient *pVarClient, char *pName )
         {
             req.id = VARSERVER_ID;
             req.version = VARSERVER_VERSION;
+            req.clientID = pVarClient->rr.clientid;
             req.requestType = VARREQUEST_FIND;
             req.requestVal = len;
 
@@ -654,6 +686,7 @@ static int get( VarClient *pVarClient, VAR_HANDLE hVar, VarObject *pVarObject )
     {
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
+        req.clientID = pVarClient->rr.clientid;
         req.requestType = VARREQUEST_GET;
         req.requestVal = hVar;
 
@@ -791,6 +824,7 @@ static int getValidationRequest( VarClient *pVarClient,
     {
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
+        req.clientID = pVarClient->rr.clientid;
         req.requestType = VARREQUEST_GET_VALIDATION_REQUEST;
         req.requestVal = id;
 
@@ -900,6 +934,7 @@ static int sendValidationResponse( VarClient *pVarClient,
     {
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
+        req.clientID = pVarClient->rr.clientid;
         req.requestVal = id;
         req.requestVal2 = response;
 
@@ -1228,6 +1263,7 @@ static int getLength( VarClient *pVarClient,
     {
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
+        req.clientID = pVarClient->rr.clientid;
         req.requestType = VARREQUEST_LENGTH;
         req.requestVal = hVar;
 
@@ -1294,6 +1330,7 @@ static int getType( VarClient *pVarClient,
     {
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
+        req.clientID = pVarClient->rr.clientid;
         req.requestType = VARREQUEST_TYPE;
         req.requestVal = hVar;
 
@@ -1369,6 +1406,7 @@ static int getName( VarClient *pVarClient,
     {
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
+        req.clientID = pVarClient->rr.clientid;
         req.requestType = VARREQUEST_NAME;
         req.requestVal = hVar;
 
@@ -1455,6 +1493,7 @@ static int set( VarClient *pVarClient,
     {
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
+        req.clientID = pVarClient->rr.clientid;
         req.requestType = VARREQUEST_SET;
         req.requestVal = hVar;
 
@@ -1552,6 +1591,7 @@ static int getFirst( VarClient *pVarClient,
     {
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
+        req.clientID = pVarClient->rr.clientid;
         req.requestType = VARREQUEST_GET_FIRST;
         req.requestVal = 0;
 
@@ -1622,6 +1662,7 @@ static int getNext( VarClient *pVarClient,
     {
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
+        req.clientID = pVarClient->rr.clientid;
         req.requestType = VARREQUEST_GET_NEXT;
         req.requestVal = query->context;
         req.transaction_id = 0;
@@ -1745,7 +1786,7 @@ static int handleIterateResponse(  VarClient *pVarClient,
             handle to the variable to be notified on
 
     @param[in]
-        notification
+        notificationType
             the type of notification requested
 
 
@@ -1765,36 +1806,113 @@ static int notify( VarClient *pVarClient,
 
     if( pVarClient != NULL )
     {
-        req.id = VARSERVER_ID;
-        req.version = VARSERVER_VERSION;
-        req.requestType = VARREQUEST_NOTIFY;
-        req.requestVal = (int)hVar;
-        req.requestVal2 = (int)notificationType;
+        result = EOK;
 
-        len = sizeof(SockRequest);
-        n = write( pVarClient->sd, &req, len );
-        if ( n == len )
+        if ( pVarClient->notify_sd <= 0 )
         {
-            len = sizeof(SockResponse);
-            n = read( pVarClient->sd, &resp, len );
+            result = SetupNotifyChannel( pVarClient );
+        }
+
+        if ( result == EOK )
+        {
+            req.id = VARSERVER_ID;
+            req.version = VARSERVER_VERSION;
+            req.clientID = pVarClient->rr.clientid;
+            req.requestType = VARREQUEST_NOTIFY;
+            req.requestVal = (int)hVar;
+            req.requestVal2 = (int)notificationType;
+
+            len = sizeof(SockRequest);
+            n = write( pVarClient->sd, &req, len );
             if ( n == len )
             {
-                result = resp.responseVal;
+                len = sizeof(SockResponse);
+                n = read( pVarClient->sd, &resp, len );
+                if ( n == len )
+                {
+                    result = resp.responseVal;
+                }
+                else
+                {
+                    result = errno;
+                }
             }
             else
             {
                 result = errno;
             }
         }
-        else
-        {
-            result = errno;
-        }
     }
 
     return result;
 }
 
+/*============================================================================*/
+/*  SetupNotifyChannel                                                        */
+/*!
+    Set up the notification channel
+
+    The SetupNotifyChannel function sets up the notification channel
+    to the variable server
+
+    @param[in]
+        pVarClient
+            pointer to the varserver client
+
+    @retval EOK - the notification channel was set up successfully
+    @retval EINVAL - invalid arguments
+    @retval EBADF - cannot connect
+
+==============================================================================*/
+static int SetupNotifyChannel( VarClient *pVarClient )
+{
+    int result = EINVAL;
+    SockRequest req;
+    SockResponse resp;
+    ssize_t reqLen = sizeof( SockRequest );
+    ssize_t respLen = sizeof( SockResponse );
+    int sd;
+
+    if ( pVarClient != NULL )
+    {
+        sd = varserver_Connect();
+        if ( sd > 0 )
+        {
+            req.id = VARSERVER_ID;
+            req.version = VARSERVER_VERSION;
+            req.clientID = pVarClient->rr.clientid;
+            req.requestType = VARREQUEST_NOTIFY;
+            req.requestVal = pVarClient->rr.clientid;
+
+            result = writesd( sd, (char *)&req, reqLen );
+            if ( result == EOK )
+            {
+                result = readsd( sd, (char *)&resp, respLen );
+                if ( result == EOK )
+                {
+                    if ( resp.responseVal == EOK )
+                    {
+                        pVarClient->notify_sd = sd;
+                    }
+                    else
+                    {
+                        result = resp.responseVal;
+                    }
+                }
+            }
+            else
+            {
+                close( sd );
+            }
+        }
+        else
+        {
+            result = EBADF;
+        }
+    }
+
+    return result;
+}
 
 /*============================================================================*/
 /*  print                                                                     */
@@ -1837,6 +1955,7 @@ static int print( VarClient *pVarClient,
     {
         req.id = VARSERVER_ID;
         req.version = VARSERVER_VERSION;
+        req.clientID = pVarClient->rr.clientid;
         req.requestType = VARREQUEST_PRINT;
         req.requestVal = hVar;
 
@@ -2271,7 +2390,6 @@ static int writesd( int sd, char *p, size_t len )
             n = write( sd,
                     &p[sent],
                     remaining );
-//            printf("CLIENT: write: n = %ld\n", n);
             if ( n < 0 )
             {
                 result = errno;

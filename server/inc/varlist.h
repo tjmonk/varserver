@@ -44,15 +44,15 @@ SOFTWARE.
 
 int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle );
 int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle );
-int VARLIST_PrintByHandle( pid_t clientPID,
+int VARLIST_PrintByHandle( int client_id,
                            VarInfo *pVarInfo,
                            char *workbuf,
                            size_t workbufsize,
                            size_t *len,
                            void *clientInfo,
-                           pid_t *handler );
+                           int *handler );
 
-int VARLIST_Set( pid_t clientPID,
+int VARLIST_Set( int client_id,
                  VarInfo *pVarInfo,
                  bool *validationInProgress,
                  void *clientInfo );
@@ -60,14 +60,17 @@ int VARLIST_Set( pid_t clientPID,
 int VARLIST_GetType( VarInfo *pVarInfo );
 int VARLIST_GetName( VarInfo *pVarInfo );
 int VARLIST_GetLength( VarInfo *pVarInfo );
-int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid );
-int VARLIST_GetByHandle( pid_t clientPID,
+int VARLIST_RequestNotify( int client_id,
+                           VarInfo *pVarInfo,
+                           pid_t pid,
+                           int sd );
+int VARLIST_GetByHandle( int client_id,
                          VarInfo *pVarInfo,
                          char *buf,
                          size_t bufsize,
                          size_t *len );
 
-int VARLIST_GetFirst( pid_t clientPID,
+int VARLIST_GetFirst( int client_id,
                       int searchType,
                       VarInfo *pVarInfo,
                       char *buf,
@@ -75,7 +78,7 @@ int VARLIST_GetFirst( pid_t clientPID,
                       size_t *len,
                       int *context );
 
-int VARLIST_GetNext( pid_t clientPID,
+int VARLIST_GetNext( int client_id,
                      int context,
                      VarInfo *pVarInfo,
                      char *buf,

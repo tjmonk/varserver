@@ -36,7 +36,7 @@ SOFTWARE.
         Public function declarations
 ============================================================================*/
 
-int TRANSACTION_New( pid_t clientPID,
+int TRANSACTION_New( int client_id,
                      void *pData,
                      uint32_t *pHandle );
 

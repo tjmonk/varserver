@@ -96,7 +96,7 @@ int VARSERVER_Close( VARSERVER_HANDLE hVarServer );
 int VARSERVER_Test( VARSERVER_HANDLE hVarServer );
 int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,
                          VarInfo *pVarInfo );
-int VARSERVER_WaitSignal( int *sigval );
+int VARSERVER_WaitSignal( VARSERVER_HANDLE hVarServer, int *sigval );
 
 /* Flag functions */
 int VARSERVER_StrToFlags( char *flagsString,
@@ -166,8 +166,6 @@ int VAR_SetStr( VARSERVER_HANDLE hVarServer,
 int VAR_SetNameValue( VARSERVER_HANDLE hVarServer,
                       char *name,
                       char *value );
-
-int VARSERVER_WaitSignal( int *sigval );
 
 sigset_t VARSERVER_SigMask( void );
 

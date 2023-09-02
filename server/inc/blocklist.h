@@ -36,7 +36,9 @@ SOFTWARE.
         Public function declarations
 ============================================================================*/
 
-int BlockClient( VarClient *pVarClient, NotificationType notifyType );
+int BlockClient( VarClient *pVarClient,
+                 NotificationType notifyType,
+                 VAR_HANDLE hVar );
 int UnblockClients( VAR_HANDLE hVar,
                     NotificationType notifyType,
                     int (*cb)( VarClient *pVarClient, void *arg ),

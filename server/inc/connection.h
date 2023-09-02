@@ -43,4 +43,6 @@ SOFTWARE.
 int ConnectionProcessor( int sock,
                          int (*fn)( VarClient *pVarClient, SockRequest *pReq ));
 
+int ConnectionSendVar( VarClient *pVarClient, VarInfo *pVarInfo );
+
 #endif

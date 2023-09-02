@@ -118,8 +118,8 @@ static uint32_t TransactionCounter = 0L;
     object and returns a handle to it
 
     @param[in]
-        clientPID
-            the process identifier of the client initiating the transaction
+        client_id
+            the identifier of the client initiating the transaction
 
     @param[in]
         pData
@@ -135,7 +135,7 @@ static uint32_t TransactionCounter = 0L;
     @retval ENOMEM memory allocation problem
 
 ==============================================================================*/
-int TRANSACTION_New( pid_t clientPID,
+int TRANSACTION_New( int client_id,
                      void *pData,
                      uint32_t *pHandle )
 {
@@ -160,7 +160,7 @@ int TRANSACTION_New( pid_t clientPID,
         if( pTransaction != NULL )
         {
             /* populate the ValidationReqeuest object */
-            pTransaction->requestor = clientPID;
+            pTransaction->requestor = client_id;
             pTransaction->pInfo = pData;
             pTransaction->transactionID = ++TransactionCounter;
 

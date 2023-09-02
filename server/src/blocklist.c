@@ -122,12 +122,18 @@ static uint64_t *pBlockedClientCount = NULL;
         notifyType
             indicates the type of notification the client is blocked on
 
+    @param[in]
+        hVar
+            handle to the variable we are blocked on
+
     @retval EOK the client was successfully added to the blocked client list
     @retval EINVAL invalid arguments
     @retval ENOMEM memory allocation problem
 
 ==============================================================================*/
-int BlockClient( VarClient *pVarClient, NotificationType notifyType )
+int BlockClient( VarClient *pVarClient,
+                 NotificationType notifyType,
+                 VAR_HANDLE hVar )
 {
     int result = EINVAL;
     BlockedClient *pBlockedClient;
@@ -151,7 +157,7 @@ int BlockClient( VarClient *pVarClient, NotificationType notifyType )
             /* populate the blocked client object */
             pBlockedClient->notifyType = notifyType;
             pBlockedClient->pVarClient = pVarClient;
-            pBlockedClient->hVar = pVarClient->rr.variableInfo.hVar;
+            pBlockedClient->hVar = hVar;
             pBlockedClient->pNext = NULL;
 
             /* insert the blocked client on the tail of the blocked
@@ -217,16 +223,26 @@ int UnblockClients( VAR_HANDLE hVar,
     BlockedClient *pNext;
     VarClient *pVarClient;
 
+    printf("Unblock clients\n");
     while( pBlockedClient != NULL )
     {
         if( pBlockedClient->pVarClient != NULL )
         {
+            printf("Checking client %d\n", pBlockedClient->pVarClient->rr.clientid );
+
             /* get a pointer to the blocked varclient */
             pVarClient = pBlockedClient->pVarClient;
+            printf("Looking for notifyType: %d\n", notifyType);
+            printf("Looking for hVar: %d\n", hVar );
+
+            printf("notifyType: %d\n", pBlockedClient->notifyType);
+            printf("hVar: %d\n", pBlockedClient->hVar );
+
             if( ( pBlockedClient->notifyType == notifyType ) &&
                 ( pBlockedClient->hVar == hVar ) )
             {
                 /* found a match */
+                printf("found a match\n");
                 if( pVarClient->debug >= LOG_DEBUG )
                 {
                     printf( "SERVER: unblocking client %d pid(%d)\n",
@@ -236,6 +252,7 @@ int UnblockClients( VAR_HANDLE hVar,
 
                 if( cb != NULL )
                 {
+                    printf("calling callback\n");
                     cb( pVarClient, arg );
                 }
 
@@ -277,8 +294,12 @@ int UnblockClients( VAR_HANDLE hVar,
                 pBlockedClient->pNext = freelist;
                 freelist = pBlockedClient;
 
-                /* unblock the client by posting to the client semaphore */
-                sem_post( &pVarClient->sem );
+                /* for sharedmem clients, unblock the client by posting to the
+                   client semaphore */
+                if ( pVarClient->rr.client_pid != -1 )
+                {
+                    sem_post( &pVarClient->sem );
+                }
 
                 /* indicate that a client was unblocked */
                 result = EOK;
