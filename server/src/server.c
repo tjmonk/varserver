@@ -59,6 +59,7 @@ SOFTWARE.
 #include <fcntl.h>
 #include <semaphore.h>
 #include <string.h>
+#include <systemd/sd-daemon.h>
 #include <varserver/varclient.h>
 #include <varserver/varserver.h>
 #include "varlist.h"
@@ -331,6 +332,9 @@ void main(int argc, char **argv)
 
         /* register the real-time signal handler */
         RegisterHandler(handler);
+
+        /* tell service manager we are running */
+        sd_notify( 0, "READY=1" );
 
         /* loop forever processing signals */
         while(1)

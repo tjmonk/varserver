@@ -33,6 +33,7 @@ target_include_directories( ${PROJECT_NAME}
 target_link_libraries( ${PROJECT_NAME}
     ${CMAKE_THREAD_LIBS_INIT}
     rt
+    systemd
     varserver
 )
 
