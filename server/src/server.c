@@ -59,7 +59,6 @@ SOFTWARE.
 #include <fcntl.h>
 #include <semaphore.h>
 #include <string.h>
-#include <systemd/sd-daemon.h>
 #include <varserver/varclient.h>
 #include <varserver/varserver.h>
 #include "varlist.h"
@@ -317,25 +316,18 @@ static RequestHandler RequestHandlers[] =
 ==============================================================================*/
 void main(int argc, char **argv)
 {
-    sigset_t mask;
-    siginfo_t info;
-    int signum;
-    int count = 0;
     ServerInfo *pServerInfo = NULL;
+
+    /* initialize the varserver statistics */
+    InitStats();
+
+    /* register the real-time signal handler */
+    RegisterHandler(handler);
 
     /* Set up server information structure */
     pServerInfo = InitServerInfo();
     if( pServerInfo != NULL )
     {
-        /* initialize the varserver statistics */
-        InitStats();
-
-        /* register the real-time signal handler */
-        RegisterHandler(handler);
-
-        /* tell service manager we are running */
-        sd_notify( 0, "READY=1" );
-
         /* loop forever processing signals */
         while(1)
         {

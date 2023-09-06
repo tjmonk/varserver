@@ -73,6 +73,7 @@ SOFTWARE.
         Private function declarations
 ==============================================================================*/
 
+static int varserver_connect( VarClient *pVarClient );
 static int ClientRequest( VarClient *pVarClient, int signal );
 static VarClient *NewClient( size_t workbufsize );
 static int ClientCleanup( VarClient *pVarClient );
@@ -190,21 +191,17 @@ VARSERVER_HANDLE VARSERVER_OpenExt( size_t workbufsize )
         sigprocmask(SIG_BLOCK, &pTempVarClient->mask, NULL );
 
         /* initialize the server information object */
-        if( InitServerInfo(pTempVarClient) == EOK )
+        if( varserver_connect(pTempVarClient) == EOK )
         {
-            /* tell the variable server about us */
-            if( ClientRequest( pTempVarClient, SIG_NEWCLIENT ) == EOK )
+            if( pTempVarClient->debug >= LOG_DEBUG )
             {
-                if( pTempVarClient->debug >= LOG_DEBUG )
-                {
-                    printf( "CLIENT: identifier is %d\n",
-                            pTempVarClient->clientid );
-                }
+                printf( "CLIENT: identifier is %d\n",
+                        pTempVarClient->clientid );
+            }
 
-                if ( pTempVarClient->clientid != 0 )
-                {
-                    pVarClient = pTempVarClient;
-                }
+            if ( pTempVarClient->clientid != 0 )
+            {
+                pVarClient = pTempVarClient;
             }
         }
     }
@@ -215,6 +212,72 @@ VARSERVER_HANDLE VARSERVER_OpenExt( size_t workbufsize )
     }
 
     return pVarClient;
+}
+
+/*============================================================================*/
+/*  varserver_connect                                                         */
+/*!
+    Connect to the varserver
+
+    The varserver_connect function tries to connect to the variable
+    server.  If the server is not available, the function will sleep for
+    1 second before trying again.  It will try to connect 10 times over 10
+    seconds before giving up.
+
+    @param[in]
+        pVarClient
+            pointer to the variable client trying to connect
+
+    @retval EOK connection successful
+    @retval EINVAL invalid argument
+    @retval ENOENT variable server is not available
+
+==============================================================================*/
+static int varserver_connect( VarClient *pVarClient )
+{
+    int result = EINVAL;
+    int tries = 10;
+    int rc;
+    bool done = false;
+
+    if ( pVarClient != NULL )
+    {
+        result = ENOENT;
+
+        while ( --tries > 0 && !done )
+        {
+            rc = InitServerInfo( pVarClient );
+            if ( rc == EOK )
+            {
+                while ( --tries > 0 && !done )
+                {
+                    rc = ClientRequest( pVarClient, SIG_NEWCLIENT );
+                    if ( rc == EOK )
+                    {
+                        result = EOK;
+                        done = true;
+                    }
+                    else
+                    {
+                        /* wait and try again to connect */
+                        sleep( 1 );
+                    }
+                }
+            }
+            else if ( rc == ENOENT )
+            {
+                /* wait and try again to connect */
+                sleep(1);
+            }
+            else
+            {
+                result = rc;
+                done = true;
+            }
+        }
+    }
+
+    return result;
 }
 
 /*============================================================================*/
@@ -2822,8 +2885,9 @@ static VarClient *ValidateHandle( VARSERVER_HANDLE hVarServer )
     to get information about the server including the server's process
     identifier which is used to send signals from the client to the server.
 
-    @retval pointer to the Variable Server's ServerInfo object
-    @retval NULL - the Variable Server's ServerInfo object could not be read
+    @retval EOK got a pointer to the server info
+    @retval ENOMEM cannot allocate server info
+    @retval ENOENT the server info could not be read
 
 ==============================================================================*/
 static int InitServerInfo( VarClient *pVarClient )
@@ -2855,14 +2919,23 @@ static int InitServerInfo( VarClient *pVarClient )
 
                 result = EOK;
             }
-            else if( pVarClient->debug >= LOG_ERR )
+            else
             {
-                perror("mmap");
+                result = ENOMEM;
+
+                if( pVarClient->debug >= LOG_ERR )
+                {
+                    perror("mmap");
+                }
             }
         }
-        else if( pVarClient->debug >= LOG_ERR )
+        else
         {
-            perror("shm_open");
+            result = ENOENT;
+            if( pVarClient->debug >= LOG_ERR )
+            {
+                perror("shm_open");
+            }
         }
     }
 
@@ -2948,11 +3021,6 @@ static int ClientRequest( VarClient *pVarClient, int signal )
 
     if( ( result != EOK ) &&
         ( pVarClient->debug >= LOG_ERR ) )
-    {
-        printf("%s failed: (%d) %s\n", __func__, result, strerror(result));
-    }
-
-    if (result != EOK )
     {
         printf("%s failed: (%d) %s\n", __func__, result, strerror(result));
     }
