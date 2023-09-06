@@ -52,6 +52,7 @@ SOFTWARE.
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include <varserver/varserver.h>
 
 /*==============================================================================
@@ -85,7 +86,7 @@ typedef struct _get_var_state
     bool showQueryCount;
 
     /*! query counter */
-    size_t queryCounter;
+    uint32_t queryCounter;
 
     /*! suppress newline */
     bool suppressNewline;
@@ -420,7 +421,7 @@ static int ProcessQuery( GetVarState *pState )
                 /* output the query counter if requested */
                 if( pState->showQueryCount == true )
                 {
-                    dprintf(fd, "%ld,", ++pState->queryCounter );
+                    dprintf(fd, "%"PRIu32",", ++pState->queryCounter );
                 }
 
                 if ( pState->timingTest == true )

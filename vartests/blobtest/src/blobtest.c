@@ -54,6 +54,7 @@ SOFTWARE.
 #include <syslog.h>
 #include <fcntl.h>
 #include <time.h>
+#include <inttypes.h>
 #include <varserver/varserver.h>
 
 /*==============================================================================
@@ -106,13 +107,13 @@ typedef struct blobtestState
     int delay;
 
     /*! count render actions*/
-    size_t rendercount;
+    uint32_t rendercount;
 
     /*! count calc actions */
-    size_t calccount;
+    uint32_t calccount;
 
     /*! modified count */
-    size_t modifiedcount;
+    uint32_t modifiedcount;
 
     /*! object used for setting and getting the blob data */
     VarObject obj;
@@ -895,7 +896,7 @@ static void HandlePrintRequest( BlobTestState *pState, int sigval )
             state.rendercount++;
             if ( pState->verbose == true )
             {
-                printf( "Rendering %s [%ld]\n",
+                printf( "Rendering %s [%"PRIu32"]\n",
                         pState->varname,
                         pState->rendercount );
             }
@@ -943,7 +944,7 @@ static void HandleCalcRequest( BlobTestState *pState, int sigval )
             pState->calccount++;
             if ( pState->verbose == true )
             {
-                printf( "Calculating %s [%ld]\n",
+                printf( "Calculating %s [%"PRIu32"]\n",
                         pState->varname,
                         pState->calccount );
             }
@@ -989,7 +990,7 @@ static void HandleModifiedNotification( BlobTestState *pState, int sigval )
                 }
 
                 PrintBlobObj( pState, &pState->obj, STDOUT_FILENO );
-                printf("\n%ld\n", pState->modifiedcount);
+                printf("\n%"PRIu32"\n", pState->modifiedcount);
             }
         }
     }
@@ -1047,7 +1048,7 @@ static void HandleQueueModifiedNotification( BlobTestState *pState )
                                   &pState->notification.obj,
                                   STDOUT_FILENO );
 
-                    printf("\n%ld\n", pState->modifiedcount);
+                    printf("\n%"PRIu32"\n", pState->modifiedcount);
                 }
             }
         } while ( rc == EOK );
@@ -1133,6 +1134,7 @@ static int GetRandomData( BlobTestState *pState, VarObject *pVarObject )
 {
     int result = EINVAL;
     int fd;
+    ssize_t n;
 
     if ( ( pState != NULL ) &&
          ( pVarObject != NULL ) )
@@ -1148,7 +1150,12 @@ static int GetRandomData( BlobTestState *pState, VarObject *pVarObject )
             fd = open("/dev/urandom", O_RDONLY );
             if ( fd != -1 )
             {
-                read( fd, pVarObject->val.blob, pVarObject->len );
+                n = read( fd, pVarObject->val.blob, pVarObject->len );
+                if ( n == pVarObject->len )
+                {
+                    result = EOK;
+                }
+
                 close( fd );
 
                 if ( pState->calc == true )
@@ -1157,7 +1164,6 @@ static int GetRandomData( BlobTestState *pState, VarObject *pVarObject )
                             &pState->calccount,
                             sizeof( size_t ));
                 }
-                result = EOK;
             }
         }
         else

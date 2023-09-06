@@ -63,6 +63,7 @@ SOFTWARE.
 #include <errno.h>
 #include <semaphore.h>
 #include <string.h>
+#include <inttypes.h>
 #include <varserver/varobject.h>
 #include <varserver/varclient.h>
 #include <varserver/varserver.h>
@@ -2773,7 +2774,7 @@ static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf )
                 break;
 
             case VARTYPE_BLOB:
-                dprintf(fd, "%s len=%ld>", "<object:", pInfo->var.len);
+                dprintf(fd, "%s len=%"PRIu32">", "<object:", pInfo->var.len);
                 result = EOK;
                 break;
 

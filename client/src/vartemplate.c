@@ -703,14 +703,22 @@ static int SubstituteVariable( VARSERVER_HANDLE hVarServer, TState *pTState )
 static int FlushOutputBuffer( TState *pTState )
 {
     int result = EINVAL;
+    ssize_t n;
 
     if ( ( pTState != NULL ) &&
          ( pTState->output != NULL ) )
     {
         if( pTState->j != 0 )
         {
+            /* indicate success */
+            result = EOK;
+
             /* output the output buffer */
-            write( pTState->fd_out, pTState->output, pTState->j );
+            n = write( pTState->fd_out, pTState->output, pTState->j );
+            if ( n != pTState->j )
+            {
+                result = EIO;
+            }
 
             /* reset the output buffer */
             memset( pTState->output, 0, pTState->j );
@@ -718,9 +726,6 @@ static int FlushOutputBuffer( TState *pTState )
             /* reset the pointer to the beginning of the output buffer */
             pTState->j = 0;
         }
-
-        /* indicate success */
-        result = EOK;
     }
 
     return result;

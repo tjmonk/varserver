@@ -59,6 +59,7 @@ SOFTWARE.
 #include <fcntl.h>
 #include <semaphore.h>
 #include <string.h>
+#include <inttypes.h>
 #include <varserver/varclient.h>
 #include <varserver/varserver.h>
 #include "varlist.h"
@@ -1778,7 +1779,7 @@ static int PrintClientInfo( VarInfo *pVarInfo, char *buf, size_t len )
             {
                 n = snprintf( &buf[offset],
                             len,
-                            "id: %d, blk: %d, txn: %lu, pid: %d\n",
+                            "id: %d, blk: %d, txn: %"PRIu64", pid: %d\n",
                             pVarClient->clientid,
                             pVarClient->blocked,
                             pVarClient->transactionCount,
