@@ -412,6 +412,10 @@ void handler(int sig, siginfo_t *info, void *ucontext)
     {
         STATS_Process();
     }
+    else if ( sig == SIGINT )
+    {
+        exit( 1 );
+    }
     else
     {
         printf("SERVER: unhandled signal: %d\n", sig);
