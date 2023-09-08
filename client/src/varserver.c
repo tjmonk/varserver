@@ -95,6 +95,8 @@ static int var_CopyBlobVarObjectToWorkbuf( VarClient *pVarClient,
 
 static void DeleteClientQueue( VarClient *pVarClient );
 
+static int var_parseName( char *dst, size_t len, char *src, uint32_t *id );
+
 /*==============================================================================
         File scoped variables
 ==============================================================================*/
@@ -1287,9 +1289,13 @@ VAR_HANDLE VAR_FindByName( VARSERVER_HANDLE hVarServer, char *pName )
         len = strlen(pName);
         if( len < MAX_NAME_LEN )
         {
-            /* copy the name to the variable info request */
-            strcpy(pVarClient->variableInfo.name, pName );
             pVarClient->variableInfo.instanceID = 0;
+
+            /* copy the name to the variable info request */
+            var_parseName( pVarClient->variableInfo.name,
+                           MAX_NAME_LEN,
+                           pName,
+                           &pVarClient->variableInfo.instanceID );
 
             /* specify the request type */
             pVarClient->requestType = VARREQUEST_FIND;
@@ -1303,6 +1309,115 @@ VAR_HANDLE VAR_FindByName( VARSERVER_HANDLE hVarServer, char *pName )
     }
 
     return hVar;
+}
+
+/*============================================================================*/
+/*  var_parseName                                                             */
+/*!
+    Parse a variable name and extract its instance identifier
+
+    The var_parseName function processes a variable name and
+    extracts its instance identifier.
+
+    eg
+
+    [12345]/foo/baa/baz -> "/foo/baa/baz", 12345
+    /foo[12345]/baa/baz -> "/foo/baa/baz", 12345
+
+    @param[in,out]
+        dst
+            output buffer for variable name string
+
+    @param[in]
+        len
+            size of output buffer
+
+    @param[in]
+        src
+            pointer to input buffer
+
+    @param[in,out]
+        id
+            pointer to a uint32 to store the instance id
+
+    @retval EOK variable name processed ok
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+static int var_parseName( char *dst, size_t len, char *src, uint32_t *id )
+{
+    int result = EINVAL;
+    char idstr[32];
+    int i;
+    int state = 0;
+    char *s = src;
+    char *d = dst;
+    int n = 0;
+    char c;
+
+    if ( ( s != NULL ) &&
+         ( d != NULL ) &&
+         ( id != NULL ) )
+    {
+        while( ( ( c = *s++ ) != 0 ) &&
+               ( n < len-1 ) )
+        {
+            switch( state )
+            {
+                case 0:
+                    /* looking for instanceID */
+                    if ( c == '[' )
+                    {
+                        /* start of instanceID */
+                        state = 1;
+                    }
+                    else
+                    {
+                        /* collect variable name character */
+                        *d++ = c;
+                        n++;
+                    }
+                    break;
+
+                case 1:
+                    /* collect instance ID */
+                    if ( c == ']' )
+                    {
+                        /* terminate instanceID */
+                        idstr[i] = 0;
+                        *id = atol(idstr);
+                        state = 2;
+                    }
+                    else
+                    {
+                        if ( i < 31 )
+                        {
+                            idstr[i++] = c;
+                        }
+                    }
+                    break;
+
+                case 2:
+                    /* collect variable name character */
+                    *d++ = c;
+                    n++;
+                    break;
+
+                default:
+                    /* should never get here */
+                    *d++ = c;
+                    n++;
+                    break;
+            }
+        }
+
+        /* NUL terminate the name */
+        *d = '\0';
+
+        result = EOK;
+    }
+
+    return result;
 }
 
 /*============================================================================*/
@@ -2402,6 +2517,9 @@ int VAR_GetFirst( VARSERVER_HANDLE hVarServer,
                         pVarClient->variableInfo.name,
                         MAX_NAME_LEN+1 );
 
+                /* get the instanceID */
+                query->instanceID = pVarClient->variableInfo.instanceID;
+
                 /* get the handle of the variable we found */
                 query->hVar = pVarClient->variableInfo.hVar;
             }
@@ -2472,6 +2590,9 @@ int VAR_GetNext( VARSERVER_HANDLE hVarServer,
                 memcpy( query->name,
                         pVarClient->variableInfo.name,
                         MAX_NAME_LEN+1 );
+
+                /* get the instance ID */
+                query->instanceID = pVarClient->variableInfo.instanceID;
 
                 /* get the handle of the variable we found */
                 query->hVar = pVarClient->variableInfo.hVar;
@@ -2774,7 +2895,10 @@ static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf )
                 break;
 
             case VARTYPE_BLOB:
-                dprintf(fd, "%s len=%"PRIu32">", "<object:", pInfo->var.len);
+                dprintf( fd,
+                         "%s len=%"PRIu32">",
+                         "<object:",
+                         (uint32_t)(pInfo->var.len));
                 result = EOK;
                 break;
 

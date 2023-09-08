@@ -187,6 +187,7 @@ static void usage( char *cmdname )
                 "usage: %s [-n name] [-v] [-h]\n"
                 " [-n name] : variable name search term\n"
                 " [-f flagslist] : variable flags search term\n"
+                " [-i instanceID]: instance identifier search term\n"
                 " [-h] : display this help\n"
                 " [-v] : output values\n",
                 cmdname );
@@ -223,7 +224,7 @@ static int ProcessOptions( int argC,
 {
     int c;
     int result = EINVAL;
-    const char *options = "hvn:f:";
+    const char *options = "hvn:f:i:";
 
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
@@ -232,6 +233,11 @@ static int ProcessOptions( int argC,
         {
             switch( c )
             {
+                case 'i':
+                    pState->searchType |= QUERY_INSTANCEID;
+                    pState->instanceID = atol(optarg);
+                    break;
+
                 case 'v':
                     pState->searchType |= QUERY_SHOWVALUE;
                     break;

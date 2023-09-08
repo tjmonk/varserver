@@ -137,7 +137,14 @@ int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
     result = VAR_GetFirst( hVarServer, &query, &obj );
     while ( result == EOK )
     {
-        dprintf(fd, "%s", query.name );
+        if ( query.instanceID == 0 )
+        {
+            dprintf(fd, "%s", query.name );
+        }
+        else
+        {
+            dprintf(fd, "[%d]%s", query.instanceID, query.name );
+        }
 
         if( searchType & QUERY_SHOWVALUE )
         {

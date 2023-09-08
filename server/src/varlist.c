@@ -2736,6 +2736,9 @@ int VARLIST_GetFirst( pid_t clientPID,
                     /* copy the name */
                     memcpy( pVarInfo->name, pVarStorage->name, MAX_NAME_LEN+1 );
 
+                    /* copy the instanceID */
+                    pVarInfo->instanceID = pVarStorage->instanceID;
+
                     /* copy the format specifier */
                     memcpy( pVarInfo->formatspec,
                             pVarStorage->formatspec,
@@ -2853,6 +2856,9 @@ int VARLIST_GetNext( pid_t clientPID,
                 /* copy the name */
                 memcpy( pVarInfo->name, pVarStorage->name, MAX_NAME_LEN+1 );
 
+                /* copy the instanceID */
+                pVarInfo->instanceID = pVarStorage->instanceID;
+
                 /* copy the format specifier */
                 memcpy( pVarInfo->formatspec,
                         pVarStorage->formatspec,
@@ -2965,6 +2971,7 @@ static SearchContext *varlist_NewSearchContext( pid_t clientPID,
         ++contextIdent;
         p->contextId = contextIdent;
         p->clientPID = clientPID;
+        p->query.instanceID = pVarInfo->instanceID;
         p->query.flags = pVarInfo->flags;
         p->query.type = searchType;
         memcpy(&(p->query.tagspec), &(pVarInfo->tagspec), MAX_TAGSPEC_LEN );
