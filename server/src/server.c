@@ -880,6 +880,10 @@ static int ProcessVarRequestNew( VarClient *pVarClient )
             /* return the new variable's handle */
             pVarClient->responseVal = varhandle;
         }
+        else
+        {
+            pVarClient->responseVal = VAR_INVALID;
+        }
     }
 
     return result;

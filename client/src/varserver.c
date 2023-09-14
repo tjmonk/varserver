@@ -478,10 +478,12 @@ int VARSERVER_Debug( VARSERVER_HANDLE hVarServer, int debug )
         hVarServer
             handle to the Variable Server
 
-    @param[out]
+    @param[in, out]
         pVarInfo
             pointer to the VarInfo object containing information
-            about the variable to be created
+            about the variable to be created.  After successful
+            creation pVarInfo->hVar contains the handle to the
+            created variable.
 
     @param[out]
         pLen
@@ -508,10 +510,12 @@ int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,
         rc = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
         if( rc == EOK )
         {
-            result = pVarClient->responseVal;
+            pVarInfo->hVar = pVarClient->responseVal;
+            result = EOK;
         }
         else
         {
+            pVarInfo->hVar = VAR_INVALID;
             result = rc;
         }
 
@@ -2496,7 +2500,7 @@ int VAR_GetFirst( VARSERVER_HANDLE hVarServer,
             len = strlen(query->match);
             if( ( len > 0 ) && ( len < pVarClient->workbufsize ) )
             {
-                /* copy the search string into the working buffer */
+                /* copy the sxearch string into the working buffer */
                 p = &pVarClient->workbuf;
                 memcpy( p, query->match, len );
 
