@@ -107,6 +107,7 @@ static const char *flagNames[] =
     "readonly",
     "hidden",
     "dirty",
+    "public",
     NULL
 };
 
@@ -1351,8 +1352,8 @@ VAR_HANDLE VAR_FindByName( VARSERVER_HANDLE hVarServer, char *pName )
 static int var_parseName( char *dst, size_t len, char *src, uint32_t *id )
 {
     int result = EINVAL;
-    char idstr[32];
-    int i;
+    char idstr[32] = {0};
+    int i = 0;
     int state = 0;
     char *s = src;
     char *d = dst;
