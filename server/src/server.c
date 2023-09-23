@@ -122,6 +122,8 @@ static int ProcessVarRequestFind( VarClient *pVarClient );
 static int ProcessVarRequestPrint( VarClient *pVarClient );
 static int ProcessVarRequestSet( VarClient *pVarClient );
 static int ProcessVarRequestType( VarClient *pVarClient );
+static int ProcessVarRequestFlags( VarClient *pVarClient );
+static int ProcessVarRequestInfo( VarClient *pVarClient );
 static int ProcessVarRequestName( VarClient *pVarClient );
 static int ProcessVarRequestLength( VarClient *pVarClient );
 static int ProcessVarRequestGet( VarClient *pVarClient );
@@ -238,6 +240,20 @@ static RequestHandler RequestHandlers[] =
         "LENGTH",
         ProcessVarRequestLength,
         "/varserver/stats/length",
+        NULL
+    },
+    {
+        VARREQUEST_FLAGS,
+        "FLAGS",
+        ProcessVarRequestFlags,
+        "/varserver/stats/flags",
+        NULL
+    },
+    {
+        VARREQUEST_INFO,
+        "INFO",
+        ProcessVarRequestInfo,
+        "/varserver/stats/info",
         NULL
     },
     {
@@ -1322,6 +1338,85 @@ static int ProcessVarRequestLength( VarClient *pVarClient )
     {
         /* get the variable length */
         result = VARLIST_GetLength( &(pVarClient->variableInfo) );
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  ProcessVarRequestFlags                                                    */
+/*!
+    Process a FLAGS variable request from a client
+
+    The ProcessVarRequestFlags function handles a "variable FLAGS" request
+    from a client.  It requests the variable flags for the specified
+    variable.
+
+    @param[in]
+        pVarClient
+            Pointer to the client data structure
+
+    @retval EOK the variable flags were retrieved
+    @retval ENOENT the variable was not found
+    @retval EINVAL the client is invalid
+    @retval ENOTSUP the client is the wrong version
+
+==============================================================================*/
+static int ProcessVarRequestFlags( VarClient *pVarClient )
+{
+    int result = EINVAL;
+
+    /* validate the client object */
+    result = ValidateClient( pVarClient );
+    if( result == EOK)
+    {
+        /* get the variable length */
+        result = VARLIST_GetFlags( &(pVarClient->variableInfo) );
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  ProcessVarRequestInfo                                                     */
+/*!
+    Process an INFO variable request from a client
+
+    The ProcessVarRequestInfo function handles a "variable INFO" request
+    from a client.  It requests the variable information for the specified
+    variable.
+
+    Variable information includes
+
+    - name
+    - permissions
+    - format specifier
+    - flags
+    - tags
+    - instanceID
+    - guid
+
+
+    @param[in]
+        pVarClient
+            Pointer to the client data structure
+
+    @retval EOK the variable info was retrieved
+    @retval ENOENT the variable was not found
+    @retval EINVAL the client is invalid
+    @retval ENOTSUP the client is the wrong version
+
+==============================================================================*/
+static int ProcessVarRequestInfo( VarClient *pVarClient )
+{
+    int result = EINVAL;
+
+    /* validate the client object */
+    result = ValidateClient( pVarClient );
+    if( result == EOK)
+    {
+        /* get the variable length */
+        result = VARLIST_GetInfo( &(pVarClient->variableInfo) );
     }
 
     return result;

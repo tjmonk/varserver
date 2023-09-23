@@ -59,6 +59,9 @@ int VARLIST_Set( pid_t clientPID,
 int VARLIST_GetType( VarInfo *pVarInfo );
 int VARLIST_GetName( VarInfo *pVarInfo );
 int VARLIST_GetLength( VarInfo *pVarInfo );
+int VARLIST_GetFlags( VarInfo *pVarInfo );
+int VARLIST_GetInfo( VarInfo *pVarInfo );
+
 int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid );
 int VARLIST_GetByHandle( pid_t clientPID,
                          VarInfo *pVarInfo,

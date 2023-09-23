@@ -128,6 +128,14 @@ int VAR_GetLength( VARSERVER_HANDLE hVarServer,
                    VAR_HANDLE hVar,
                    size_t *len );
 
+int VAR_GetFlags( VARSERVER_HANDLE hVarServer,
+                  VAR_HANDLE hVar,
+                  VarFlags *flags );
+
+int VAR_GetInfo( VARSERVER_HANDLE hVarServer,
+                 VAR_HANDLE hVar,
+                 VarInfo *pVarInfo );
+
 int VAR_Print( VARSERVER_HANDLE hVarServer,
                VAR_HANDLE hVar,
                int fd );

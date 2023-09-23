@@ -2035,6 +2035,102 @@ int VAR_GetLength( VARSERVER_HANDLE hVarServer,
             *len = pVarClient->variableInfo.var.len;
         }
     }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VAR_GetFlags                                                              */
+/*!
+    Get the flags of the specified variable
+
+    The VAR_GetFlags function queries the variable server for the
+    flags of the specified variable.
+
+    @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[in]
+        hVar
+            handle to the variable to be retrieved
+
+    @param[in]
+        flags
+            specifies the location where the flags should be stored
+
+    @retval EOK - the flags were retrieved ok
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+int VAR_GetFlags( VARSERVER_HANDLE hVarServer,
+                  VAR_HANDLE hVar,
+                  VarFlags *flags )
+{
+    int result = EINVAL;
+    VarClient *pVarClient = ValidateHandle( hVarServer );
+
+    if( ( pVarClient != NULL ) &&
+        ( flags != NULL ) )
+    {
+        pVarClient->requestType = VARREQUEST_FLAGS;
+        pVarClient->variableInfo.hVar = hVar;
+
+        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+        if( result == EOK )
+        {
+            *flags = pVarClient->variableInfo.flags;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VAR_GetInfo                                                               */
+/*!
+    Get the info of the specified variable
+
+    The VAR_GetInfo function queries the variable server for the
+    information of the specified variable.
+
+    @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[in]
+        hVar
+            handle to the variable to be retrieved
+
+    @param[in]
+        pVarInfo
+            pointer to a VarInfo object to store the variable info
+
+    @retval EOK - the flags were retrieved ok
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+int VAR_GetInfo( VARSERVER_HANDLE hVarServer,
+                 VAR_HANDLE hVar,
+                 VarInfo *pVarInfo )
+{
+    int result = EINVAL;
+    VarClient *pVarClient = ValidateHandle( hVarServer );
+
+    if( ( pVarClient != NULL ) &&
+        ( pVarInfo != NULL ) )
+    {
+        pVarClient->requestType = VARREQUEST_INFO;
+        pVarClient->variableInfo.hVar = hVar;
+
+        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+        if( result == EOK )
+        {
+            memcpy( pVarInfo, &pVarClient->variableInfo, sizeof( VarInfo ));
+        }
+    }
+
+    return result;
 }
 
 /*============================================================================*/

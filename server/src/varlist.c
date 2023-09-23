@@ -2315,6 +2315,114 @@ int VARLIST_GetLength( VarInfo *pVarInfo )
 }
 
 /*============================================================================*/
+/*  VARLIST_GetFlags                                                          */
+/*!
+    Handle a FLAGS request from a client
+
+    The VARLIST_GetFlags function handles a FLAGS request from a client.
+    It retrieves the flags for the specified variable
+
+    @param[in,out]
+        pVarInfo
+            Pointer to the variable definition containing the handle
+            of the variable to query
+
+    @retval EOK the variable was successfully set
+    @retval ENOENT the variable does not exist
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+int VARLIST_GetFlags( VarInfo *pVarInfo )
+{
+    int result = EINVAL;
+    VarStorage *pVarStorage;
+    VAR_HANDLE hVar;
+    char buf[BUFSIZ];
+
+    if( pVarInfo != NULL )
+    {
+        hVar = pVarInfo->hVar;
+
+        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
+            ( hVar <= varcount ) )
+        {
+            /* get a pointer to the variable storage for this variable */
+            pVarStorage = &varstore[hVar];
+
+            /* retrieve the flags */
+            pVarInfo->flags = pVarStorage->flags;
+            result = EOK;
+        }
+        else
+        {
+            result = ENOENT;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VARLIST_GetInfo                                                           */
+/*!
+    Handle a variable information request from a client
+
+    The VARLIST_GetInfo function handles an INFO request from a client.
+    It retrieves the VarInfo data for the specified variable
+
+    @param[in,out]
+        pVarInfo
+            Pointer to the variable definition containing the handle
+            of the variable to query
+
+    @retval EOK the variable was successfully set
+    @retval ENOENT the variable does not exist
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+int VARLIST_GetInfo( VarInfo *pVarInfo )
+{
+    int result = EINVAL;
+    VarStorage *pVarStorage;
+    VAR_HANDLE hVar;
+    char buf[BUFSIZ];
+
+    if( pVarInfo != NULL )
+    {
+        hVar = pVarInfo->hVar;
+
+        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
+            ( hVar <= varcount ) )
+        {
+            /* get a pointer to the variable storage for this variable */
+            pVarStorage = &varstore[hVar];
+
+            /* retrieve the VarInfo object */
+            pVarInfo->flags = pVarStorage->flags;
+            memcpy( pVarInfo->formatspec,
+                    pVarStorage->formatspec,
+                    MAX_FORMATSPEC_LEN );
+
+            pVarInfo->guid = pVarStorage->guid;
+            pVarInfo->instanceID = pVarStorage->instanceID;
+            memcpy( pVarInfo->name, pVarStorage->name, MAX_NAME_LEN );
+            pVarInfo->permissions = pVarStorage->permissions;
+            TAGLIST_TagsToString( pVarStorage->tags,
+                                  MAX_TAGS_LEN,
+                                  pVarInfo->tagspec,
+                                  MAX_TAGSPEC_LEN );
+            result = EOK;
+        }
+        else
+        {
+            result = ENOENT;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
 /*  VARLIST_RequestNotify                                                     */
 /*!
     Handle a notification registration request from a client

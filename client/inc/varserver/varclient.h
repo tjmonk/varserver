@@ -107,6 +107,12 @@ typedef enum _varRequest
     /*! Get Variable Length */
     VARREQUEST_LENGTH,
 
+    /*! Get Variable Flags */
+    VARREQUEST_FLAGS,
+
+    /*! Get Variable Info */
+    VARREQUEST_INFO,
+
     /*! Request Variable Notification */
     VARREQUEST_NOTIFY,
 
