@@ -68,7 +68,7 @@ SOFTWARE.
 /*==============================================================================
         Public function declarations
 ==============================================================================*/
-void main( int argc, char **argv );
+int main( int argc, char **argv );
 
 /*==============================================================================
         Private function declarations
@@ -98,7 +98,7 @@ void usage( void );
     @return none
 
 ==============================================================================*/
-void main(int argc, char **argv)
+int main(int argc, char **argv)
 {
     char *inputFile = NULL;
     char *outputFile;
@@ -154,6 +154,8 @@ void main(int argc, char **argv)
     {
         fprintf( stderr, "No input file specified\n" );
     }
+
+    return result;
 }
 
 /*============================================================================*/

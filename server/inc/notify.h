@@ -98,9 +98,7 @@ int NOTIFY_Signal( pid_t pid,
                    int handle,
                    pid_t *sentTo );
 
-int NOTIFY_Payload( pid_t pid,
-                    Notification **ppNotification,
-                    NotificationType type,
+int NOTIFY_Payload( Notification **ppNotification,
                     void *buf,
                     size_t len );
 

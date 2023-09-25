@@ -21,6 +21,14 @@ target_include_directories( ${PROJECT_NAME} PRIVATE
     ../client/inc
 	${CMAKE_BINARY_DIR} )
 
+target_compile_options( ${PROJECT_NAME}
+	PUBLIC
+	-Wall
+	-Wextra
+	-Wpedantic
+	-Werror
+)
+
 install(TARGETS ${PROJECT_NAME}
 	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} )
 

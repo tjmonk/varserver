@@ -22,6 +22,14 @@ target_link_libraries( ${PROJECT_NAME}
 	varserver
 )
 
+target_compile_options( ${PROJECT_NAME}
+	PUBLIC
+	-Wall
+	-Wextra
+	-Wpedantic
+	-Werror
+)
+
 set_target_properties(${PROJECT_NAME}
     PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"

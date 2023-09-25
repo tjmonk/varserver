@@ -186,8 +186,6 @@ int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle )
 {
     int result = EINVAL;
     int varhandle;
-    size_t len;
-    char *pStr;
     VarStorage *pVarStorage;
 
     if( ( pVarInfo != NULL ) &&
@@ -267,7 +265,7 @@ int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle )
         *pVarHandle = VAR_INVALID;
 
         /* iterate through the VarStorage */
-        for( hVar = 1; hVar <= varcount; hVar++ )
+        for( hVar = 1; hVar <= (VAR_HANDLE)varcount; hVar++ )
         {
             /* case insensitive name comparison */
             if( ( pVarInfo->instanceID == varstore[hVar].instanceID ) &&
@@ -344,7 +342,7 @@ int VARLIST_PrintByHandle( pid_t clientPID,
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -498,7 +496,6 @@ int VARLIST_GetByHandle( pid_t clientPID,
     int result = EINVAL;
     VAR_HANDLE hVar;
     size_t n;
-    uint8_t notifyType;
 
     if( ( pVarInfo != NULL ) &&
         ( buf != NULL ) )
@@ -506,7 +503,7 @@ int VARLIST_GetByHandle( pid_t clientPID,
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -621,7 +618,6 @@ int VARLIST_Set( pid_t clientPID,
     VarStorage *pVarStorage;
     VAR_HANDLE hVar;
     size_t n;
-    VarType type;
     uint32_t validateHandle;
     void *payload;
 
@@ -630,7 +626,7 @@ int VARLIST_Set( pid_t clientPID,
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= varcount ) &&
+            ( hVar <= (VAR_HANDLE)varcount ) &&
             ( validationInProgress != NULL ) )
         {
             /* get a pointer to the variable storage for this variable */
@@ -760,9 +756,7 @@ int VARLIST_Set( pid_t clientPID,
                                                               &n );
 
                     /* send the notification payloads */
-                    NOTIFY_Payload( clientPID,
-                                    &pVarStorage->pNotifications,
-                                    NOTIFY_MODIFIED_QUEUE,
+                    NOTIFY_Payload( &pVarStorage->pNotifications,
                                     payload,
                                     n );
 
@@ -1226,7 +1220,6 @@ static int varlist_Set16s( VarStorage *pVarStorage, VarInfo *pVarInfo )
 {
     int result = EINVAL;
     VarType srctype;
-    uint16_t ui;
     int16_t i;
 
     if( ( pVarStorage != NULL ) &&
@@ -1465,6 +1458,7 @@ static int varlist_Set32( VarStorage *pVarStorage, VarInfo *pVarInfo )
                     pVarStorage->var.val.ul = ul;
                     result = EOK;
                 }
+                break;
 
             case VARTYPE_UINT64:
                 if ( pVarInfo->var.val.ull > 4294967295 )
@@ -1756,6 +1750,7 @@ static int varlist_Set64( VarStorage *pVarStorage, VarInfo *pVarInfo )
                     pVarStorage->var.val.ull = ull;
                     result = EOK;
                 }
+                break;
 
             case VARTYPE_UINT64:
                 if ( pVarInfo->var.val.ull == pVarStorage->var.val.ull )
@@ -1892,7 +1887,7 @@ static int varlist_Set64s( VarStorage *pVarStorage, VarInfo *pVarInfo )
                 else
                 {
                     ll = (int64_t)(pVarInfo->var.val.ull);
-                    if ( ll == pVarStorage->var.val.ull )
+                    if ( ll == (int64_t)(pVarStorage->var.val.ull) )
                     {
                         result = EALREADY;
                     }
@@ -2193,14 +2188,13 @@ int VARLIST_GetType( VarInfo *pVarInfo )
     int result = EINVAL;
     VarStorage *pVarStorage;
     VAR_HANDLE hVar;
-    char buf[BUFSIZ];
 
     if( pVarInfo != NULL )
     {
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -2248,7 +2242,7 @@ int VARLIST_GetName( VarInfo *pVarInfo )
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -2289,14 +2283,13 @@ int VARLIST_GetLength( VarInfo *pVarInfo )
     int result = EINVAL;
     VarStorage *pVarStorage;
     VAR_HANDLE hVar;
-    char buf[BUFSIZ];
 
     if( pVarInfo != NULL )
     {
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -2337,14 +2330,13 @@ int VARLIST_GetFlags( VarInfo *pVarInfo )
     int result = EINVAL;
     VarStorage *pVarStorage;
     VAR_HANDLE hVar;
-    char buf[BUFSIZ];
 
     if( pVarInfo != NULL )
     {
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -2385,14 +2377,13 @@ int VARLIST_GetInfo( VarInfo *pVarInfo )
     int result = EINVAL;
     VarStorage *pVarStorage;
     VAR_HANDLE hVar;
-    char buf[BUFSIZ];
 
     if( pVarInfo != NULL )
     {
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -2461,7 +2452,7 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
         notifyType = pVarInfo->notificationType;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -2813,8 +2804,6 @@ int VARLIST_GetFirst( pid_t clientPID,
 {
     int result = EINVAL;
     VAR_HANDLE hVar;
-    size_t n;
-    uint8_t notifyType;
     SearchContext *ctx;
     VarStorage *pVarStorage;
 
@@ -2834,7 +2823,7 @@ int VARLIST_GetFirst( pid_t clientPID,
         {
             /* search through the variable list */
             while( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-                   ( hVar <= varcount ) )
+                   ( hVar <= (VAR_HANDLE)varcount ) )
             {
                 if( varlist_Match( hVar, ctx ) == EOK )
                 {
@@ -2937,8 +2926,6 @@ int VARLIST_GetNext( pid_t clientPID,
 {
     int result = EINVAL;
     VAR_HANDLE hVar;
-    size_t n;
-    uint8_t notifyType;
     SearchContext *ctx;
     VarStorage *pVarStorage;
 
@@ -2953,7 +2940,7 @@ int VARLIST_GetNext( pid_t clientPID,
 
         /* search through the variable list looking for a match */
         while( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-               ( hVar <= varcount ) )
+               ( hVar <= (VAR_HANDLE)varcount ) )
         {
             /* check if the current variable matches the search criteria */
             if( varlist_Match( hVar, ctx ) == EOK )
@@ -3202,7 +3189,7 @@ static int varlist_Match( VAR_HANDLE hVar, SearchContext *ctx )
 
     if ( ( ctx != NULL ) &&
          ( hVar < VARSERVER_MAX_VARIABLES ) &&
-         ( hVar <= varcount ) )
+         ( hVar <= (VAR_HANDLE)varcount ) )
     {
         /* get a pointer to the variable storage for this variable */
         pVarStorage = &varstore[hVar];

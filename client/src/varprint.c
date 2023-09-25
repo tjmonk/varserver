@@ -107,14 +107,10 @@ static int varprint_ReceiveFd( int sock, int *fd );
 @retval EINVAL invalid arguments
 
 ==============================================================================*/
-int VARPRINT_GetFileDescriptor( int requestorPID,
-                                int sock,
+int VARPRINT_GetFileDescriptor( int sock,
                                 int *fd )
 {
-    struct sockaddr_un addr;
-    char path[108];
     int result = EINVAL;
-    int count = 0;
     int conn;
 
     while ( 1 )
@@ -245,8 +241,6 @@ int VARPRINT_SendFileDescriptor( int responderPID, int fd )
     int sock;
     struct sockaddr_un addr;
     int result = EINVAL;
-    int conn;
-    int count = 0;
 
     /* Create a unix domain socket */
     sock = socket( AF_UNIX, SOCK_STREAM, 0 );

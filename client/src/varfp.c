@@ -121,7 +121,6 @@ typedef struct _VarFP
 VarFP *VARFP_Open( char *name, size_t len )
 {
     int result = EINVAL;
-    char clientName[BUFSIZ];
     pid_t pid;
     VarFP *pVarFP;
     int rc;

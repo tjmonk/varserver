@@ -394,7 +394,7 @@ int VARCACHE_Map( VarCache *pVarCache,
                   void *arg )
 {
     int result = EINVAL;
-    int idx;
+    size_t idx;
     VAR_HANDLE hVar;
 
     if ( ( pVarCache != NULL ) &&

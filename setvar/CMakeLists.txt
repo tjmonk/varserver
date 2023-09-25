@@ -22,6 +22,14 @@ target_link_libraries( ${PROJECT_NAME}
 	varserver
 )
 
+target_compile_options( ${PROJECT_NAME}
+	PUBLIC
+	-Wall
+	-Wextra
+	-Wpedantic
+	-Werror
+)
+
 install(TARGETS ${PROJECT_NAME}
 	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )

@@ -73,7 +73,7 @@ typedef struct tState
     char *output;
 
     /*! working output buffer length */
-    size_t outputLength;
+    ssize_t outputLength;
 
     /*! variable name buffer */
     char *varname;
@@ -85,7 +85,7 @@ typedef struct tState
     int fd_out;
 
     /*! current index in the output buffer */
-    size_t j;
+    ssize_t j;
 
     /*! current index in the variable name buffer */
     size_t k;
@@ -243,7 +243,6 @@ int TEMPLATE_StrToFile( VARSERVER_HANDLE hVarServer,
     char varname[BUFSIZ];
     int n = 0;
     TState state;
-    int rc;
 
     if ( ( hVarServer != NULL ) &&
          ( input != NULL ) &&
@@ -324,7 +323,7 @@ static int ProcessInputChunk( VARSERVER_HANDLE hVarServer,
     if ( ( hVarServer != NULL ) &&
          ( pTState != NULL ) &&
          ( input != NULL ) &&
-         ( len >= 0 ) )
+         ( len > 0 ) )
     {
         /* assume we are ok, until we are not */
         result = EOK;
@@ -571,7 +570,6 @@ static int CheckEndVariable( VARSERVER_HANDLE hVarServer,
                             char c )
 {
     int result = EINVAL;
-    char *varname;
 
     if ( ( pTState != NULL ) &&
          ( pTState->varname != NULL ) &&
@@ -595,9 +593,6 @@ static int CheckEndVariable( VARSERVER_HANDLE hVarServer,
         }
         else
         {
-            /* get a pointer to the variable name */
-            varname = pTState->varname;
-
             /* keep building the variable name */
             pTState->varname[pTState->k++] = c;
 

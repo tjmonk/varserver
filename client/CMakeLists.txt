@@ -48,6 +48,14 @@ target_include_directories( ${PROJECT_NAME} PRIVATE . )
 
 target_include_directories( ${PROJECT_NAME} PUBLIC inc )
 
+target_compile_options( ${PROJECT_NAME}
+	PUBLIC
+	-Wall
+	-Wextra
+	-Wpedantic
+	-Werror
+)
+
 install(TARGETS ${PROJECT_NAME}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/varserver)

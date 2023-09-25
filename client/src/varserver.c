@@ -179,12 +179,8 @@ VARSERVER_HANDLE VARSERVER_Open( void )
 ==============================================================================*/
 VARSERVER_HANDLE VARSERVER_OpenExt( size_t workbufsize )
 {
-    int i;
-    int result = EINVAL;
     VarClient *pTempVarClient = NULL;
     VarClient *pVarClient = NULL;
-    sigset_t mask;
-    static ServerInfo *pServerInfo = NULL;
 
     /* create a new client instance */
     pTempVarClient = NewClient( workbufsize );
@@ -651,8 +647,6 @@ int VARSERVER_WaitSignal( int *sigval )
 int VARSERVER_Signalfd( void )
 {
     sigset_t mask;
-    siginfo_t info;
-    int sig;
 
     /* initialize empty signal set */
     sigemptyset( &mask );
@@ -801,7 +795,7 @@ int VARSERVER_ParsePermissionSpec( char *permissionSpec,
                                    uint16_t *permissions,
                                    size_t len )
 {
-    int i = 0;
+    size_t i = 0;
     int result = EINVAL;
     char *permission;
     char buf[ MAX_PERMISSIONSPEC_LEN + 1 ];
@@ -1161,13 +1155,6 @@ int VARSERVER_ParseValueString( VarObject *var, char *valueString )
 {
     int result = EINVAL;
     size_t len;
-    int32_t lVal;
-    uint32_t ulVal;
-    int64_t llVal;
-    uint64_t ullVal;
-    int16_t iVal;
-    uint16_t uiVal;
-
     int base = 0;
 
     if( ( var != NULL ) &&
@@ -1357,7 +1344,7 @@ static int var_parseName( char *dst, size_t len, char *src, uint32_t *id )
     int state = 0;
     char *s = src;
     char *d = dst;
-    int n = 0;
+    size_t n = 0;
     char c;
 
     if ( ( s != NULL ) &&
@@ -1455,7 +1442,6 @@ int VAR_Get( VARSERVER_HANDLE hVarServer,
 {
     int result = EINVAL;
     VarClient *pVarClient = ValidateHandle( hVarServer );
-    int n;
 
     if( ( pVarClient != NULL ) &&
         ( pVarObject != NULL ) )
@@ -2390,9 +2376,6 @@ int VAR_Set( VARSERVER_HANDLE hVarServer,
              VarObject *pVarObject )
 {
     int result = EINVAL;
-    char *p;
-    size_t len;
-
     VarClient *pVarClient = ValidateHandle( hVarServer );
 
     if( ( pVarClient != NULL ) &&
@@ -2668,8 +2651,6 @@ int VAR_GetNext( VARSERVER_HANDLE hVarServer,
                  VarObject *obj )
 {
     int result = EINVAL;
-    char *p;
-    size_t len;
 
     VarClient *pVarClient = ValidateHandle( hVarServer );
 
@@ -2785,7 +2766,6 @@ int VAR_Print( VARSERVER_HANDLE hVarServer,
 {
     int result = EINVAL;
     pid_t responderPID;
-    int sock;
 
     VarClient *pVarClient = ValidateHandle( hVarServer );
 
@@ -2888,8 +2868,7 @@ int VAR_OpenPrintSession( VARSERVER_HANDLE hVarServer,
                 *hVar = pVarClient->variableInfo.hVar;
 
                 /* get the file descriptor we are printing to */
-                result = VARPRINT_GetFileDescriptor( pVarClient->peer_pid,
-                                                     sock,
+                result = VARPRINT_GetFileDescriptor( sock,
                                                      fd );
             }
 
@@ -3282,7 +3261,6 @@ static VarClient *NewClient( size_t workbufsize )
 {
     int res;
 	int fd;
-	int len;
 	pid_t pid;
     char clientname[BUFSIZ];
     VarClient *pVarClient = NULL;
@@ -3294,7 +3272,6 @@ static VarClient *NewClient( size_t workbufsize )
     /* build the varclient identifier */
 	pid = getpid();
 	sprintf(clientname, "/varclient_%d", pid);
-
 
 	/* get shared memory file descriptor (NOT a file) */
 	fd = shm_open(clientname, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
@@ -3366,7 +3343,6 @@ static VarClient *NewClient( size_t workbufsize )
 ==============================================================================*/
 static int NewClientSemaphore( VarClient *pVarClient )
 {
-    char semname[BUFSIZ];
     int result = EINVAL;
 
     if( pVarClient != NULL )
@@ -3467,7 +3443,7 @@ int VAR_GetFromQueue( VARSERVER_HANDLE hVarServer,
             /* get a pointer to the received VarObject */
             pSrc = (VarNotification *)buf;
 
-            if ( n > sizeof( VarNotification ) )
+            if ( n > (ssize_t)sizeof( VarNotification ) )
             {
                 /* calculate the length of the variable part of the message */
                 varlen = n - sizeof(VarNotification);
@@ -3541,7 +3517,6 @@ int VAR_GetFromQueue( VARSERVER_HANDLE hVarServer,
 static int DeleteClientSemaphore( VarClient *pVarClient )
 {
     int result = EINVAL;
-    char semname[BUFSIZ];
 
     if( pVarClient != NULL )
     {

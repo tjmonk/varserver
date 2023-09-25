@@ -398,8 +398,6 @@ int VAROBJECT_ValueFromString( char *str,
 int VAROBJECT_Copy( VarObject *pDst, VarObject *pSrc )
 {
     int result = EINVAL;
-    char *pSrcString;
-    size_t srclen;
 
     if( ( pSrc != NULL ) &&
         ( pDst != NULL ) )
@@ -509,6 +507,8 @@ static int varobject_CopyString( VarObject *pDst, VarObject *pSrc )
             but it does not have a string pointer */
         result = ENOTSUP;
     }
+
+    return result;
 }
 
 /*============================================================================*/
@@ -593,6 +593,8 @@ static int varobject_CopyBlob( VarObject *pDst, VarObject *pSrc )
             but it does not have a blob pointer */
         result = ENOTSUP;
     }
+
+    return result;
 }
 
 /*============================================================================*/
@@ -679,9 +681,16 @@ int VAROBJECT_ToString( VarObject *pVarObject, char *buf, size_t len )
         if ( result == EOK )
         {
             /* check for truncation */
-            if ( n >= len )
+            if ( n > 0 )
             {
-                result = E2BIG;
+                if ( (size_t)n >= len )
+                {
+                    result = E2BIG;
+                }
+            }
+            else
+            {
+                result = ENOTSUP;
             }
         }
     }
@@ -734,9 +743,7 @@ static int str_to_var( char *str,
                        uint32_t options )
 {
     int result = EINVAL;
-    size_t len;
     size_t n;
-    unsigned long ul;
     char *pStrCopy;
 
     if( ( str != NULL ) &&
@@ -839,9 +846,7 @@ static int blobstr_to_var( char *str,
                            uint32_t options )
 {
     int result = EINVAL;
-    size_t len;
     size_t n;
-    unsigned long ul;
     void *pBlobCopy;
 
     if( ( str != NULL ) &&
@@ -931,6 +936,9 @@ static int floatstr_to_var( char *str,
     int result = EINVAL;
     float f;
 
+    /* options currently unused */
+    (void)options;
+
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
     {
@@ -983,6 +991,9 @@ static int uint32str_to_var( char *str,
     int result = EINVAL;
     uint32_t ul;
 
+    /* options currently unused */
+    (void)options;
+
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
     {
@@ -1033,6 +1044,9 @@ static int int32str_to_var( char *str,
 {
     int result = EINVAL;
     int32_t l;
+
+    /* options currently unused */
+    (void)options;
 
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
@@ -1086,6 +1100,9 @@ static int uint64str_to_var( char *str,
     int result = EINVAL;
     uint64_t ull;
 
+    /* options currently unused */
+    (void)options;
+
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
     {
@@ -1136,6 +1153,9 @@ static int int64str_to_var( char *str,
 {
     int result = EINVAL;
     int64_t ll;
+
+    /* options currently unused */
+    (void)options;
 
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
@@ -1188,6 +1208,9 @@ static int uint16str_to_var( char *str,
 {
     int result = EINVAL;
     uint32_t ul;
+
+    /* options currently unused */
+    (void)options;
 
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
@@ -1244,8 +1267,10 @@ static int int16str_to_var( char *str,
                             uint32_t options )
 {
     int result = EINVAL;
-    uint32_t ul;
     long l;
+
+    /* options not currently used */
+    (void)options;
 
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )

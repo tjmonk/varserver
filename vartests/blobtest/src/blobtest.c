@@ -140,11 +140,11 @@ timer_t timerID;
         Private function declarations
 ==============================================================================*/
 
-void main(int argc, char **argv);
+int main(int argc, char **argv);
 static void usage( char *cmdname );
 static int ProcessOptions( int argC, char *argV[], BlobTestState *pState );
 static int GetRandomData( BlobTestState *pState, VarObject *pVarObject );
-static int PrintBlobObj( BlobTestState *pState, VarObject *pObj, int fd );
+static int PrintBlobObj( VarObject *pObj, int fd );
 static void SetupTerminationHandler( void );
 static void TerminationHandler( int signum, siginfo_t *info, void *ptr );
 static void CreateTimer( int timeoutms );
@@ -187,7 +187,7 @@ static void HandleTimer( BlobTestState *pState );
     @return none
 
 ==============================================================================*/
-void main(int argc, char **argv)
+int main(int argc, char **argv)
 {
     int rc;
 
@@ -238,6 +238,8 @@ void main(int argc, char **argv)
 
     /* clean up client resources */
     Cleanup( &state );
+
+    return 0;
 }
 
 /*============================================================================*/
@@ -446,7 +448,6 @@ static void usage( char *cmdname )
 static int ProcessOptions( int argC, char *argV[], BlobTestState *pState )
 {
     int c;
-    int result = EINVAL;
     const char *options = "vhgscpwn:d:qWf";
 
     if( ( pState != NULL ) &&
@@ -550,7 +551,6 @@ static int Setup( BlobTestState *pState )
 {
     int result = EINVAL;
     size_t len;
-    int rc;
 
     if ( pState != NULL )
     {
@@ -905,7 +905,7 @@ static void HandlePrintRequest( BlobTestState *pState, int sigval )
             VAR_Get( pState->hVarServer, hVar, &pState->obj );
 
             /* print the blob */
-            PrintBlobObj( pState, &pState->obj, fd );
+            PrintBlobObj( &pState->obj, fd );
         }
 
         /* Close the print session */
@@ -989,7 +989,7 @@ static void HandleModifiedNotification( BlobTestState *pState, int sigval )
                     dprintf( STDOUT_FILENO, "%s\n", pState->varname );
                 }
 
-                PrintBlobObj( pState, &pState->obj, STDOUT_FILENO );
+                PrintBlobObj( &pState->obj, STDOUT_FILENO );
                 printf("\n%"PRIu32"\n", pState->modifiedcount);
             }
         }
@@ -1044,8 +1044,7 @@ static void HandleQueueModifiedNotification( BlobTestState *pState )
                         dprintf( STDOUT_FILENO, "%s\n", state.varname );
                     }
 
-                    PrintBlobObj( pState,
-                                  &pState->notification.obj,
+                    PrintBlobObj( &pState->notification.obj,
                                   STDOUT_FILENO );
 
                     printf("\n%"PRIu32"\n", pState->modifiedcount);
@@ -1102,7 +1101,7 @@ static void HandleTimer( BlobTestState *pState )
 
                 if ( pState->verbose == true )
                 {
-                    PrintBlobObj( pState, &pState->obj, STDOUT_FILENO );
+                    PrintBlobObj( &pState->obj, STDOUT_FILENO );
                     printf("\n");
                 }
             }
@@ -1151,7 +1150,7 @@ static int GetRandomData( BlobTestState *pState, VarObject *pVarObject )
             if ( fd != -1 )
             {
                 n = read( fd, pVarObject->val.blob, pVarObject->len );
-                if ( n == pVarObject->len )
+                if ( n == (ssize_t)(pVarObject->len) )
                 {
                     result = EOK;
                 }
@@ -1201,11 +1200,11 @@ static int GetRandomData( BlobTestState *pState, VarObject *pVarObject )
     @retval EINVAL - invalid arguments
 
 ==============================================================================*/
-static int PrintBlobObj( BlobTestState *pState, VarObject *pObj, int fd )
+static int PrintBlobObj( VarObject *pObj, int fd )
 {
     int result = EINVAL;
     uint8_t *p;
-    int i;
+    size_t i;
     size_t len;
 
     if ( pObj != NULL )
@@ -1290,6 +1289,11 @@ static void SetupTerminationHandler( void )
 --============================================================================*/
 static void TerminationHandler( int signum, siginfo_t *info, void *ptr )
 {
+    /* signum, ptr, and info are unused */
+    (void)signum;
+    (void)info;
+    (void)ptr;
+
     syslog( LOG_ERR, "Abnormal termination of blobtest\n" );
     VARSERVER_Close( state.hVarServer );
 
@@ -1318,8 +1322,6 @@ static void CreateTimer( int timeoutms )
     int sigNo = SIG_VAR_TIMER;
     long secs;
     long msecs;
-
-    int result = EINVAL;
 
     secs = timeoutms / 1000;
     msecs = timeoutms % 1000;

@@ -47,8 +47,7 @@ SOFTWARE.
 int VARPRINT_SendFileDescriptor( int responderPID, int fd );
 
 
-int VARPRINT_GetFileDescriptor( int requestorPID,
-                                int sock,
+int VARPRINT_GetFileDescriptor( int sock,
                                 int *fd );
 
 int VARPRINT_SetupListener( pid_t requestorPID, int *sock );

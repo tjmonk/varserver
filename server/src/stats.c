@@ -204,9 +204,7 @@ static void CreateStatsTimer( int timeoutms )
     int sigNo = SIGRTMIN+5;
     long secs;
     long msecs;
-
     timer_t timerID;
-    int result = EINVAL;
 
     secs = timeoutms / 1000;
     msecs = timeoutms % 1000;

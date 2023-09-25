@@ -137,11 +137,8 @@ static int TimingTest( GetVarState *pState, VAR_HANDLE hVar );
 ==============================================================================*/
 int main(int argc, char **argv)
 {
-    VARSERVER_HANDLE hVarServer = NULL;
-    VAR_HANDLE hVar;
     int result;
     GetVarState state;
-    int fd;
 
     /*! clear the state object */
     memset( &state, 0, sizeof( GetVarState ) );
@@ -401,7 +398,6 @@ static int ProcessQuery( GetVarState *pState )
 {
     int result = EINVAL;
     VAR_HANDLE hVar;
-    int rc;
     int fd;
     bool done = false;
 

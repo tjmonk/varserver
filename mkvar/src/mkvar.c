@@ -86,7 +86,6 @@ typedef struct _make_var_state
 int main( int argc, char **argv );
 static int ProcessOptions( int argc, char **argv, MakeVarState *pState );
 static void usage( char *name );
-static int ProcessQuery( MakeVarState *pState );
 static int MakeVar( MakeVarState *pState );
 
 /*==============================================================================
@@ -114,8 +113,6 @@ static int MakeVar( MakeVarState *pState );
 ==============================================================================*/
 int main(int argc, char **argv)
 {
-    VARSERVER_HANDLE hVarServer = NULL;
-    VAR_HANDLE hVar;
     int result;
     MakeVarState state;
 

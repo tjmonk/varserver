@@ -113,7 +113,6 @@ static int taglist_Add( char *pTagName, uint16_t *pTagNumber );
 int TAGLIST_AddNew( char *pTagName, uint16_t *pTagNumber )
 {
     int result = EINVAL;
-    uint16_t tagNumber = 1;
 
     if( ( pTagName != NULL ) &&
         ( pTagNumber != NULL ) )
@@ -168,7 +167,7 @@ int TAGLIST_Parse( char *pTagspec, uint16_t *pTags, size_t len )
     char *r;
     char *pTagName;
     int rc;
-    int count = 0;
+    size_t count = 0;
 
     if( ( pTagspec != NULL ) &&
         ( pTags != NULL ) )
@@ -183,7 +182,7 @@ int TAGLIST_Parse( char *pTagspec, uint16_t *pTags, size_t len )
             /* copy the tagspec into our working buffer */
             strcpy( buf, pTagspec );
             r = buf;
-            while( pTagName = strtok_r( r, ",", &r ) )
+            while( ( pTagName = strtok_r( r, ",", &r ) ) != NULL )
             {
                 /* check if we have enough space in the tags output array */
                 if( count < len )
@@ -254,7 +253,7 @@ int TAGLIST_Parse( char *pTagspec, uint16_t *pTags, size_t len )
 ==============================================================================*/
 int TAGLIST_TagsToString( uint16_t *pTags, size_t len, char *pBuf, size_t n )
 {
-    int i;
+    size_t i;
     int result = EINVAL;
     uint16_t tagNumber;
     char tagName[MAX_TAGSPEC_LEN];

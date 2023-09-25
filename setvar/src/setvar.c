@@ -81,11 +81,9 @@ SOFTWARE.
     @return none
 
 ==============================================================================*/
-void main(int argc, char **argv)
+int main(int argc, char **argv)
 {
     VARSERVER_HANDLE hVarServer = NULL;
-    VAR_HANDLE hVar;
-    VarType type;
     int result;
 
     if( argc != 3 )
@@ -116,6 +114,8 @@ void main(int argc, char **argv)
     {
         fprintf( stderr, "%s\n", strerror( result ) );
     }
+
+    return 0;
 }
 
 /*! @}

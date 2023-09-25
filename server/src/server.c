@@ -110,7 +110,6 @@ static int NewClient( pid_t pid );
 static int ProcessRequest( siginfo_t *pInfo );
 static int UnblockClient( VarClient *pVarClient );
 static int GetClientID( void );
-static int SetupServerInfo( void );
 static ServerInfo *InitServerInfo( void );
 static int ValidateClient( VarClient *pVarClient );
 
@@ -150,7 +149,6 @@ void handler(int sig, siginfo_t *info, void *ucontext);
 
 /*! variable clients */
 static VarClient *VarClients[MAX_VAR_CLIENTS+1] = {0};
-static ServerInfo *pServerInfo = NULL;
 static VAR_HANDLE hClientInfo = VAR_INVALID;
 
 /*! Request Handlers - these must appear in the exact same order
@@ -331,9 +329,13 @@ static RequestHandler RequestHandlers[] =
     @return none
 
 ==============================================================================*/
-void main(int argc, char **argv)
+int main(int argc, char **argv)
 {
     ServerInfo *pServerInfo = NULL;
+
+    /* argc and argv are unused */
+    (void)argc;
+    (void)argv;
 
     /* initialize the varserver statistics */
     InitStats();
@@ -352,6 +354,8 @@ void main(int argc, char **argv)
             pause();
         }
     }
+
+    return 0;
 }
 
 /*============================================================================*/
@@ -413,6 +417,9 @@ void RegisterHandler(void(*f)(int sig, siginfo_t *info, void *ucontext))
 ==============================================================================*/
 void handler(int sig, siginfo_t *info, void *ucontext)
 {
+    /* ucontext is not used */
+    (void)ucontext;
+
     if ( sig == SIG_NEWCLIENT )
     {
         if ( info != NULL )
@@ -926,8 +933,6 @@ static int ProcessVarRequestNew( VarClient *pVarClient )
 static int ProcessVarRequestFind( VarClient *pVarClient )
 {
     int result = EINVAL;
-    int rc;
-    char *pStr = NULL;
 
     /* validate the client object */
     result = ValidateClient( pVarClient );
@@ -991,8 +996,6 @@ static int ProcessVarRequestEcho( VarClient *pVarClient )
 static int ProcessVarRequestInvalid( VarClient *pVarClient )
 {
     int result = EINVAL;
-    int rc;
-    char *pStr = NULL;
 
     /* validate the client object */
     result = ValidateClient( pVarClient );
@@ -1027,8 +1030,6 @@ static int ProcessVarRequestInvalid( VarClient *pVarClient )
 static int ProcessVarRequestPrint( VarClient *pVarClient )
 {
     int result = EINVAL;
-    int rc;
-    char *pStr = NULL;
     pid_t handler;
     /* validate the client object */
     result = ValidateClient( pVarClient );
@@ -1493,8 +1494,6 @@ static int ProcessVarRequestNotify( VarClient *pVarClient )
 static int ProcessVarRequestGet( VarClient *pVarClient )
 {
     int result = EINVAL;
-    int rc;
-    char *pStr = NULL;
 
     /* validate the client object */
     result = ValidateClient( pVarClient );
@@ -1536,8 +1535,6 @@ static int ProcessVarRequestGet( VarClient *pVarClient )
 static int ProcessVarRequestGetFirst( VarClient *pVarClient )
 {
     int result = EINVAL;
-    int rc;
-    char *pStr = NULL;
 
     /* validate the client object */
     result = ValidateClient( pVarClient );
@@ -1581,8 +1578,6 @@ static int ProcessVarRequestGetFirst( VarClient *pVarClient )
 static int ProcessVarRequestGetNext( VarClient *pVarClient )
 {
     int result = EINVAL;
-    int rc;
-    char *pStr = NULL;
 
     /* validate the client object */
     result = ValidateClient( pVarClient );
@@ -1631,8 +1626,6 @@ static int ProcessVarRequestGetNext( VarClient *pVarClient )
 static int ProcessValidationRequest( VarClient *pVarClient )
 {
     int result = EINVAL;
-    VarInfo *pVarInfo;
-    pid_t peer_pid;
     VarClient *pSetClient;
 
     /* validated the client object */
@@ -1698,10 +1691,7 @@ static int ProcessValidationRequest( VarClient *pVarClient )
 static int ProcessValidationResponse( VarClient *pVarClient )
 {
     int result = EINVAL;
-    VarInfo *pVarInfo;
     VarClient *pSetClient;
-
-    pid_t peer_pid;
 
     /* validated the client object */
     result = ValidateClient( pVarClient );
@@ -1743,8 +1733,6 @@ static int ProcessValidationResponse( VarClient *pVarClient )
 static int InitStats( void )
 {
     VarInfo info;
-    VAR_HANDLE hVar;
-    VarObject *pVarObject;
     size_t len;
     size_t n;
     size_t i;

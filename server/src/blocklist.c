@@ -214,7 +214,6 @@ int UnblockClients( VAR_HANDLE hVar,
 
     BlockedClient *pBlockedClient = blockedClientsHead;
     BlockedClient *pPrevClient = blockedClientsHead;
-    BlockedClient *pNext;
     VarClient *pVarClient;
 
     while( pBlockedClient != NULL )

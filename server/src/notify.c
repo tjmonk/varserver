@@ -277,7 +277,6 @@ int NOTIFY_Signal( pid_t pid,
                    pid_t *sentTo )
 {
     int result = EINVAL;
-    int rc;
     Notification *pNotification;
     int sig = -1;
     int done = 0;
@@ -457,16 +456,8 @@ static int notify_Send( Notification *pNotification,
     which has registered to receive it.
 
     @param[in]
-        pid
-            process identifier of the sending client process
-
-    @param[in]
         ppNotification
             pointer to the Notification list
-
-    @param[in]
-        type
-            type of the notification (should be NOTIFY_MODIFIED_QUEUE )
 
     @param[in]
         buf
@@ -481,16 +472,13 @@ static int notify_Send( Notification *pNotification,
     @retval ENOENT no notifications registered
 
 ==============================================================================*/
-int NOTIFY_Payload( pid_t pid,
-                    Notification **ppNotification,
-                    NotificationType type,
+int NOTIFY_Payload( Notification **ppNotification,
                     void *buf,
                     size_t len )
 {
     int result = EINVAL;
     int rc;
     Notification *pNotification;
-    int sig = -1;
 
     if( ppNotification != NULL )
     {

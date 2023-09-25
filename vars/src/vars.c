@@ -93,8 +93,6 @@ typedef struct _varsState
        Function declarations
 ==============================================================================*/
 static void usage( char *cmdname );
-static void SetupTerminationHandler( void );
-static void TerminationHandler( int signum, siginfo_t *info, void *ptr );
 static int ProcessOptions( int argC,
                            char *argV[],
                            VarsState *pState );
@@ -229,6 +227,8 @@ static int ProcessOptions( int argC,
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
     {
+        result = EOK;
+
         while( ( c = getopt( argC, argV, options ) ) != -1 )
         {
             switch( c )
@@ -263,73 +263,6 @@ static int ProcessOptions( int argC,
         }
     }
 
-    return 0;
+    return result;
 }
-
-/*============================================================================*/
-/*  SetupTerminationHandler                                                   */
-/*!
-    Set up an abnormal termination handler
-
-    The SetupTerminationHandler function registers a termination handler
-    function with the kernel in case of an abnormal termination of this
-    process.
-
-==============================================================================*/
-static void SetupTerminationHandler( void )
-{
-    static struct sigaction sigact;
-
-    memset( &sigact, 0, sizeof(sigact) );
-
-    sigact.sa_sigaction = TerminationHandler;
-    sigact.sa_flags = SA_SIGINFO;
-
-    sigaction( SIGTERM, &sigact, NULL );
-    sigaction( SIGINT, &sigact, NULL );
-
-}
-
-/*============================================================================*/
-/*  TerminationHandler                                                        */
-/*!
-    Abnormal termination handler
-
-    The TerminationHandler function will be invoked in case of an abnormal
-    termination of this process.  The termination handler closes
-    the connection with the variable server and cleans up its VARFP shared
-    memory.
-
-@param[in]
-    signum
-        The signal which caused the abnormal termination (unused)
-
-@param[in]
-    info
-        pointer to a siginfo_t object (unused)
-
-@param[in]
-    ptr
-        signal context information (ucontext_t) (unused)
-
-==============================================================================*/
-static void TerminationHandler( int signum, siginfo_t *info, void *ptr )
-{
-    syslog( LOG_ERR, "Abnormal termination of vars\n" );
-
-    if ( pState != NULL )
-    {
-        if ( pState->hVarServer != NULL )
-        {
-            VARSERVER_Close( pState->hVarServer );
-            pState->hVarServer = NULL;
-        }
-
-        free( pState );
-        pState = NULL;
-    }
-
-    exit( 1 );
-}
-
 

@@ -200,7 +200,6 @@ int TRANSACTION_New( pid_t clientPID,
 ==============================================================================*/
 void *TRANSACTION_Get( uint32_t transactionID )
 {
-    int result = EINVAL;
     Transaction *pTransaction;
     void *pTransactionInfo = NULL;
 
@@ -238,7 +237,6 @@ void *TRANSACTION_Get( uint32_t transactionID )
 ==============================================================================*/
 void *TRANSACTION_FindByRequestor( pid_t requestor )
 {
-    int result = EINVAL;
     Transaction *pTransaction;
     void *pTransactionInfo = NULL;
 
