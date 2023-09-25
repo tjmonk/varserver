@@ -42,7 +42,7 @@ SOFTWARE.
 
 /*! maximum length of the variable name string */
 #ifndef MAX_NAME_LEN
-#define MAX_NAME_LEN  ( 31 )
+#define MAX_NAME_LEN  ( 63 )
 #endif
 
 /*! maximum number of uids for the read/write permissions */
