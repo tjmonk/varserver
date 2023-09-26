@@ -556,8 +556,8 @@ static int ProcessRequest( siginfo_t *pInfo )
 {
     int result = EINVAL;
     int clientid;
-    VarClient *pVarClient;
-    VarRequest requestType;
+    VarClient *pVarClient = NULL;
+    VarRequest requestType = VARREQUEST_INVALID;
     int (*handler)(VarClient *pVarClient);
     uint64_t *pMetric;
 

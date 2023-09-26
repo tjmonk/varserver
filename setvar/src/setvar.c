@@ -84,7 +84,7 @@ SOFTWARE.
 int main(int argc, char **argv)
 {
     VARSERVER_HANDLE hVarServer = NULL;
-    int result;
+    int result = EINVAL;
 
     if( argc != 3 )
     {

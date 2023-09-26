@@ -137,7 +137,7 @@ static int TimingTest( GetVarState *pState, VAR_HANDLE hVar );
 ==============================================================================*/
 int main(int argc, char **argv)
 {
-    int result;
+    int result = EINVAL;
     GetVarState state;
 
     /*! clear the state object */

@@ -617,7 +617,7 @@ int VARLIST_Set( pid_t clientPID,
     int result = EINVAL;
     VarStorage *pVarStorage;
     VAR_HANDLE hVar;
-    size_t n;
+    size_t n = 0;
     uint32_t validateHandle;
     void *payload;
 

@@ -122,7 +122,7 @@ VarFP *VARFP_Open( char *name, size_t len )
 {
     int result = EINVAL;
     pid_t pid;
-    VarFP *pVarFP;
+    VarFP *pVarFP = NULL;
     int rc;
 
     if ( ( name != NULL ) &&
@@ -169,8 +169,11 @@ VarFP *VARFP_Open( char *name, size_t len )
 
     if( result != EOK )
     {
-        VARFP_Close( pVarFP );
-        pVarFP = NULL;
+        if ( pVarFP != NULL )
+        {
+            VARFP_Close( pVarFP );
+            pVarFP = NULL;
+        }
     }
 
     return pVarFP;
