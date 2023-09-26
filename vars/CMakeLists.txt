@@ -22,7 +22,7 @@ target_include_directories( ${PROJECT_NAME} PRIVATE
 	${CMAKE_BINARY_DIR} )
 
 target_compile_options( ${PROJECT_NAME}
-	PUBLIC
+	PRIVATE
 	-Wall
 	-Wextra
 	-Wpedantic

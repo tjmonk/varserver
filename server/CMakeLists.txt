@@ -44,7 +44,7 @@ set_target_properties( ${PROJECT_NAME}
 )
 
 target_compile_options( ${PROJECT_NAME}
-	PUBLIC
+	PRIVATE
 	-Wall
 	-Wextra
 	-Wpedantic
