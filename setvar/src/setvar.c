@@ -115,7 +115,7 @@ int main(int argc, char **argv)
         fprintf( stderr, "%s\n", strerror( result ) );
     }
 
-    return 0;
+    return result == EOK ? 0 : 1;
 }
 
 /*! @}

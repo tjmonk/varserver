@@ -105,7 +105,7 @@ int main(int argc, char **argv)
     int fd_in;
     int fd_out = STDOUT_FILENO;
     int c;
-    int result;
+    int result = EINVAL;
     VARSERVER_HANDLE hVarServer;
 
     while( ( c = getopt( argc, argv, "o:h" ) ) != -1 )
@@ -155,7 +155,7 @@ int main(int argc, char **argv)
         fprintf( stderr, "No input file specified\n" );
     }
 
-    return result;
+    return result == EOK ? 0 : 1;
 }
 
 /*============================================================================*/

@@ -263,6 +263,6 @@ static int ProcessOptions( int argC,
         }
     }
 
-    return result;
+    return result == EOK ? 0 : 1;
 }
 

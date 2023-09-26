@@ -113,7 +113,7 @@ static int MakeVar( MakeVarState *pState );
 ==============================================================================*/
 int main(int argc, char **argv)
 {
-    int result;
+    int result = EINVAL;
     MakeVarState state;
 
     /*! clear the state object */
@@ -138,7 +138,7 @@ int main(int argc, char **argv)
         }
     }
 
-    return result;
+    return result == EOK ? 0 : 1;
 }
 
 /*============================================================================*/
