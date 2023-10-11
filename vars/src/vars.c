@@ -61,6 +61,8 @@ SOFTWARE.
 #include <signal.h>
 #include <syslog.h>
 #include <errno.h>
+#include <pwd.h>
+#include <grp.h>
 #include <varserver/varserver.h>
 #include <varserver/varquery.h>
 
@@ -87,6 +89,9 @@ typedef struct _varsState
     /*! instance identifier */
     uint32_t instanceID;
 
+    /*! user name */
+    char *username;
+
 } VarsState;
 
 /*==============================================================================
@@ -96,6 +101,7 @@ static void usage( char *cmdname );
 static int ProcessOptions( int argC,
                            char *argV[],
                            VarsState *pState );
+static int SetUser( VarsState *pState );
 
 /*==============================================================================
        Definitions
@@ -129,6 +135,10 @@ VarsState *pState;
 ==============================================================================*/
 int main(int argC, char *argV[])
 {
+    uid_t uid;
+    bool userChanged = false;
+    int rc;
+
     pState = NULL;
 
     /* create the vars utility instance */
@@ -137,6 +147,9 @@ int main(int argC, char *argV[])
     {
         pState->fd = STDOUT_FILENO;
 
+        /* get the user identifier */
+        uid = getuid();
+
         /* get a handle to the variable server for transition events */
         pState->hVarServer = VARSERVER_Open();
         if ( pState->hVarServer != NULL )
@@ -144,14 +157,35 @@ int main(int argC, char *argV[])
             /* Process Options */
             ProcessOptions( argC, argV, pState );
 
-            /* make the query */
+            if ( pState->username != NULL )
+            {
+                rc = SetUser( pState );
+                if ( rc == EOK )
+                {
+                    userChanged = true;
+                }
+                else
+                {
+                    fprintf( stderr,
+                            "Failed to set user to: %s rc=%d (%s)\n",
+                            pState->username,
+                            rc,
+                            strerror(rc) );
+                }
+            }
 
+            /* make the query */
             (void)VARQUERY_Search( pState->hVarServer,
                                    pState->searchType,
                                    pState->searchText,
                                    pState->instanceID,
                                    pState->flags,
                                    pState->fd );
+
+            if ( userChanged == true )
+            {
+                setuid( uid );
+            }
 
             /* close the variable server */
             VARSERVER_Close( pState->hVarServer );
@@ -222,7 +256,7 @@ static int ProcessOptions( int argC,
 {
     int c;
     int result = EINVAL;
-    const char *options = "hvn:f:i:";
+    const char *options = "hvn:f:i:u:";
 
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
@@ -252,6 +286,10 @@ static int ProcessOptions( int argC,
                     VARSERVER_StrToFlags( optarg, &pState->flags );
                     break;
 
+                case 'u':
+                    pState->username = optarg;
+                    break;
+
                 case 'h':
                     usage( argV[0] );
                     break;
@@ -266,3 +304,47 @@ static int ProcessOptions( int argC,
     return result == EOK ? 0 : 1;
 }
 
+/*============================================================================*/
+/*  SetUser                                                                   */
+/*!
+    Set the user
+
+    Set the user to use to make the varserver query
+
+    @param[in]
+        pState
+            pointer to the VarsState object which contains the user name
+
+    @retval EOK user set ok
+    @retval EINVAL invalid arguments
+    @retval other error from seteuid and setegid
+
+==============================================================================*/
+static int SetUser( VarsState *pState )
+{
+    int result = EINVAL;
+    struct passwd *pw;
+    int rc;
+
+    if ( pState != NULL )
+    {
+        if ( VARSERVER_SetGroup() == EOK )
+        {
+            pw = getpwnam( pState->username );
+            if ( pw != NULL )
+            {
+                rc = seteuid( pw->pw_uid );
+                if ( rc == EOK )
+                {
+                    result = VARSERVER_UpdateUser( pState->hVarServer );
+                }
+                else
+                {
+                    result = errno;
+                }
+            }
+        }
+    }
+
+    return result;
+}

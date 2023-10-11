@@ -64,6 +64,8 @@ SOFTWARE.
 #include <semaphore.h>
 #include <string.h>
 #include <inttypes.h>
+#include <pwd.h>
+#include <grp.h>
 #include <varserver/varobject.h>
 #include <varserver/varclient.h>
 #include <varserver/varserver.h>
@@ -77,6 +79,7 @@ SOFTWARE.
 static int varserver_connect( VarClient *pVarClient );
 static int ClientRequest( VarClient *pVarClient, int signal );
 static VarClient *NewClient( size_t workbufsize );
+static int varserver_GetGroupList( VarClient *pVarClient );
 static int ClientCleanup( VarClient *pVarClient );
 static int DeleteClientSemaphore( VarClient *pVarClient );
 static int NewClientSemaphore( VarClient *pVarClient );
@@ -275,6 +278,69 @@ static int varserver_connect( VarClient *pVarClient )
                 done = true;
             }
         }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VARSERVER_UpdateUser                                                      */
+/*!
+    Update the effective user id for the varserver client
+
+    The VARSERVER_UpdateUser function updates the effective user identifier
+    for the varserver client.  This user is used to determine read/write
+    access to the varserver variables.
+
+    This is done automatically when the varserver client is created,
+    it is only necessary to change this if the effective user
+    needs to be changed at runtime.
+
+    @param[in]
+        hVarServer
+            handle to the variable server client
+
+    @retval EOK the user id update was successful
+    @retval E2BIG the user is a member of too many groups
+    @retval EINVAL invalid argument
+
+==============================================================================*/
+int VARSERVER_UpdateUser( VARSERVER_HANDLE hVarServer )
+{
+    int result = EINVAL;
+    VarClient *pVarClient = ValidateHandle( hVarServer );
+
+    if ( pVarClient != NULL )
+    {
+        pVarClient->uid = geteuid();
+        result = varserver_GetGroupList( pVarClient );
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VARSERVER_SetGroup                                                        */
+/*!
+    Set the calling process' group so we can access varserver client sockets
+
+    The VARSERVER_SetGroup function sets the effective group id of the
+    calling process so we can access varserver client sockets
+    (used for client variable rendering)
+
+    @retval EOK group set ok
+    @retval other error from setegid
+
+==============================================================================*/
+int VARSERVER_SetGroup( void )
+{
+    int result = EINVAL;
+    struct group *grp;
+
+    grp = getgrnam( VARSERVER_GROUP_NAME);
+    if ( grp != NULL )
+    {
+        result = ( setegid( grp->gr_gid ) == 0 ) ? EOK : errno;
     }
 
     return result;
@@ -782,9 +848,11 @@ sigset_t VARSERVER_SigMask( void )
         permissions
             pointer to the output array of permission UIDs
 
-    @param[in]
+    @param[in,out]
         len
-            size of the output permission UID array
+            pointer to size of the output permission UID array
+            and location to store the actual number of
+            permissions parsed
 
     @retval EOK - the flags parsing was successful
     @retval EINVAL - invalid arguments
@@ -792,8 +860,8 @@ sigset_t VARSERVER_SigMask( void )
 
 ==============================================================================*/
 int VARSERVER_ParsePermissionSpec( char *permissionSpec,
-                                   uint16_t *permissions,
-                                   size_t len )
+                                   gid_t *permissions,
+                                   size_t *len )
 {
     size_t i = 0;
     int result = EINVAL;
@@ -801,14 +869,16 @@ int VARSERVER_ParsePermissionSpec( char *permissionSpec,
     char buf[ MAX_PERMISSIONSPEC_LEN + 1 ];
     size_t permissionSpecLength;
     char *r;
+    struct group *gr = NULL;
 
     if( ( permissionSpec != NULL ) &&
         ( permissions != NULL ) &&
-        ( len > 0 ) &&
-        ( len <= MAX_UIDS ) )
+        ( len != NULL ) &&
+        ( *len > 0 ) &&
+        ( *len <= VARSERVER_MAX_UIDS ) )
     {
         /* initialize the result */
-        memset( permissions, 0, sizeof( uint16_t) * len );
+        memset( permissions, 0, sizeof( gid_t) * *len );
         result = EOK;
 
         /* get the length of the permission specifier string */
@@ -826,10 +896,21 @@ int VARSERVER_ParsePermissionSpec( char *permissionSpec,
             r = buf;
             while( ( permission = strtok_r( r, ",", &r ) ) )
             {
-                if( ( i < len ) &&
-                    ( i < MAX_UIDS ) )
+                if( ( i < *len ) &&
+                    ( i < VARSERVER_MAX_UIDS ) )
                 {
-                    permissions[i++] = atoi( permission );
+                    if (isdigit( *permission ))
+                    {
+                        permissions[i++] = atoi( permission );
+                    }
+                    else
+                    {
+                        gr = getgrnam( permission );
+                        if ( gr != NULL )
+                        {
+                            permissions[i++] = gr->gr_gid;
+                        }
+                    }
                 }
                 else
                 {
@@ -837,6 +918,8 @@ int VARSERVER_ParsePermissionSpec( char *permissionSpec,
                     break;
                 }
             }
+
+            *len = i;
         }
         else
         {
@@ -2782,7 +2865,6 @@ int VAR_Print( VARSERVER_HANDLE hVarServer,
 
             /* send the file descriptor to the responder */
             result = VARPRINT_SendFileDescriptor( responderPID, fd );
-
             if( result == EOK )
             {
                 /* block client until printing is complete */
@@ -2855,7 +2937,7 @@ int VAR_OpenPrintSession( VARSERVER_HANDLE hVarServer,
     {
         /* set up a socket to get the file descriptor to print to */
         pid = pVarClient->client_pid;
-        result = VARPRINT_SetupListener( pid, &sock );
+        result = VARPRINT_SetupListener( pid, &sock, pVarClient->varserver_gid);
         if( result == EOK )
         {
             pVarClient->requestType = VARREQUEST_OPEN_PRINT_SESSION;
@@ -3194,6 +3276,14 @@ static int ClientRequest( VarClient *pVarClient, int signal )
                        pServerInfo->pid );
             }
 
+            /* copy the client grouplist into the VarInfo credentials */
+            memcpy( pVarClient->variableInfo.creds,
+                    pVarClient->grouplist,
+                    pVarClient->ngroups * sizeof( gid_t ) );
+
+            /*! set the number of groups to check */
+            pVarClient->variableInfo.ncreds = pVarClient->ngroups;
+
             result = sigqueue( pServerInfo->pid, signal, val );
             if( result == EOK )
             {
@@ -3265,6 +3355,7 @@ static VarClient *NewClient( size_t workbufsize )
     char clientname[BUFSIZ];
     VarClient *pVarClient = NULL;
     size_t sharedMemSize;
+    struct group *gr;
 
     /* calculate the size of the client-server interface working buffer */
     sharedMemSize = sizeof(VarClient) + workbufsize;
@@ -3275,7 +3366,6 @@ static VarClient *NewClient( size_t workbufsize )
 
 	/* get shared memory file descriptor (NOT a file) */
 	fd = shm_open(clientname, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-
 	if (fd != -1)
 	{
     	/* extend shared memory object as by default
@@ -3299,11 +3389,27 @@ static VarClient *NewClient( size_t workbufsize )
                 pVarClient->client_pid = pid;
                 pVarClient->workbufsize = workbufsize + 1;
 
+                /* get the varserver group id */
+                gr = getgrnam( VARSERVER_GROUP_NAME );
+                if ( gr != NULL )
+                {
+                    pVarClient->varserver_gid = gr->gr_gid;
+                }
+
                 /* clear the working buffer */
                 memset( &pVarClient->workbuf, 0, pVarClient->workbufsize );
 
                 /* initialize the VarClient semaphore */
                 NewClientSemaphore( pVarClient );
+
+                /* get the varclient user and group info */
+                pVarClient->uid = geteuid();
+                if ( varserver_GetGroupList( pVarClient ) != EOK )
+                {
+                    syslog( LOG_ERR,
+                            "Cannot get group list for user %d",
+                            pVarClient->uid );
+                }
             }
             else
             {
@@ -3324,6 +3430,63 @@ static VarClient *NewClient( size_t workbufsize )
     }
 
     return pVarClient;
+}
+
+/*============================================================================*/
+/*  varserver_GetGroupList                                                    */
+/*!
+    Get the current user's group list
+
+    The varserver_GetGroupList function gets the group and group list
+    of the current varserver user.  The user and group ids are used
+    to determine if the current user has read/write permissions on the
+    varserver variables.
+
+    @param[in]
+        pVarClient
+            pointer to the VarClient that contains the current effective user
+            identifier of the varserver client.
+
+    @retval EOK the group list was retrieved
+    @retval E2BIG the current user is a member of too many groups
+    @retval EINVAL invalid argument
+
+==============================================================================*/
+static int varserver_GetGroupList( VarClient *pVarClient )
+{
+    int result = EINVAL;
+    struct passwd *pw;
+    int rc;
+
+    if ( pVarClient != NULL )
+    {
+        pw = getpwuid (pVarClient->uid);
+        if ( pw != NULL )
+        {
+            pVarClient->gid = pw->pw_gid;
+
+            /* get the group list */
+            pVarClient->ngroups = VARSERVER_MAX_UIDS;
+
+            rc = getgrouplist( pw->pw_name,
+                               pw->pw_gid,
+                               pVarClient->grouplist,
+                               &pVarClient->ngroups );
+            if ( rc == -1 )
+            {
+                memset( pVarClient->grouplist,
+                        -1,
+                        sizeof( pVarClient->grouplist ));
+                result = E2BIG;
+            }
+            else
+            {
+                result = EOK;
+            }
+        }
+    }
+
+    return result;
 }
 
 /*============================================================================*/

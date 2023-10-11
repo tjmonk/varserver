@@ -63,6 +63,8 @@ SOFTWARE.
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <string.h>
 #include <errno.h>
 #include <varserver/varobject.h>
@@ -298,7 +300,7 @@ int VARPRINT_SendFileDescriptor( int responderPID, int fd )
 @retval other indicates an errno
 
 ==============================================================================*/
-int VARPRINT_SetupListener( pid_t requestorPID, int *sock )
+int VARPRINT_SetupListener( pid_t requestorPID, int *sock, gid_t gid )
 {
     int result = EINVAL;
     struct sockaddr_un addr;
@@ -319,6 +321,11 @@ int VARPRINT_SetupListener( pid_t requestorPID, int *sock )
 
         if( bind(s, (struct sockaddr *)&addr, sizeof(addr)) != -1 )
         {
+            /* set up group ownership for client file */
+            chown( addr.sun_path, -1, gid);
+            chmod( addr.sun_path,
+                   S_IWUSR | S_IRUSR | S_IXUSR | S_IWGRP | S_IRGRP | S_IXGRP );
+
             /* listen for a connection */
             if( listen(s, 1) != -1 )
             {

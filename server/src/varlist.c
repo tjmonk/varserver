@@ -157,6 +157,12 @@ static void *varlist_GetNotificationPayload( VAR_HANDLE hVar,
 
 static void varlist_SetDirty( VarStorage *pVarStorage );
 
+static bool varlist_CheckReadPermissions( VarInfo *pVarInfo,
+                                          VarStorage *pVarStorage );
+
+static bool varlist_CheckWritePermissions( VarInfo *pVarInfo,
+                                           VarStorage *pVarStorage );
+
 /*==============================================================================
         Public function definitions
 ==============================================================================*/
@@ -269,7 +275,8 @@ int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle )
         {
             /* case insensitive name comparison */
             if( ( pVarInfo->instanceID == varstore[hVar].instanceID ) &&
-                ( strcasecmp( pVarInfo->name, varstore[hVar].name ) == 0 ) )
+                ( strcasecmp( pVarInfo->name, varstore[hVar].name ) == 0 ) &&
+                ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] )))
             {
                 *pVarHandle = hVar;
                 result = EOK;
@@ -342,7 +349,8 @@ int VARLIST_PrintByHandle( pid_t clientPID,
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -351,7 +359,9 @@ int VARLIST_PrintByHandle( pid_t clientPID,
             if( pVarStorage->notifyMask & NOTIFY_MASK_PRINT )
             {
                 /* create a PRINT transaction */
-                result = TRANSACTION_New( clientPID, clientInfo, &printHandle );
+                result = TRANSACTION_New( clientPID,
+                                            clientInfo,
+                                            &printHandle );
                 if( result == EOK )
                 {
                     /* send a PRINT notification */
@@ -364,7 +374,8 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                     {
                         /* indicate that there is now a PRINT blocked
                         client on this variable */
-                        pVarStorage->notifyMask |= NOTIFY_MASK_HAS_PRINT_BLOCK;
+                        pVarStorage->notifyMask |=
+                            NOTIFY_MASK_HAS_PRINT_BLOCK;
 
                         /* indicate that the print output will be piped
                         from another client */
@@ -387,11 +398,11 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                 if (result == EOK )
                 {
                     /* indicate that there is now a CALC blocked
-                       client on this variable */
+                    client on this variable */
                     pVarStorage->notifyMask |= NOTIFY_MASK_HAS_CALC_BLOCK;
 
                     /* an EINPROGRESS result will prevent the client
-                       from being unblocked until this request is complete */
+                    from being unblocked until this request is complete */
                     result = EINPROGRESS;
                 }
                 else if( result == ESRCH )
@@ -445,13 +456,11 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                     }
                 }
 
-
                 result = EOK;
             }
         }
         else
         {
-            printf("%s not found\n", __func__ );
             result = ENOENT;
         }
     }
@@ -503,7 +512,8 @@ int VARLIST_GetByHandle( pid_t clientPID,
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -520,11 +530,11 @@ int VARLIST_GetByHandle( pid_t clientPID,
                 if (result == EOK )
                 {
                     /* indicate that there is now a CALC blocked
-                       client on this variable */
+                    client on this variable */
                     pVarStorage->notifyMask |= NOTIFY_MASK_HAS_CALC_BLOCK;
 
                     /* an EINPROGRESS result will prevent the client
-                       from being unblocked until this request is complete */
+                    from being unblocked until this request is complete */
                     result = EINPROGRESS;
                 }
                 else if( result == ESRCH )
@@ -578,7 +588,6 @@ int VARLIST_GetByHandle( pid_t clientPID,
         }
         else
         {
-            printf("%s not found\n", __func__ );
             result = ENOENT;
         }
     }
@@ -620,6 +629,7 @@ int VARLIST_Set( pid_t clientPID,
     size_t n = 0;
     uint32_t validateHandle;
     void *payload;
+    int rc;
 
     if( pVarInfo != NULL )
     {
@@ -627,10 +637,18 @@ int VARLIST_Set( pid_t clientPID,
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
             ( hVar <= (VAR_HANDLE)varcount ) &&
-            ( validationInProgress != NULL ) )
+            ( validationInProgress != NULL ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
+
+            /* check if we have write permissions on this variable */
+            rc = varlist_CheckWritePermissions( pVarInfo, pVarStorage );
+            if ( rc == false )
+            {
+                return EACCES;
+            }
 
             /* Check if we have a validation handler on this variable */
             if( ( pVarStorage->notifyMask & NOTIFY_MASK_VALIDATE ) &&
@@ -2194,7 +2212,8 @@ int VARLIST_GetType( VarInfo *pVarInfo )
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -2242,7 +2261,8 @@ int VARLIST_GetName( VarInfo *pVarInfo )
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -2289,7 +2309,8 @@ int VARLIST_GetLength( VarInfo *pVarInfo )
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -2336,7 +2357,8 @@ int VARLIST_GetFlags( VarInfo *pVarInfo )
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -2383,7 +2405,8 @@ int VARLIST_GetInfo( VarInfo *pVarInfo )
         hVar = pVarInfo->hVar;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -2452,7 +2475,8 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
         notifyType = pVarInfo->notificationType;
 
         if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) )
+            ( hVar <= (VAR_HANDLE)varcount ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
         {
             /* get a pointer to the variable storage for this variable */
             pVarStorage = &varstore[hVar];
@@ -2825,35 +2849,41 @@ int VARLIST_GetFirst( pid_t clientPID,
             while( ( hVar < VARSERVER_MAX_VARIABLES ) &&
                    ( hVar <= (VAR_HANDLE)varcount ) )
             {
-                if( varlist_Match( hVar, ctx ) == EOK )
+                if ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) )
                 {
-                    /* get a pointer to the storage for this variable */
-                    pVarStorage = &varstore[hVar];
+                    if( varlist_Match( hVar, ctx ) == EOK )
+                    {
+                        /* get a pointer to the storage for this variable */
+                        pVarStorage = &varstore[hVar];
 
-                    /* copy the name */
-                    memcpy( pVarInfo->name, pVarStorage->name, MAX_NAME_LEN+1 );
+                        /* copy the name */
+                        memcpy( pVarInfo->name,
+                                pVarStorage->name,
+                                MAX_NAME_LEN+1 );
 
-                    /* copy the instanceID */
-                    pVarInfo->instanceID = pVarStorage->instanceID;
+                        /* copy the instanceID */
+                        pVarInfo->instanceID = pVarStorage->instanceID;
 
-                    /* copy the format specifier */
-                    memcpy( pVarInfo->formatspec,
-                            pVarStorage->formatspec,
-                            MAX_FORMATSPEC_LEN );
+                        /* copy the format specifier */
+                        memcpy( pVarInfo->formatspec,
+                                pVarStorage->formatspec,
+                                MAX_FORMATSPEC_LEN );
 
-                    /* store the variable context id */
-                    *context = ctx->contextId;
+                        /* store the variable context id */
+                        *context = ctx->contextId;
 
-                    /* store the last variable found */
-                    ctx->hVar = hVar;
+                        /* store the last variable found */
+                        ctx->hVar = hVar;
 
-                    /* get the variable value */
-                    pVarInfo->hVar = hVar;
-                    result = VARLIST_GetByHandle( clientPID,
-                                                  pVarInfo,
-                                                  buf,
-                                                  bufsize );
-                    break;
+                        /* get the variable value */
+                        pVarInfo->hVar = hVar;
+                        result = VARLIST_GetByHandle( clientPID,
+                                                    pVarInfo,
+                                                    buf,
+                                                    bufsize );
+                        break;
+                    }
+
                 }
 
                 hVar++;
@@ -2942,33 +2972,36 @@ int VARLIST_GetNext( pid_t clientPID,
         while( ( hVar < VARSERVER_MAX_VARIABLES ) &&
                ( hVar <= (VAR_HANDLE)varcount ) )
         {
-            /* check if the current variable matches the search criteria */
-            if( varlist_Match( hVar, ctx ) == EOK )
+            if ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) )
             {
-                /* get a pointer to the variable storage for this variable */
-                pVarStorage = &varstore[hVar];
+                /* check if the current variable matches the search criteria */
+                if( varlist_Match( hVar, ctx ) == EOK )
+                {
+                    /* get a pointer to the storage for this variable */
+                    pVarStorage = &varstore[hVar];
 
-                /* copy the name */
-                memcpy( pVarInfo->name, pVarStorage->name, MAX_NAME_LEN+1 );
+                    /* copy the name */
+                    memcpy( pVarInfo->name, pVarStorage->name, MAX_NAME_LEN+1 );
 
-                /* copy the instanceID */
-                pVarInfo->instanceID = pVarStorage->instanceID;
+                    /* copy the instanceID */
+                    pVarInfo->instanceID = pVarStorage->instanceID;
 
-                /* copy the format specifier */
-                memcpy( pVarInfo->formatspec,
-                        pVarStorage->formatspec,
-                        MAX_FORMATSPEC_LEN );
+                    /* copy the format specifier */
+                    memcpy( pVarInfo->formatspec,
+                            pVarStorage->formatspec,
+                            MAX_FORMATSPEC_LEN );
 
-                /* store the last variable found */
-                ctx->hVar = hVar;
+                    /* store the last variable found */
+                    ctx->hVar = hVar;
 
-                /* get the variable value */
-                pVarInfo->hVar = hVar;
-                result = VARLIST_GetByHandle( clientPID,
-                                              pVarInfo,
-                                              buf,
-                                              bufsize );
-                break;
+                    /* get the variable value */
+                    pVarInfo->hVar = hVar;
+                    result = VARLIST_GetByHandle( clientPID,
+                                                pVarInfo,
+                                                buf,
+                                                bufsize );
+                    break;
+                }
             }
 
             hVar++;
@@ -3339,6 +3372,143 @@ static void *varlist_GetNotificationPayload( VAR_HANDLE hVar,
     }
 
     return *size ? buf : NULL;
+}
+
+/*============================================================================*/
+/*  varlist_CheckReadPermissions                                              */
+/*!
+    Check a client's read permissions on a variable
+
+    The varlist_CheckReadPermissions function checks a client's
+    read permissions against the read permissions for the variable
+    to see if the client has access to the variable.
+
+    @param[in]
+        pVarInfo
+            pointer to the VarInfo request containing the client's
+            read permissions
+
+    @param[in]
+        pVarStorage
+            pointer to the variable storage containing the variable
+            read permissions
+
+    @retval true the client has permission to read
+    @retval false the client does not have permission to read
+
+==============================================================================*/
+static bool varlist_CheckReadPermissions( VarInfo *pVarInfo,
+                                          VarStorage *pVarStorage )
+{
+    register size_t n;
+    register size_t m;
+    register size_t i;
+    register size_t j;
+    register bool access = false;
+    register gid_t *p;
+    register gid_t *q;
+
+    if ( ( pVarInfo != NULL ) &&
+         ( pVarStorage != NULL ) )
+    {
+        n = pVarInfo->ncreds;
+        m = pVarStorage->permissions.nreads;
+        p = pVarInfo->creds;
+        q = pVarStorage->permissions.read;
+
+        for(i = 0 ; i < n && !access ; i++ )
+        {
+            if ( p[i] == 0 )
+            {
+                access = true;
+            }
+            else
+            {
+                for( j = 0; j < m && !access ; j++ )
+                {
+                    if ( p[i] == q[j])
+                    {
+                        access = true;
+                    }
+                }
+            }
+        }
+    }
+
+    return access;
+}
+
+/*============================================================================*/
+/*  varlist_CheckWritePermissions                                             */
+/*!
+    Check a client's write permissions on a variable
+
+    The varlist_CheckWritePermissions function checks a client's
+    write permissions against the write permissions for the variable
+    to see if the client has write access to the variable.
+
+    @param[in]
+        pVarInfo
+            pointer to the VarInfo request containing the client's
+            read/write permissions
+
+    @param[in]
+        pVarStorage
+            pointer to the variable storage containing the variable
+            write permissions
+
+    @retval true the client has permission to write
+    @retval false the client does not have permission to write
+
+==============================================================================*/
+static bool varlist_CheckWritePermissions( VarInfo *pVarInfo,
+                                           VarStorage *pVarStorage )
+{
+    register size_t n;
+    register size_t m;
+    register size_t i;
+    register size_t j;
+    register bool access = false;
+    register gid_t *p;
+    register gid_t *q;
+
+
+    if ( ( pVarInfo != NULL ) &&
+         ( pVarStorage != NULL ) )
+    {
+        /* client group IDs are always in the varInfo read list
+           even when checking for write permissions */
+        n = pVarInfo->ncreds;
+        m = pVarStorage->permissions.nwrites;
+        p = pVarInfo->creds;
+        q = pVarStorage->permissions.write;
+
+        if ( m == 0 )
+        {
+            /* if no variable permissions are specified everyone has access */
+            access = true;
+        }
+
+        for(i = 0 ; i < n && !access ; i++ )
+        {
+            if ( p[i] == 0 )
+            {
+                access = true;
+            }
+            else
+            {
+                for( j = 0; j < m && !access ; j++ )
+                {
+                    if ( p[i] == q[j])
+                    {
+                        access = true;
+                    }
+                }
+            }
+        }
+    }
+
+    return access;
 }
 
 /*! @}

@@ -51,6 +51,11 @@ SOFTWARE.
 #define VARSERVER_MAX_NOTIFICATION_MSG_COUNT   ( 10 )
 #endif
 
+#ifndef VARSERVER_GROUP_NAME
+/*! the name of the varserver group */
+#define VARSERVER_GROUP_NAME "varserver"
+#endif
+
 /*! signal indicating a timer has fired  */
 #define SIG_VAR_TIMER    ( SIGRTMIN + 5 )
 
@@ -91,6 +96,9 @@ typedef struct _VarNotification
 
 VARSERVER_HANDLE VARSERVER_Open( void );
 VARSERVER_HANDLE VARSERVER_OpenExt( size_t workbufsize );
+int VARSERVER_UpdateUser( VARSERVER_HANDLE hVarServer );
+int VARSERVER_SetGroup( void );
+
 int VARSERVER_Debug( VARSERVER_HANDLE hVarServer, int debug );
 int VARSERVER_GetWorkingBuffer( VARSERVER_HANDLE hVarServer,
                                 char **pBuf,
@@ -111,8 +119,8 @@ int VARSERVER_FlagsToStr( uint32_t flags,
 
 /* Permission functions */
 int VARSERVER_ParsePermissionSpec( char *permissionSpec,
-                                   uint16_t *permissions,
-                                   size_t len );
+                                   gid_t *permissions,
+                                   size_t *len );
 
 /* type functions */
 int VARSERVER_TypeNameToType( char *typeName, VarType *type );

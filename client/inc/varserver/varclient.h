@@ -67,6 +67,11 @@ SOFTWARE.
 /*! protocol version of the var server to check for library/server mismatch */
 #define VARSERVER_VERSION ( 1 )
 
+#ifndef VARSERVER_MAX_GROUPS
+/*! maximum number of groups the varserver supports */
+#define VARSERVER_MAX_GROUPS 10
+#endif
+
 /*! the VarRequest enumeration specifies the type of requests that can
     be made from the client to the server */
 typedef enum _varRequest
@@ -173,6 +178,21 @@ typedef struct _varClient
 
     /*! client process identifier */
     pid_t client_pid;
+
+    /*! varclient effective user id */
+    uid_t uid;
+
+    /*! varclient effective group id */
+    gid_t gid;
+
+    /*! varserver group id */
+    gid_t varserver_gid;
+
+    /*! number of groups in the group list */
+    int ngroups;
+
+    /*! maxmimum number of groups supported by varserver */
+    gid_t grouplist[ VARSERVER_MAX_UIDS ];
 
     /*! process identifier of a peer process which is
         interacting with this one, eg during variable validation */

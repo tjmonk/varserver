@@ -60,6 +60,7 @@ SOFTWARE.
 #include <semaphore.h>
 #include <string.h>
 #include <inttypes.h>
+#include <grp.h>
 #include <varserver/varclient.h>
 #include <varserver/varserver.h>
 #include "varlist.h"
@@ -343,15 +344,24 @@ int main(int argc, char **argv)
     /* register the real-time signal handler */
     RegisterHandler(handler);
 
-    /* Set up server information structure */
-    pServerInfo = InitServerInfo();
-    if( pServerInfo != NULL )
+    /* check that varserver group exists */
+    if ( getgrnam( VARSERVER_GROUP_NAME ) == NULL )
     {
-        /* loop forever processing signals */
-        while(1)
+        fprintf(stderr, "varserver group does not exist\n");
+        syslog( LOG_ERR, "varserver group does not exist");
+    }
+    else
+    {
+        /* Set up server information structure */
+        pServerInfo = InitServerInfo();
+        if( pServerInfo != NULL )
         {
-            /* do nothing - handler functions take care of everything */
-            pause();
+            /* loop forever processing signals */
+            while(1)
+            {
+                /* do nothing - handler functions take care of everything */
+                pause();
+            }
         }
     }
 
@@ -1757,6 +1767,9 @@ static int InitStats( void )
     info.var.len = BUFSIZ;
     info.var.val.str = calloc(1, BUFSIZ);
     info.var.type = VARTYPE_STR;
+    /* only root can see this variable */
+    info.permissions.nreads= 1;
+    info.permissions.read[0] = 0;
     VARLIST_AddNew( &info, &hClientInfo );
 
     /* make metrics for all the request endpoints */
@@ -1806,6 +1819,8 @@ static uint64_t *MakeMetric( char *name )
     info.name[len-1] = 0;
     info.var.len = sizeof( uint64_t );
     info.var.type = VARTYPE_UINT64;
+    info.permissions.read[0] = 0;
+    info.permissions.nreads = 1;
     VARLIST_AddNew( &info, &hVar );
 
     /* get a pointer to the metric variable */

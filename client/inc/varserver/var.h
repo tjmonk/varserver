@@ -46,8 +46,8 @@ SOFTWARE.
 #endif
 
 /*! maximum number of uids for the read/write permissions */
-#ifndef MAX_UIDS
-#define MAX_UIDS     ( 4 )
+#ifndef VARSERVER_MAX_UIDS
+#define VARSERVER_MAX_UIDS     ( 6 )
 #endif
 
 /*! maximum format specifier length */
@@ -125,11 +125,17 @@ typedef enum _VarFlags
 /*! Variable permissions */
 typedef struct _VarPermissions
 {
+    /*! number of read permissions */
+    size_t nreads;
+
     /*! read permissions */
-    uint16_t read[MAX_UIDS];
+    gid_t read[VARSERVER_MAX_UIDS];
+
+    /*! number of write permissions */
+    size_t nwrites;
 
     /*! write permissions */
-    uint16_t write[MAX_UIDS];
+    gid_t write[VARSERVER_MAX_UIDS];
 
 } VarPermissions;
 
@@ -193,6 +199,12 @@ typedef struct _VarInfo
 
     /*! notification type */
     NotificationType notificationType;
+
+    /*! user credentials */
+    gid_t creds[ VARSERVER_MAX_UIDS ];
+
+    /* number of credentials */
+    size_t ncreds;
 
 } VarInfo;
 

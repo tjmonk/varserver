@@ -53,6 +53,7 @@ SOFTWARE.
 #include <fcntl.h>
 #include <unistd.h>
 #include <inttypes.h>
+#include <pwd.h>
 #include <varserver/varserver.h>
 
 /*==============================================================================
@@ -94,6 +95,9 @@ typedef struct _get_var_state
     /*! timing test mode */
     bool timingTest;
 
+    /*! user name */
+    char *username;
+
 } GetVarState;
 
 /*==============================================================================
@@ -111,6 +115,7 @@ static int GetOutputFileDescriptor( GetVarState *pState );
 static int ProcessQuery( GetVarState *pState );
 static int PrintVar( GetVarState *pState, VAR_HANDLE hVar, int fd );
 static int TimingTest( GetVarState *pState, VAR_HANDLE hVar );
+static int SetUser( GetVarState *pState );
 
 /*==============================================================================
         Function definitions
@@ -139,12 +144,17 @@ int main(int argc, char **argv)
 {
     int result = EINVAL;
     GetVarState state;
+    int rc;
+    uid_t uid;
+    bool userChanged = false;
 
     /*! clear the state object */
     memset( &state, 0, sizeof( GetVarState ) );
 
     /*! initialize the operating state */
     state.n = 1;
+
+    uid = getuid();
 
     /*! process the command line options */
     if( ProcessOptions( argc, argv, &state ) == EOK )
@@ -153,8 +163,30 @@ int main(int argc, char **argv)
         state.hVarServer = VARSERVER_Open();
         if( state.hVarServer != NULL )
         {
+            if ( state.username != NULL )
+            {
+                rc = SetUser( &state );
+                if ( rc == EOK )
+                {
+                    userChanged = true;
+                }
+                else
+                {
+                    fprintf( stderr,
+                            "Failed to set user to: %s rc=%d (%s)\n",
+                            state.username,
+                            rc,
+                            strerror(rc) );
+                }
+            }
+
             /* process the vars query */
             result = ProcessQuery( &state );
+
+            if ( userChanged == true )
+            {
+                setuid( uid );
+            }
 
             /* close the variable server */
             VARSERVER_Close( state.hVarServer );
@@ -188,6 +220,7 @@ int main(int argc, char **argv)
     -c : show query count
     -t : timing test mode
     -N : no newline
+    -u : set username (to allow permissions testing)
 
     @param[in]
         argc
@@ -208,7 +241,7 @@ int main(int argc, char **argv)
 ==============================================================================*/
 static int ProcessOptions( int argc, char **argv, GetVarState *pState )
 {
-    const char *options = "hvo:n:w:rcNt";
+    const char *options = "hvo:n:w:rcNtu:";
     int c;
     int errcount = 0;
     bool display_help = false;
@@ -262,6 +295,10 @@ static int ProcessOptions( int argc, char **argv, GetVarState *pState )
                         pState->timingTest = true;
                         break;
 
+                    case 'u':
+                        pState->username = optarg;
+                        break;
+
                     default:
                         errcount++;
                         break;
@@ -312,7 +349,8 @@ static void usage( char *name )
 {
     if( name != NULL )
     {
-        printf("usage: %s [-h] [-v] [-c] [-N] [-t] [-n <num>] [-o <outfile> ]"
+        printf("usage: %s [-h] [-v] [-c] [-N] [-t] [-n <num>] [-o <outfile> ] "
+               "[-u user] "
                "[-w <wait time>] <variable name>\n\n", name );
         printf("-h : display this help\n");
         printf("-v : enable verbose (debugging) output\n");
@@ -323,7 +361,53 @@ static void usage( char *name )
         printf("-r : repeat forever\n");
         printf("-c : show query count\n");
         printf("-N : suppress newline\n");
+        printf("-u : set user\n");
     }
+}
+
+/*============================================================================*/
+/*  SetUser                                                                   */
+/*!
+    Set the user
+
+    Set the user to use to make the varserver query
+
+    @param[in]
+        pState
+            pointer to the GetVarState object which contains the user name
+
+    @retval EOK user set ok
+    @retval EINVAL invalid arguments
+    @retval other error from seteuid and setegid
+
+==============================================================================*/
+static int SetUser( GetVarState *pState )
+{
+    int result = EINVAL;
+    struct passwd *pw;
+    int rc;
+
+    if ( pState != NULL )
+    {
+        if ( VARSERVER_SetGroup() == EOK )
+        {
+            pw = getpwnam( pState->username );
+            if ( pw != NULL )
+            {
+                rc = seteuid( pw->pw_uid );
+                if ( rc == EOK )
+                {
+                    result = VARSERVER_UpdateUser( pState->hVarServer );
+                }
+                else
+                {
+                    result = errno;
+                }
+            }
+        }
+    }
+
+    return result;
 }
 
 /*============================================================================*/

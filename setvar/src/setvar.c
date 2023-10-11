@@ -46,13 +46,36 @@ SOFTWARE.
 
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <getopt.h>
+#include <unistd.h>
+#include <pwd.h>
 #include <varserver/varserver.h>
 
 /*==============================================================================
         Private definitions
 ==============================================================================*/
+
+/*! GetVar state object used to customize the behavior of the application */
+typedef struct _set_var_state
+{
+    VARSERVER_HANDLE hVarServer;
+
+    /*! name of the variable to set */
+    char *varname;
+
+    /*! value of the variable to set */
+    char *value;
+
+    /*! verbose mode */
+    bool verbose;
+
+    /*! user name */
+    char *username;
+
+} SetVarState;
 
 /*==============================================================================
         Private file scoped variables
@@ -61,6 +84,12 @@ SOFTWARE.
 /*==============================================================================
         Private function declarations
 ==============================================================================*/
+static int SetUser( SetVarState *pState );
+static int ProcessOptions( int argC,
+                           char *argV[],
+                           SetVarState *pState );
+static void usage( char *name );
+static int SetUser( SetVarState *pState );
 
 /*============================================================================*/
 /*  main                                                                      */
@@ -83,39 +112,220 @@ SOFTWARE.
 ==============================================================================*/
 int main(int argc, char **argv)
 {
-    VARSERVER_HANDLE hVarServer = NULL;
+    SetVarState state;
     int result = EINVAL;
+    uid_t uid;
+    bool userChanged = false;
+    int rc;
 
-    if( argc != 3 )
-    {
-        printf("usage: setvar <varname> <value>\n");
-        exit( 1 );
-    }
+    memset( &state, 0, sizeof(SetVarState));
 
-    /* get a handle to the VAR server */
-    hVarServer = VARSERVER_Open();
-    if( hVarServer != NULL )
+    result = ProcessOptions( argc, argv, &state );
+    if ( result == EOK )
     {
-        result = VAR_SetNameValue( hVarServer, argv[1], argv[2] );
-        if( result != EOK )
+        uid = getuid();
+
+        /* get a handle to the VAR server */
+        state.hVarServer = VARSERVER_Open();
+        if( state.hVarServer != NULL )
         {
-            fprintf(stderr, "SETVAR: %s\n", strerror( result ) );
-        }
-        else
-        {
-            printf("OK\n");
-        }
-    }
+            if ( state.username != NULL )
+            {
+                rc = SetUser( &state );
+                if ( rc == EOK )
+                {
+                    userChanged = true;
+                }
+                else
+                {
+                    fprintf( stderr,
+                            "Failed to set user to: %s rc=%d (%s)\n",
+                            state.username,
+                            rc,
+                            strerror(rc) );
+                }
+            }
 
-    /* close the variable server */
-    VARSERVER_Close( hVarServer );
+            result = VAR_SetNameValue( state.hVarServer,
+                                       state.varname,
+                                       state.value );
+            if( result != EOK )
+            {
+                fprintf(stderr, "SETVAR: %s\n", strerror( result ) );
+            }
+            else
+            {
+                printf("OK\n");
+            }
 
-    if( result != EOK )
-    {
-        fprintf( stderr, "%s\n", strerror( result ) );
+            if ( userChanged == true )
+            {
+                setuid( uid );
+            }
+
+            /* close the variable server */
+            VARSERVER_Close( state.hVarServer );
+        }
     }
 
     return result == EOK ? 0 : 1;
+}
+
+/*============================================================================*/
+/*  ProcessOptions                                                            */
+/*!
+    Process the command line options
+
+    The ProcessOptions function processes the command line options and
+    populates the iotsend state object
+
+    @param[in]
+        argC
+            number of arguments
+            (including the command itself)
+
+    @param[in]
+        argv
+            array of pointers to the command line arguments
+
+    @param[in]
+        pState
+            pointer to the SetVarState object
+
+    @retval EOK ok to proceed
+    @retval EINVAL do not proceed
+
+==============================================================================*/
+static int ProcessOptions( int argC,
+                           char *argV[],
+                           SetVarState *pState )
+{
+    int c;
+    int result = EINVAL;
+    const char *options = "hvu:";
+    int errcount = 0;
+    bool display_help = false;
+
+    if( ( pState != NULL ) &&
+        ( argV != NULL ) )
+    {
+        while( ( c = getopt( argC, argV, options ) ) != -1 )
+        {
+            switch( c )
+            {
+                case 'v':
+                    pState->verbose = true;
+                    break;
+
+                case 'u':
+                    pState->username = optarg;
+                    break;
+
+                case 'h':
+                    display_help = true;
+                    break;
+
+                default:
+                    errcount++;
+                    break;
+
+            }
+        }
+
+        if ( optind < argC - 1)
+        {
+            pState->varname = argV[optind++];
+            pState->value = argV[optind];
+            result = EOK;
+        }
+        else
+        {
+            errcount++;
+        }
+
+        if ( ( display_help == true ) ||
+             ( errcount > 0 ) )
+        {
+            usage( argV[0] );
+            errcount++;
+        }
+
+        if ( errcount == 0 )
+        {
+            result = EOK;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  usage                                                                     */
+/*!
+    Display the usage information
+
+    The usage function describes the command line options on the
+    standard output stream.
+
+    @param[in]
+        name
+            pointer to the application name
+
+==============================================================================*/
+static void usage( char *name )
+{
+    if( name != NULL )
+    {
+        printf("usage: %s [-h] [-v] [-u <user>] varname value", name );
+        printf("-h : display this help\n");
+        printf("-v : enable verbose (debugging) output\n");
+        printf("-u : set user name\n");
+    }
+}
+
+/*============================================================================*/
+/*  SetUser                                                                   */
+/*!
+    Set the user
+
+    Set the user to use to make the varserver query
+
+    @param[in]
+        pState
+            pointer to the VarsState object which contains the user name
+
+    @retval EOK user set ok
+    @retval EINVAL invalid arguments
+    @retval other error from seteuid and setegid
+
+==============================================================================*/
+static int SetUser( SetVarState *pState )
+{
+    int result = EINVAL;
+    struct passwd *pw;
+    int rc;
+
+    if ( pState != NULL )
+    {
+        if ( VARSERVER_SetGroup() == EOK )
+        {
+            pw = getpwnam( pState->username );
+            if ( pw != NULL )
+            {
+                rc = seteuid( pw->pw_uid );
+                if ( rc == EOK )
+                {
+                    result = VARSERVER_UpdateUser( pState->hVarServer );
+                }
+                else
+                {
+                    result = errno;
+                }
+            }
+        }
+    }
+
+    return result;
 }
 
 /*! @}
