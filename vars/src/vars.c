@@ -184,7 +184,7 @@ int main(int argC, char *argV[])
 
             if ( userChanged == true )
             {
-                setuid( uid );
+                rc = setuid( uid );
             }
 
             /* close the variable server */

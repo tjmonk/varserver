@@ -306,6 +306,7 @@ int VARPRINT_SetupListener( pid_t requestorPID, int *sock, gid_t gid )
     struct sockaddr_un addr;
     int s;
     int reuse = 1;
+    int rc;
 
     /* Create a unix domain socket */
     s = socket( AF_UNIX, SOCK_STREAM, 0 );
@@ -322,9 +323,19 @@ int VARPRINT_SetupListener( pid_t requestorPID, int *sock, gid_t gid )
         if( bind(s, (struct sockaddr *)&addr, sizeof(addr)) != -1 )
         {
             /* set up group ownership for client file */
-            chown( addr.sun_path, -1, gid);
-            chmod( addr.sun_path,
-                   S_IWUSR | S_IRUSR | S_IXUSR | S_IWGRP | S_IRGRP | S_IXGRP );
+            if ( chown( addr.sun_path, -1, gid) == 0 )
+            {
+                rc = chmod( addr.sun_path,
+                    S_IWUSR | S_IRUSR | S_IXUSR | S_IWGRP | S_IRGRP | S_IXGRP );
+                if ( rc != 0 )
+                {
+                    result = errno;
+                }
+            }
+            else
+            {
+                result = errno;
+            }
 
             /* listen for a connection */
             if( listen(s, 1) != -1 )
