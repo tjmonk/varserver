@@ -3472,7 +3472,6 @@ static bool varlist_CheckWritePermissions( VarInfo *pVarInfo,
     register gid_t *p;
     register gid_t *q;
 
-
     if ( ( pVarInfo != NULL ) &&
          ( pVarStorage != NULL ) )
     {
@@ -3482,12 +3481,6 @@ static bool varlist_CheckWritePermissions( VarInfo *pVarInfo,
         m = pVarStorage->permissions.nwrites;
         p = pVarInfo->creds;
         q = pVarStorage->permissions.write;
-
-        if ( m == 0 )
-        {
-            /* if no variable permissions are specified everyone has access */
-            access = true;
-        }
 
         for(i = 0 ; i < n && !access ; i++ )
         {
