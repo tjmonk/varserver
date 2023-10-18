@@ -84,4 +84,6 @@ int VARLIST_GetNext( pid_t clientPID,
 
 VarObject *VARLIST_GetObj( VAR_HANDLE hVar );
 
+void VARLIST_SetUser( void );
+
 #endif

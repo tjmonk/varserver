@@ -117,6 +117,9 @@ static SearchContext *pSearchContexts = NULL;
 /*! unique context identifier */
 static int contextIdent = 0;
 
+/*! id of user that started varserver */
+static uid_t varserver_uid;
+
 /*==============================================================================
         Private function declarations
 ==============================================================================*/
@@ -3421,7 +3424,7 @@ static bool varlist_CheckReadPermissions( VarInfo *pVarInfo,
 
         for(i = 0 ; i < n && !access ; i++ )
         {
-            if ( p[i] == 0 )
+            if ( ( p[i] == 0 ) || ( p[i] == varserver_uid ) )
             {
                 access = true;
             }
@@ -3487,7 +3490,7 @@ static bool varlist_CheckWritePermissions( VarInfo *pVarInfo,
 
         for(i = 0 ; i < n && !access ; i++ )
         {
-            if ( p[i] == 0 )
+            if ( ( p[i] == 0 ) || ( p[i] == varserver_uid ) )
             {
                 access = true;
             }
@@ -3505,6 +3508,24 @@ static bool varlist_CheckWritePermissions( VarInfo *pVarInfo,
     }
 
     return access;
+}
+
+/*============================================================================*/
+/*  VARLIST_SetUser                                                           */
+/*!
+    Set the varserver user identifier
+
+    The VARLIST_SetUser function sets the identifier of the user that
+    started the variable server.  This user identifier is used to validate
+    request to read/write variables. If the requesting user is the same
+    as the user that started the variable server, then this requesting user
+    has full read/write access to the variable store.
+
+==============================================================================*/
+void VARLIST_SetUser( void )
+{
+    /* get the user identifier of the user that started the variable server */
+    varserver_uid = getuid();
 }
 
 /*! @}

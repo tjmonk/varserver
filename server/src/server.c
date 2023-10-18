@@ -338,6 +338,9 @@ int main(int argc, char **argv)
     (void)argc;
     (void)argv;
 
+    /* get the user id of the user running varserver */
+    VARLIST_SetUser();
+
     /* initialize the varserver statistics */
     InitStats();
 
