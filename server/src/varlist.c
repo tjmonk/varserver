@@ -2898,6 +2898,7 @@ int VARLIST_GetFirst( pid_t clientPID,
         }
         else
         {
+            *context = 0;
             result = ENOMEM;
         }
     }
@@ -3023,6 +3024,8 @@ int VARLIST_GetNext( pid_t clientPID,
     else
     {
         /* search context does not exist */
+        *response = 0;
+
         result = ENOTSUP;
     }
 

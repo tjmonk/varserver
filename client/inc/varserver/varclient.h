@@ -192,7 +192,7 @@ typedef struct _varClient
     int ngroups;
 
     /*! maxmimum number of groups supported by varserver */
-    gid_t grouplist[ VARSERVER_MAX_UIDS ];
+    gid_t grouplist[ VARSERVER_MAX_CLIENT_GIDS ];
 
     /*! process identifier of a peer process which is
         interacting with this one, eg during variable validation */

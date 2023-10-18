@@ -50,6 +50,11 @@ SOFTWARE.
 #define VARSERVER_MAX_UIDS     ( 6 )
 #endif
 
+/*! maximum client group ids */
+#ifndef VARSERVER_MAX_CLIENT_GIDS
+#define VARSERVER_MAX_CLIENT_GIDS  ( 20 )
+#endif
+
 /*! maximum format specifier length */
 #ifndef MAX_FORMATSPEC_LEN
 #define MAX_FORMATSPEC_LEN  ( 8 )
@@ -201,7 +206,7 @@ typedef struct _VarInfo
     NotificationType notificationType;
 
     /*! user credentials */
-    gid_t creds[ VARSERVER_MAX_UIDS ];
+    gid_t creds[ VARSERVER_MAX_CLIENT_GIDS ];
 
     /* number of credentials */
     size_t ncreds;

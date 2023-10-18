@@ -3466,7 +3466,7 @@ static int varserver_GetGroupList( VarClient *pVarClient )
             pVarClient->gid = pw->pw_gid;
 
             /* get the group list */
-            pVarClient->ngroups = VARSERVER_MAX_UIDS;
+            pVarClient->ngroups = VARSERVER_MAX_CLIENT_GIDS;
 
             rc = getgrouplist( pw->pw_name,
                                pw->pw_gid,
@@ -3477,6 +3477,11 @@ static int varserver_GetGroupList( VarClient *pVarClient )
                 memset( pVarClient->grouplist,
                         -1,
                         sizeof( pVarClient->grouplist ));
+
+                /* fall back to basic user only access (no groups) */
+                pVarClient->ngroups = 1;
+                pVarClient->grouplist[0] = pVarClient->uid;
+
                 result = E2BIG;
             }
             else
