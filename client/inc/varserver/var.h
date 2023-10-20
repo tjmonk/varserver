@@ -123,7 +123,10 @@ typedef enum _VarFlags
     VARFLAG_DIRTY = 8,
 
     /*! public variable */
-    VARFLAG_PUBLIC = 16
+    VARFLAG_PUBLIC = 16,
+
+    /*! trigger variable (value not changed) */
+    VARFLAG_TRIGGER = 32
 
 } VarFlags;
 

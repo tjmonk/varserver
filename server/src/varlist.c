@@ -136,6 +136,14 @@ static int varlist_SetStr( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int varlist_SetBlob( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int varlist_Calc( VarClient *pVarClient, void *arg );
 
+static int varlist_SendNotifications( pid_t clientPID,
+                                      VarStorage *pVarStorage,
+                                      VAR_HANDLE hVar );
+
+static int varlist_HandleTrigger( pid_t clientPID,
+                                  VarStorage *pVarStorage,
+                                  VAR_HANDLE hVar );
+
 static SearchContext *varlist_NewSearchContext( pid_t clientPID,
                                                 int searchType,
                                                 VarInfo *pVarInfo,
@@ -629,9 +637,7 @@ int VARLIST_Set( pid_t clientPID,
     int result = EINVAL;
     VarStorage *pVarStorage;
     VAR_HANDLE hVar;
-    size_t n = 0;
     uint32_t validateHandle;
-    void *payload;
     int rc;
 
     if( pVarInfo != NULL )
@@ -651,6 +657,14 @@ int VARLIST_Set( pid_t clientPID,
             if ( rc == false )
             {
                 return EACCES;
+            }
+
+            /* handle trigger notifications */
+            rc = varlist_HandleTrigger( clientPID, pVarStorage, hVar );
+            if ( rc == EOK )
+            {
+                /* further processing disabled for trigger variables */
+                return EOK;
             }
 
             /* Check if we have a validation handler on this variable */
@@ -757,36 +771,12 @@ int VARLIST_Set( pid_t clientPID,
                     pVarStorage->notifyMask &= ~NOTIFY_MASK_HAS_CALC_BLOCK;
                 }
 
-                /* signal variable modified */
-                if( ( pVarStorage->notifyMask & NOTIFY_MASK_MODIFIED ) &&
-                    ( result == EOK ) )
+                if ( result == EOK )
                 {
-                    NOTIFY_Signal( clientPID,
-                                   &pVarStorage->pNotifications,
-                                   NOTIFY_MODIFIED,
-                                   hVar,
-                                   NULL );
-                }
-
-                if ( ( pVarStorage->notifyMask & NOTIFY_MASK_MODIFIED_QUEUE ) &&
-                     ( result == EOK ) )
-                {
-                    /* prepare the notification payload */
-                    payload = varlist_GetNotificationPayload( hVar,
-                                                              pVarStorage,
-                                                              &n );
-
-                    /* send the notification payloads */
-                    NOTIFY_Payload( &pVarStorage->pNotifications,
-                                    payload,
-                                    n );
-
-                    /* send notification signals to the clients */
-                    NOTIFY_Signal( clientPID,
-                                   &pVarStorage->pNotifications,
-                                   NOTIFY_MODIFIED_QUEUE,
-                                   hVar,
-                                   NULL );
+                    /* send out notifications */
+                    result = varlist_SendNotifications( clientPID,
+                                                        pVarStorage,
+                                                        hVar );
                 }
             }
 
@@ -808,6 +798,111 @@ int VARLIST_Set( pid_t clientPID,
 /*==============================================================================
         Private function definitions
 ==============================================================================*/
+
+/*============================================================================*/
+/*  varlist_SendNotifications                                                 */
+/*!
+    Send out requested client notifications
+
+    The varlist_SendNotifications function sends out requested client
+    notifications of type modified and modified_queued.
+
+    @param[in]
+        clientPID
+            process identifier of the requesting client
+
+    @param[in]
+        pVarStorage
+            pointer to the variable storage for the variable notification
+
+    @param[in]
+        hVar
+            handle to the variable that has been modified
+
+    @retval EOK the notifications were sent
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+static int varlist_SendNotifications( pid_t clientPID,
+                                      VarStorage *pVarStorage,
+                                      VAR_HANDLE hVar )
+{
+    int result = EINVAL;
+    void *payload;
+    size_t n = 0;
+
+    if ( pVarStorage != NULL )
+    {
+        result = EOK;
+
+        /* signal variable modified */
+        if ( pVarStorage->notifyMask & NOTIFY_MASK_MODIFIED )
+        {
+            NOTIFY_Signal( clientPID,
+                           &pVarStorage->pNotifications,
+                           NOTIFY_MODIFIED,
+                           hVar,
+                           NULL );
+        }
+
+        if ( pVarStorage->notifyMask & NOTIFY_MASK_MODIFIED_QUEUE )
+        {
+            /* prepare the notification payload */
+            payload = varlist_GetNotificationPayload( hVar,
+                                                      pVarStorage,
+                                                      &n );
+
+            /* send the notification payloads */
+            NOTIFY_Payload( &pVarStorage->pNotifications,
+                            payload,
+                            n );
+
+            /* send notification signals to the clients */
+            NOTIFY_Signal( clientPID,
+                            &pVarStorage->pNotifications,
+                            NOTIFY_MODIFIED_QUEUE,
+                            hVar,
+                            NULL );
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  varlist_HandleTrigger                                                     */
+/*!
+    Check for and handle modification for a trigger variable
+
+    The varlist_HandleTrigger function checks to see if the variable
+    which is being set is a trigger variable.  If it is, and notifications,
+    are requested for this variable, then the notification will be sent out.
+
+
+    @param[in]
+        pVarStorage
+            Pointer to the variable storage
+
+==============================================================================*/
+static int varlist_HandleTrigger( pid_t clientPID,
+                                  VarStorage *pVarStorage,
+                                  VAR_HANDLE hVar )
+{
+    int result = EINVAL;
+
+    if ( pVarStorage != NULL )
+    {
+        if (  pVarStorage->flags & VARFLAG_TRIGGER )
+        {
+            /* send out notifications */
+            result = varlist_SendNotifications( clientPID,
+                                                pVarStorage,
+                                                hVar );
+        }
+    }
+
+    return result;
+}
 
 /*============================================================================*/
 /*  varlist_SetDirty                                                          */
