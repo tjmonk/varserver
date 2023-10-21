@@ -1,0 +1,28 @@
+name: Linux builds
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Prepare environment
+        # change this to test with different toolchains
+        run: sudo apt-get install -y g++-10
+
+      - name: Configure build
+        working-directory: ${{runner.workspace}}
+        env:
+          CXX: g++-10
+        # Note: $GITHUB_WORKSPACE is distinct from ${{runner.workspace}}.
+        #       This is important
+        run: |
+          cmake -Bbuild -H$GITHUB_WORKSPACE
+    
+      - name: Build everything
+        working-directory: ${{runner.workspace}}/build
+        run: cmake --build .
+    
