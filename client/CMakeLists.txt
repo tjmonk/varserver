@@ -16,7 +16,9 @@ add_library( ${PROJECT_NAME} SHARED
     src/varcache.c
     src/varfp.c
     src/varquery.c
+    src/varflags.c
     src/vartemplate.c
+    src/varclient.c
 )
 
 set_target_properties( ${PROJECT_NAME} PROPERTIES
@@ -35,6 +37,7 @@ set(VARSERVER_HEADERS
     inc/varserver/varcache.h
     inc/varserver/varfp.h
     inc/varserver/varquery.h
+    inc/varserver/varflags.h
     inc/varserver/vartemplate.h)
 
 set_target_properties(${PROJECT_NAME}

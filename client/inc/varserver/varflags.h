@@ -1,4 +1,4 @@
-/*============================================================================
+/*==============================================================================
 MIT License
 
 Copyright (c) 2023 Trevor Monk
@@ -20,10 +20,10 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-============================================================================*/
+==============================================================================*/
 
-#ifndef VARQUERY_H
-#define VARQUERY_H
+#ifndef VARFLAGS_H
+#define VARFLAGS_H
 
 /*============================================================================
         Includes
@@ -42,15 +42,35 @@ SOFTWARE.
         Public Types
 ============================================================================*/
 
+/*! operation type to set or clear the flag */
+typedef enum _flagModifyOperation
+{
+    /*! clear the flag */
+    FlagClear = 0,
+
+    /* set the flag */
+    FlagSet = 1,
+} FlagModifyOperation;
+
 /*============================================================================
         Public Function Declarations
 ============================================================================*/
 
-int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
-                     int searchType,
+int VAR_ModifyFlags( VARSERVER_HANDLE hVarServer,
                      char *match,
-                     uint32_t instanceID,
                      uint32_t flags,
-                     int fd );
+                     FlagModifyOperation op );
+
+int VAR_SetFlags( VARSERVER_HANDLE hVarServer,
+                  VAR_HANDLE hVar,
+                  uint32_t flags );
+
+int VAR_ClearFlags( VARSERVER_HANDLE hVarServer,
+                    VAR_HANDLE hVar,
+                    uint32_t flags );
+
+int VAR_ClearDirtyFlags( VARSERVER_HANDLE hVarServer );
+
+
 
 #endif

@@ -30,6 +30,7 @@ SOFTWARE.
 
 #include "var.h"
 #include "varprint.h"
+#include "varclient.h"
 #include <signal.h>
 
 /*============================================================================
@@ -73,9 +74,6 @@ SOFTWARE.
 
 /*! signal indicating the variable notification queue has been modified */
 #define SIG_VAR_QUEUE_MODIFIED ( SIGRTMIN + 10 )
-
-/*! handle to the variable server */
-typedef void * VARSERVER_HANDLE;
 
 /*! The VarNotification object is used to retrieve
     variable notifications from the Variable Server

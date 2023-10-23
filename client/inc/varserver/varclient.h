@@ -72,6 +72,9 @@ SOFTWARE.
 #define VARSERVER_MAX_GROUPS 10
 #endif
 
+/*! handle to the variable server */
+typedef void * VARSERVER_HANDLE;
+
 /*! the VarRequest enumeration specifies the type of requests that can
     be made from the client to the server */
 typedef enum _varRequest
@@ -138,6 +141,12 @@ typedef enum _varRequest
 
     /*! Get the next variable in a search query result */
     VARREQUEST_GET_NEXT,
+
+    /*! Set variable flags */
+    VARREQUEST_SET_FLAGS,
+
+    /*! Set variable flags */
+    VARREQUEST_CLEAR_FLAGS,
 
     /*! End request type marker */
     VARREQUEST_END_MARKER
@@ -233,5 +242,13 @@ typedef struct _varClient
     char workbuf;
 
 } VarClient;
+
+/*============================================================================
+        Public function declarations
+============================================================================*/
+
+VarClient *ValidateHandle( VARSERVER_HANDLE hVarServer );
+
+int ClientRequest( VarClient *pVarClient, int signal );
 
 #endif

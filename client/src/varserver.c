@@ -77,14 +77,12 @@ SOFTWARE.
 ==============================================================================*/
 
 static int varserver_connect( VarClient *pVarClient );
-static int ClientRequest( VarClient *pVarClient, int signal );
 static VarClient *NewClient( size_t workbufsize );
 static int varserver_GetGroupList( VarClient *pVarClient );
 static int ClientCleanup( VarClient *pVarClient );
 static int DeleteClientSemaphore( VarClient *pVarClient );
 static int NewClientSemaphore( VarClient *pVarClient );
 static int InitServerInfo( VarClient *pVarClient );
-static VarClient *ValidateHandle( VARSERVER_HANDLE hVarServer );
 static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf );
 static int var_GetVarObject( VarClient *pVarClient, VarObject *pVarObject );
 static int var_GetBlobObjectFromWorkbuf( VarClient *pVarClient,
@@ -3125,44 +3123,6 @@ static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf )
 }
 
 /*============================================================================*/
-/*  ValidateHandle                                                            */
-/*!
-    Validate a variable server handle
-
-    The ValidateHandle function checks that the specified handle is a
-    handle to the variable server and converts it into VarClient
-    pointer.
-
-    @param[in]
-        hVarServer
-            handle to the Variable Server
-
-    @retval pointer to a VarClient object
-    @retval NULL - an invalid variable server handle was specified
-
-==============================================================================*/
-static VarClient *ValidateHandle( VARSERVER_HANDLE hVarServer )
-{
-    VarClient *pVarClient;
-
-    pVarClient = (VarClient *)hVarServer;
-    if( pVarClient != NULL )
-    {
-        if( ( pVarClient->id != VARSERVER_ID ) &&
-            ( pVarClient->version != VARSERVER_VERSION ) )
-        {
-            if( pVarClient->debug >= LOG_ERR )
-            {
-                printf("CLIENT: Invalid VARSERVER handle\n");
-            }
-            pVarClient = NULL;
-        }
-    }
-
-    return pVarClient;
-}
-
-/*============================================================================*/
 /*  InitServerInfo                                                            */
 /*!
     Initialize the VarServer information
@@ -3230,99 +3190,6 @@ static int InitServerInfo( VarClient *pVarClient )
     return result;
 }
 
-/*============================================================================*/
-/*  ClientRequest                                                             */
-/*!
-    Send a request from the client to the server
-
-    The ClientRequest function is used to send a client request from a
-    client to the Variable Server.
-
-    This is a blocking call.  The client will wait until explicitly
-    released by the server.  If the server dies, the client will hang!
-
-    @param[in]
-        pVarClient
-            pointer to the VarClient object belonging to the client
-
-    @param[in]
-        signal
-            specifies the readl-time signal to be sent
-            from the client to the server
-
-    @retval EOK - the client request was handled successfully by the server
-    @retval EINVAL - an invalid client was specified
-    @retval other - error code returned by sigqueue, or sem_wait
-
-==============================================================================*/
-static int ClientRequest( VarClient *pVarClient, int signal )
-{
-    int result = EINVAL;
-    union sigval val;
-    ServerInfo *pServerInfo = NULL;
-
-    if( pVarClient != NULL )
-    {
-         /* get a pointer to the server info */
-        pServerInfo = pVarClient->pServerInfo;
-        if( pServerInfo != NULL )
-        {
-            /* provide the client identifier to the var server */
-            val.sival_int = pVarClient->clientid;
-
-            if( pVarClient->debug >= LOG_DEBUG )
-            {
-                printf("CLIENT: Sending client request signal (%d) to %d\n",
-                       signal,
-                       pServerInfo->pid );
-            }
-
-            /* copy the client grouplist into the VarInfo credentials */
-            memcpy( pVarClient->variableInfo.creds,
-                    pVarClient->grouplist,
-                    pVarClient->ngroups * sizeof( gid_t ) );
-
-            /*! set the number of groups to check */
-            pVarClient->variableInfo.ncreds = pVarClient->ngroups;
-
-            result = sigqueue( pServerInfo->pid, signal, val );
-            if( result == EOK )
-            {
-                do
-                {
-                    pVarClient->blocked = 1;
-                    result = sem_wait( &pVarClient->sem );
-                    if( result == EOK )
-                    {
-                        if( pVarClient->debug >= LOG_DEBUG )
-                        {
-                            printf("CLIENT: Received response\n");
-                        }
-                    }
-                    else
-                    {
-                        printf("sem_wait failed\n");
-                        result = errno;
-                    }
-                    pVarClient->blocked = 0;
-                }
-                while ( result != EOK );
-            }
-            else
-            {
-                result = errno;
-            }
-        }
-    }
-
-    if( ( result != EOK ) &&
-        ( pVarClient->debug >= LOG_ERR ) )
-    {
-        printf("%s failed: (%d) %s\n", __func__, result, strerror(result));
-    }
-
-    return result;
-}
 
 /*============================================================================*/
 /*  NewClient                                                                 */

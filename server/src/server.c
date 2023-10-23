@@ -134,6 +134,8 @@ static int ProcessVarRequestOpenPrintSession( VarClient *pVarClient );
 static int ProcessVarRequestClosePrintSession( VarClient *pVarClient );
 static int ProcessVarRequestGetFirst( VarClient *pVarClient );
 static int ProcessVarRequestGetNext( VarClient *pVarClient );
+static int ProcessVarRequestSetFlags( VarClient *pVarClient );
+static int ProcessVarRequestClearFlags( VarClient *pVarClient );
 
 static uint64_t *MakeMetric( char *name );
 
@@ -302,6 +304,20 @@ static RequestHandler RequestHandlers[] =
         "GET_FIRST",
         ProcessVarRequestGetNext,
         "/varserver/stats/get_next",
+        NULL
+    },
+    {
+        VARREQUEST_SET_FLAGS,
+        "GET_FLAGS",
+        ProcessVarRequestSetFlags,
+        "/varserver/stats/set_flags",
+        NULL
+    },
+    {
+        VARREQUEST_CLEAR_FLAGS,
+        "CLEAR_FLAGS",
+        ProcessVarRequestClearFlags,
+        "/varserver/stats/clear_flags",
         NULL
     }
 };
@@ -1607,6 +1623,74 @@ static int ProcessVarRequestGetNext( VarClient *pVarClient )
             /* add the client to the blocked clients list */
             BlockClient( pVarClient, NOTIFY_CALC );
         }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  ProcessVarRequestSetFlags                                                 */
+/*!
+    Process a SET_FLAGS variable request from a client
+
+    The ProcessVarRequestSetFlags function handles a "variable SET_FLAGS"
+    request from a client.  It sets all of the flags specified in the
+    pVarClient->variableInfo object for the variable specified in the
+    pVarClient->variableInfo object.
+
+    @param[in]
+        pVarClient
+            Pointer to the client data structure
+
+    @retval EOK the variable flags were set
+    @retval ENOENT the variable was not found
+    @retval EINVAL the client is invalid
+    @retval ENOTSUP the client is the wrong version
+
+==============================================================================*/
+static int ProcessVarRequestSetFlags( VarClient *pVarClient )
+{
+    int result = EINVAL;
+
+    /* validate the client object */
+    result = ValidateClient( pVarClient );
+    if( result == EOK)
+    {
+        result = VARLIST_SetFlags( &pVarClient->variableInfo );
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  ProcessVarRequestClearFlags                                               */
+/*!
+    Process a CLEAR_FLAGS variable request from a client
+
+    The ProcessVarRequestClearFlags function handles a "variable CLEAR_FLAGS"
+    request from a client.  It clears all of the flags specified in the
+    pVarClient->variableInfo object for the variable specified in the
+    pVarClient->variableInfo object.
+
+    @param[in]
+        pVarClient
+            Pointer to the client data structure
+
+    @retval EOK the variable flags were cleared
+    @retval ENOENT the variable was not found
+    @retval EINVAL the client is invalid
+    @retval ENOTSUP the client is the wrong version
+
+==============================================================================*/
+static int ProcessVarRequestClearFlags( VarClient *pVarClient )
+{
+    int result = EINVAL;
+
+    /* validate the client object */
+    result = ValidateClient( pVarClient );
+    if( result == EOK)
+    {
+        result = VARLIST_ClearFlags( &pVarClient->variableInfo );
     }
 
     return result;

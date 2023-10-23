@@ -23,25 +23,24 @@ SOFTWARE.
 ==============================================================================*/
 
 /*!
- * @defgroup vars vars
- * @brief Variable Query utility
+ * @defgroup varflags varflags
+ * @brief Variable Flag Manipulation utility
  * @{
  */
 
 /*============================================================================*/
 /*!
-@file vars.c
+@file varflags.c
 
-    Variable Query Utility
+    Variable Flags Manipulation Utility
 
-    The Vars utility can be used to query the variable server
-    via the libvarquery library to obtain a list of variables
-    and their values which match the specified search criteria.
+    The VarFlags utility can be used to set/clear flags on
+    varserver variables which match the specified search criteria.
 
     Variables can be searched using their name, instance identifier,
     tags, and flags.
 
-    Search options are specified via command line arguments to the vars
+    Search options are specified via command line arguments to the varflags
     utility
 
 */
@@ -65,6 +64,7 @@ SOFTWARE.
 #include <grp.h>
 #include <varserver/varserver.h>
 #include <varserver/varquery.h>
+#include <varserver/varflags.h>
 
 /*==============================================================================
        Type Definitions
@@ -77,11 +77,14 @@ typedef struct _varsState
     /*! search text */
     char *searchText;
 
-    /*! output file descriptor */
-    int fd;
-
     /*! flags to search for */
     uint32_t flags;
+
+    /*! flags to set */
+    uint32_t setflags;
+
+    /*! flags to clear */
+    uint32_t clearflags;
 
     /*! type of search - bitfield */
     int searchType;
@@ -92,7 +95,10 @@ typedef struct _varsState
     /*! user name */
     char *username;
 
-} VarsState;
+    /*! verbose flag */
+    bool verbose;
+
+} VarFlagsState;
 
 /*==============================================================================
        Function declarations
@@ -100,8 +106,9 @@ typedef struct _varsState
 static void usage( char *cmdname );
 static int ProcessOptions( int argC,
                            char *argV[],
-                           VarsState *pState );
-static int SetUser( VarsState *pState );
+                           VarFlagsState *pState );
+static int SetUser( VarFlagsState *pState );
+static int varflags_Update( VarFlagsState *pState );
 
 /*==============================================================================
        Definitions
@@ -110,7 +117,6 @@ static int SetUser( VarsState *pState );
 /*==============================================================================
       File Scoped Variables
 ==============================================================================*/
-VarsState *pState;
 
 /*==============================================================================
        Function definitions
@@ -138,15 +144,13 @@ int main(int argC, char *argV[])
     uid_t uid;
     bool userChanged = false;
     int rc;
-
-    pState = NULL;
+    VarFlagsState *pState = NULL;
+    int result = EINVAL;
 
     /* create the vars utility instance */
-    pState = (VarsState *)calloc(1, sizeof( VarsState ) );
+    pState = (VarFlagsState *)calloc(1, sizeof( VarFlagsState ) );
     if ( pState != NULL )
     {
-        pState->fd = STDOUT_FILENO;
-
         /* get the user identifier */
         uid = getuid();
 
@@ -174,13 +178,8 @@ int main(int argC, char *argV[])
                 }
             }
 
-            /* make the query */
-            (void)VARQUERY_Search( pState->hVarServer,
-                                   pState->searchType,
-                                   pState->searchText,
-                                   pState->instanceID,
-                                   pState->flags,
-                                   pState->fd );
+            /* update the flags */
+            result = varflags_Update( pState );
 
             if ( userChanged == true )
             {
@@ -193,7 +192,7 @@ int main(int argC, char *argV[])
         }
     }
 
-    return 0;
+    return ( result == EOK ) ? 0 : 1;
 }
 
 /*============================================================================*/
@@ -220,8 +219,10 @@ static void usage( char *cmdname )
                 " [-n name] : variable name search term\n"
                 " [-f flagslist] : variable flags search term\n"
                 " [-i instanceID]: instance identifier search term\n"
-                " [-h] : display this help\n"
-                " [-v] : output values\n",
+                " [-s flagslist] : set flags on matching vars\n"
+                " [-c flagslist] : clear flags on matching vars\n"
+                " [-v] : verbose output\n"
+                " [-h] : display this help\n",
                 cmdname );
     }
 }
@@ -252,11 +253,11 @@ static void usage( char *cmdname )
 ==============================================================================*/
 static int ProcessOptions( int argC,
                            char *argV[],
-                           VarsState *pState )
+                           VarFlagsState *pState )
 {
     int c;
     int result = EINVAL;
-    const char *options = "hvn:f:i:u:";
+    const char *options = "hvn:f:i:u:s:c:";
 
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
@@ -272,10 +273,6 @@ static int ProcessOptions( int argC,
                     pState->instanceID = atol(optarg);
                     break;
 
-                case 'v':
-                    pState->searchType |= QUERY_SHOWVALUE;
-                    break;
-
                 case 'n':
                     pState->searchText = optarg;
                     pState->searchType |= QUERY_MATCH;
@@ -286,8 +283,20 @@ static int ProcessOptions( int argC,
                     VARSERVER_StrToFlags( optarg, &pState->flags );
                     break;
 
+                case 's':
+                    VARSERVER_StrToFlags( optarg, &pState->setflags );
+                    break;
+
+                case 'c':
+                    VARSERVER_StrToFlags( optarg, &pState->clearflags );
+                    break;
+
                 case 'u':
                     pState->username = optarg;
+                    break;
+
+                case 'v':
+                    pState->verbose = true;
                     break;
 
                 case 'h':
@@ -313,14 +322,14 @@ static int ProcessOptions( int argC,
 
     @param[in]
         pState
-            pointer to the VarsState object which contains the user name
+            pointer to the VarFlagsState object which contains the user name
 
     @retval EOK user set ok
     @retval EINVAL invalid arguments
     @retval other error from seteuid and setegid
 
 ==============================================================================*/
-static int SetUser( VarsState *pState )
+static int SetUser( VarFlagsState *pState )
 {
     int result = EINVAL;
     struct passwd *pw;
@@ -349,5 +358,111 @@ static int SetUser( VarsState *pState )
     return result;
 }
 
+/*============================================================================*/
+/*  VARQUERY_Search                                                           */
+/*!
+    Search for variables
+
+    The VARQUERY_Search function searches for variables using the
+    specified criteria and outputs them to the specified output.
+
+    @param[in]
+        hVarServer
+            handle to the Variable Server to create variables for
+
+    @param[in]
+        searchType
+            a bitfield indicating the type of search to perform.
+            Contains one or more of the following OR'd together:
+                QUERY_REGEX or QUERY_MATCH
+                QUERY_FLAGS
+                QUERY_TAGS
+                QUERY_INSTANCEID
+
+    @param[in]
+        match
+            string to use for variable name matching.  This is used
+            if one of these search types is specified: QUERY_REGEX,
+            QUERY_MATCH, otherwise this parameter is ignored.
+
+    @param[in]
+        instanceID
+            used for instance ID matching if QUERY_INSTANCEID is specified,
+            otherwise it is ignored.
+
+    @param[in]
+        fd
+            output steam for variable data
+
+    @retval EOK - variable search was successful
+    @retval EINVAL - invalid arguments
+    @retval ENOENT - no variables matched the search criteria
+
+==============================================================================*/
+static int varflags_Update( VarFlagsState *pState )
+{
+    int result = EINVAL;
+    VarQuery query;
+    VarObject obj;
+    char setFlagsStr[BUFSIZ];
+    char clrFlagsStr[BUFSIZ];
+
+    memset( &query, 0, sizeof( VarQuery ) );
+
+    VARSERVER_FlagsToStr( pState->setflags, setFlagsStr, sizeof setFlagsStr );
+    VARSERVER_FlagsToStr( pState->clearflags, clrFlagsStr, sizeof clrFlagsStr );
+
+    query.type = pState->searchType;
+    query.instanceID = pState->instanceID;
+    query.match = pState->searchText;
+    query.flags = pState->flags;
+
+    result = VAR_GetFirst( pState->hVarServer, &query, &obj );
+    while ( result == EOK )
+    {
+        if ( pState->setflags != 0 )
+        {
+            if ( pState->verbose )
+            {
+                printf( "Setting flags '%s' on var %s: ",
+                        setFlagsStr,
+                        query.name );
+            }
+
+            result = VAR_SetFlags( pState->hVarServer,
+                                   query.hVar,
+                                   pState->setflags );
+
+            if ( pState->verbose )
+            {
+                printf("%s\n", (result == EOK ) ? "OK" : "FAILED" );
+            }
+        }
+
+        if ( pState->clearflags != 0 )
+        {
+            if ( pState->verbose )
+            {
+                printf( "Clearing flags '%s' on var %s: ",
+                        clrFlagsStr,
+                        query.name );
+            }
+
+            result = VAR_ClearFlags( pState->hVarServer,
+                                     query.hVar,
+                                     pState->clearflags );
+
+            if ( pState->verbose )
+            {
+                printf("%s\n", (result == EOK ) ? "OK" : "FAILED" );
+            }
+        }
+
+        result = VAR_GetNext( pState->hVarServer, &query, &obj );
+    }
+
+    return result;
+}
+
 /*! @}
- * end of vars group */
+ * end of varflags group */

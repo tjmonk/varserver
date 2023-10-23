@@ -795,6 +795,118 @@ int VARLIST_Set( pid_t clientPID,
     return result;
 }
 
+/*============================================================================*/
+/*  VARLIST_SetFlags                                                          */
+/*!
+    Handle a SET_FLAGS request from a client
+
+    The VARLIST_SetFlags function handles a SET_FLAGS request from a client.
+    It sets the specified flags on the specified variable
+
+    @param[in]
+        pVarInfo
+            Pointer to the variable definition containing the handle
+            of the variable whose flags will be set
+
+    @retval EOK the variable flags were successfully set
+    @retval ENOENT the variable does not exist
+    @retval EACCES insufficient permissions to set the flags
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+int VARLIST_SetFlags( VarInfo *pVarInfo )
+{
+    int result = EINVAL;
+    VarStorage *pVarStorage;
+    VAR_HANDLE hVar;
+    bool rc;
+
+    if( pVarInfo != NULL )
+    {
+        result = ENOENT;
+
+        hVar = pVarInfo->hVar;
+
+        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
+            ( hVar <= (VAR_HANDLE)varcount ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
+        {
+            /* get a pointer to the variable storage for this variable */
+            pVarStorage = &varstore[hVar];
+
+            /* check if we have write permissions on this variable */
+            rc = varlist_CheckWritePermissions( pVarInfo, pVarStorage );
+            if ( rc == true )
+            {
+                pVarStorage->flags |= pVarInfo->flags;
+                result = EOK;
+            }
+            else
+            {
+                result = EACCES;
+            }
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VARLIST_ClearFlags                                                        */
+/*!
+    Handle a CLEAR_FLAGS request from a client
+
+    The VARLIST_ClearFlags function handles a CLEAR_FLAGS request from a client.
+    It clears the specified flags on the specified variable
+
+    @param[in]
+        pVarInfo
+            Pointer to the variable definition containing the handle
+            of the variable whose flags will be cleared
+
+    @retval EOK the variable flags were successfully cleared
+    @retval ENOENT the variable does not exist
+    @retval EACCES insufficient permissions to clear the flags
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+int VARLIST_ClearFlags( VarInfo *pVarInfo )
+{
+    int result = EINVAL;
+    VarStorage *pVarStorage;
+    VAR_HANDLE hVar;
+    int rc;
+
+    if( pVarInfo != NULL )
+    {
+        result = ENOENT;
+
+        hVar = pVarInfo->hVar;
+
+        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
+            ( hVar <= (VAR_HANDLE)varcount ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
+        {
+            /* get a pointer to the variable storage for this variable */
+            pVarStorage = &varstore[hVar];
+
+            /* check if we have write permissions on this variable */
+            rc = varlist_CheckWritePermissions( pVarInfo, pVarStorage );
+            if ( rc == true )
+            {
+                pVarStorage->flags &= ~(pVarInfo->flags);
+                result = EOK;
+            }
+            else
+            {
+                result = EACCES;
+            }
+        }
+    }
+
+    return result;
+}
+
 /*==============================================================================
         Private function definitions
 ==============================================================================*/

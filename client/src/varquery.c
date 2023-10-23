@@ -120,7 +120,7 @@ int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
                      int searchType,
                      char *match,
                      uint32_t instanceID,
-                     VarFlags flags,
+                     uint32_t flags,
                      int fd )
 {
     int result = EINVAL;
