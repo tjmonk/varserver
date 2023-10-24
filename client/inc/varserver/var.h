@@ -194,7 +194,7 @@ typedef struct _VarInfo
     VarObject var;
 
     /*! variable flags */
-    VarFlags flags;
+    uint32_t flags;
 
     /*! variable tag specifier */
     char tagspec[MAX_TAGSPEC_LEN];

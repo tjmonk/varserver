@@ -457,55 +457,60 @@ static int varobject_CopyString( VarObject *pDst, VarObject *pSrc )
     char *pSrcString;
     size_t srclen;
 
-    /* get the source object length */
-    srclen = pSrc->len;
-
-    /* set the destination object type */
-    pDst->type = pSrc->type;
-
-    /* get the source string */
-    pSrcString = pSrc->val.str;
-    if( pSrcString != NULL )
+    if ( ( pSrc != NULL ) &&
+         ( pDst != NULL ) &&
+         ( pSrc != pDst ) )
     {
-        if( pDst->val.str == NULL )
-        {
-            /* allocate memory for the target string */
-            pDst->val.str = calloc( 1, srclen );
-            pDst->len = srclen;
-        }
-        else
-        {
-            /* calculate the length of the source string */
-            srclen = strlen( pSrcString ) + 1;
-        }
+        /* get the source object length */
+        srclen = pSrc->len;
 
-        if( pDst->val.str != NULL )
+        /* set the destination object type */
+        pDst->type = pSrc->type;
+
+        /* get the source string */
+        pSrcString = pSrc->val.str;
+        if( pSrcString != NULL )
         {
-            if( pDst->len >= srclen )
+            if( pDst->val.str == NULL )
             {
-                /* get source string  */
-                strcpy( pDst->val.str,
-                        pSrc->val.str );
-
-                result = EOK;
+                /* allocate memory for the target string */
+                pDst->val.str = calloc( 1, srclen );
+                pDst->len = srclen;
             }
             else
             {
-                /* not enough space to store the string */
-                result = E2BIG;
+                /* calculate the length of the source string */
+                srclen = strlen( pSrcString ) + 1;
+            }
+
+            if( pDst->val.str != NULL )
+            {
+                if( pDst->len >= srclen )
+                {
+                    /* get source string  */
+                    strcpy( pDst->val.str,
+                            pSrc->val.str );
+
+                    result = EOK;
+                }
+                else
+                {
+                    /* not enough space to store the string */
+                    result = E2BIG;
+                }
+            }
+            else
+            {
+                /* no memory available for the string result */
+                result = ENOMEM;
             }
         }
         else
         {
-            /* no memory available for the string result */
-            result = ENOMEM;
+            /* should not see this.  The source object says it is a string
+                but it does not have a string pointer */
+            result = ENOTSUP;
         }
-    }
-    else
-    {
-        /* should not see this.  The source object says it is a string
-            but it does not have a string pointer */
-        result = ENOTSUP;
     }
 
     return result;
@@ -544,54 +549,59 @@ static int varobject_CopyBlob( VarObject *pDst, VarObject *pSrc )
     char *pSrcData;
     size_t srclen;
 
-    /* get the source object length */
-    srclen = pSrc->len;
-
-    /* set the destination object type */
-    pDst->type = pSrc->type;
-
-    /* get the source data */
-    pSrcData = pSrc->val.blob;
-    if( pSrcData != NULL )
+    if ( ( pSrc != NULL ) &&
+         ( pDst != NULL ) &&
+         ( pSrc != pDst ) )
     {
-        if( pDst->val.blob == NULL )
-        {
-            /* allocate memory for the target blob */
-            pDst->val.blob = calloc( 1, srclen );
-            pDst->len = srclen;
-        }
+        /* get the source object length */
+        srclen = pSrc->len;
 
-        if( pDst->val.blob != NULL )
+        /* set the destination object type */
+        pDst->type = pSrc->type;
+
+        /* get the source data */
+        pSrcData = pSrc->val.blob;
+        if( pSrcData != NULL )
         {
-            if( pDst->len >= srclen )
+            if( pDst->val.blob == NULL )
             {
-                /* get source blob  */
-                memcpy( pDst->val.blob,
-                        pSrc->val.blob,
-                        srclen );
-
-                /* set the destination blob size */
+                /* allocate memory for the target blob */
+                pDst->val.blob = calloc( 1, srclen );
                 pDst->len = srclen;
+            }
 
-                result = EOK;
+            if( pDst->val.blob != NULL )
+            {
+                if( pDst->len >= srclen )
+                {
+                    /* get source blob  */
+                    memcpy( pDst->val.blob,
+                            pSrc->val.blob,
+                            srclen );
+
+                    /* set the destination blob size */
+                    pDst->len = srclen;
+
+                    result = EOK;
+                }
+                else
+                {
+                    /* not enough space to store the blob */
+                    result = E2BIG;
+                }
             }
             else
             {
-                /* not enough space to store the blob */
-                result = E2BIG;
+                /* no memory available for the blob result */
+                result = ENOMEM;
             }
         }
         else
         {
-            /* no memory available for the blob result */
-            result = ENOMEM;
+            /* should not see this.  The source object says it is a blob
+                but it does not have a blob pointer */
+            result = ENOTSUP;
         }
-    }
-    else
-    {
-        /* should not see this.  The source object says it is a blob
-            but it does not have a blob pointer */
-        result = ENOTSUP;
     }
 
     return result;

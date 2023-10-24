@@ -188,7 +188,7 @@ int TEMPLATE_FileToFile( VARSERVER_HANDLE hVarServer,
             done = true;
         }
 
-        if( n > 0 )
+        if( n > 1 )
         {
             /* process the input buffer chunk to the output */
             rc = ProcessInputChunk( hVarServer, &state, buf, n );
@@ -248,6 +248,9 @@ int TEMPLATE_StrToFile( VARSERVER_HANDLE hVarServer,
          ( input != NULL ) &&
          ( fd > 0 ) )
     {
+        /* assume everything is ok until it is not */
+        result = EOK;
+
         /* initialize the translation engine state */
         memset( &state, 0, sizeof( TState ) );
 
@@ -259,9 +262,11 @@ int TEMPLATE_StrToFile( VARSERVER_HANDLE hVarServer,
 
         /* get the length of the input buffer */
         n = strlen( input );
-
-        /* process the input string and perform variable substitutions */
-        result = ProcessInputChunk( hVarServer, &state, input, n );
+        if ( n > 0 )
+        {
+            /* process the input string and perform variable substitutions */
+            result = ProcessInputChunk( hVarServer, &state, input, n );
+        }
 
         /* Flush the output buffer */
         FlushOutputBuffer( &state );

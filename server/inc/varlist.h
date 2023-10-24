@@ -86,4 +86,7 @@ VarObject *VARLIST_GetObj( VAR_HANDLE hVar );
 
 void VARLIST_SetUser( void );
 
+int VARLIST_SetFlags( VarInfo *pVarInfo );
+int VARLIST_ClearFlags( VarInfo *pVarInfo );
+
 #endif
