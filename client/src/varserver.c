@@ -2373,6 +2373,10 @@ int VAR_SetNameValue( VARSERVER_HANDLE hVarServer,
                 result = VAR_SetStr( hVarServer, hVar, type, value );
             }
         }
+        else
+        {
+            result = ENOENT;
+        }
     }
 
     return result;
