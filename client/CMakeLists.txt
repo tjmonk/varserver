@@ -62,3 +62,7 @@ target_compile_options( ${PROJECT_NAME}
 install(TARGETS ${PROJECT_NAME}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/varserver)
+
+if(BUILD_TESTING)
+    add_subdirectory(test)
+endif()
