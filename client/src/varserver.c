@@ -110,6 +110,7 @@ static const char *flagNames[] =
     "dirty",
     "public",
     "trigger",
+    "audit",
     NULL
 };
 

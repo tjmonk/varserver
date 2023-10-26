@@ -126,7 +126,10 @@ typedef enum _VarFlags
     VARFLAG_PUBLIC = 16,
 
     /*! trigger variable (value not changed) */
-    VARFLAG_TRIGGER = 32
+    VARFLAG_TRIGGER = 32,
+
+    /*! variable auditing */
+    VARFLAG_AUDIT = 64
 
 } VarFlags;
 

@@ -47,6 +47,7 @@ SOFTWARE.
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/mman.h>
@@ -54,6 +55,7 @@ SOFTWARE.
 #include <fcntl.h>
 #include <semaphore.h>
 #include <string.h>
+#include <syslog.h>
 #include <varserver/varclient.h>
 #include <varserver/varserver.h>
 #include <varserver/varobject.h>
@@ -173,6 +175,10 @@ static bool varlist_CheckReadPermissions( VarInfo *pVarInfo,
 
 static bool varlist_CheckWritePermissions( VarInfo *pVarInfo,
                                            VarStorage *pVarStorage );
+
+static int varlist_Audit( pid_t clientPID,
+                          VarStorage *pVarStorage,
+                          VarInfo *pVarInfo );
 
 /*==============================================================================
         Public function definitions
@@ -755,6 +761,11 @@ int VARLIST_Set( pid_t clientPID,
                 varlist_SetDirty( pVarStorage );
             }
 
+            if ( pVarStorage->flags & VARFLAG_AUDIT )
+            {
+                varlist_Audit( clientPID, pVarStorage, pVarInfo );
+            }
+
             if ( ( result == EOK ) ||
                  ( result == EALREADY ) )
             {
@@ -789,6 +800,152 @@ int VARLIST_Set( pid_t clientPID,
         {
             /* the requested variable does not exist */
             result = ENOENT;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  varlist_Audit                                                             */
+/*!
+    Create a variable change audit log
+
+    The varlist_Audit function creates a variable change audit log,
+    using syslog, and writes the variable name, value, user id, and
+    process id that requested the change.
+
+    @param[in]
+        clientPID
+            process id of the client requesting the change
+
+    @param[in]
+        pVarStorage
+            pointer to the variable storage object that was changed
+
+    @param[in]
+        pVarInfo
+            pointer to the variable change info for the change request
+
+    @retval EOK the variable audit log was written
+    @retval ENOTSUP unsupported data type
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+static int varlist_Audit( pid_t clientPID,
+                          VarStorage *pVarStorage,
+                          VarInfo *pVarInfo )
+{
+    int result = EINVAL;
+    uid_t uid;
+    char *varname;
+
+    if ( ( pVarInfo != NULL ) &&
+         ( pVarStorage != NULL ) )
+    {
+        uid = pVarInfo->creds[0];
+        varname = pVarStorage->name;
+
+        result = EOK;
+
+        switch( pVarStorage->var.type )
+        {
+            case VARTYPE_FLOAT:
+                syslog( LOG_INFO,
+                        "'%s' changed to '%f' by user %d from process %d",
+                        varname,
+                        pVarStorage->var.val.f,
+                        uid,
+                        clientPID  );
+                break;
+
+            case VARTYPE_BLOB:
+                syslog( LOG_INFO,
+                        "'%s' changed by user %d from process %d",
+                        varname,
+                        uid,
+                        clientPID  );
+                result = EOK;
+                break;
+
+            case VARTYPE_STR:
+                if ( pVarStorage->var.val.str != NULL )
+                {
+                    syslog( LOG_INFO,
+                            "'%s' changed to '%s' by user %d from process %d",
+                            varname,
+                            pVarStorage->var.val.str,
+                            uid,
+                            clientPID  );
+                }
+                result = EOK;
+                break;
+
+            case VARTYPE_UINT16:
+                syslog( LOG_INFO,
+                        "'%s' changed to '%u' by user %d from process %d",
+                        varname,
+                        pVarStorage->var.val.ui,
+                        uid,
+                        clientPID  );
+                break;
+
+            case VARTYPE_INT16:
+                syslog( LOG_INFO,
+                        "'%s' changed to '%d' by user %d from process %d",
+                        varname,
+                        pVarStorage->var.val.i,
+                        uid,
+                        clientPID  );
+                break;
+
+            case VARTYPE_UINT32:
+                syslog( LOG_INFO,
+                        "'%s' changed to '"
+                        "%" PRIu32
+                        "' by user %d from process %d",
+                        varname,
+                        pVarStorage->var.val.ul,
+                        uid,
+                        clientPID  );
+                break;
+
+            case VARTYPE_INT32:
+                syslog( LOG_INFO,
+                        "'%s' changed to '"
+                        "%" PRId32
+                        "' by user %d from process %d",
+                        varname,
+                        pVarStorage->var.val.l,
+                        uid,
+                        clientPID  );
+                break;
+
+            case VARTYPE_UINT64:
+                syslog( LOG_INFO,
+                        "'%s' changed to '"
+                        "%" PRIu64
+                        "' by user %d from process %d",
+                        varname,
+                        pVarStorage->var.val.ull,
+                        uid,
+                        clientPID  );
+                break;
+
+            case VARTYPE_INT64:
+                syslog( LOG_INFO,
+                        "'%s' changed to '"
+                        "%" PRId64
+                        "' by user %d from process %d",
+                        varname,
+                        pVarStorage->var.val.ll,
+                        uid,
+                        clientPID  );
+                break;
+
+            default:
+                result = ENOTSUP;
+                break;
         }
     }
 
