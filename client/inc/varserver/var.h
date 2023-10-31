@@ -129,7 +129,10 @@ typedef enum _VarFlags
     VARFLAG_TRIGGER = 32,
 
     /*! variable auditing */
-    VARFLAG_AUDIT = 64
+    VARFLAG_AUDIT = 64,
+
+    /*! password variable */
+    VARFLAG_PASSWORD = 128
 
 } VarFlags;
 

@@ -403,7 +403,6 @@ static int varflags_Update( VarFlagsState *pState )
 {
     int result = EINVAL;
     VarQuery query;
-    VarObject obj;
     char setFlagsStr[BUFSIZ];
     char clrFlagsStr[BUFSIZ];
 
@@ -417,7 +416,7 @@ static int varflags_Update( VarFlagsState *pState )
     query.match = pState->searchText;
     query.flags = pState->flags;
 
-    result = VAR_GetFirst( pState->hVarServer, &query, &obj );
+    result = VAR_GetFirst( pState->hVarServer, &query, NULL );
     while ( result == EOK )
     {
         if ( pState->setflags != 0 )
@@ -458,7 +457,7 @@ static int varflags_Update( VarFlagsState *pState )
             }
         }
 
-        result = VAR_GetNext( pState->hVarServer, &query, &obj );
+        result = VAR_GetNext( pState->hVarServer, &query, NULL );
     }
 
     return result;

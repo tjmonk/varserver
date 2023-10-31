@@ -110,7 +110,6 @@ int VAR_ModifyFlags( VARSERVER_HANDLE hVarServer,
 {
     int result = EINVAL;
     VarQuery query;
-    VarObject obj;
 
     memset( &query, 0, sizeof( VarQuery ) );
 
@@ -118,7 +117,7 @@ int VAR_ModifyFlags( VARSERVER_HANDLE hVarServer,
     query.instanceID = 0;
     query.match = match;
 
-    result = VAR_GetFirst( hVarServer, &query, &obj );
+    result = VAR_GetFirst( hVarServer, &query, NULL );
     while ( result == EOK )
     {
         if ( op == FlagSet )
@@ -131,7 +130,7 @@ int VAR_ModifyFlags( VARSERVER_HANDLE hVarServer,
 
         }
 
-        result = VAR_GetNext( hVarServer, &query, &obj );
+        result = VAR_GetNext( hVarServer, &query, NULL );
     }
 
     return result;
@@ -159,7 +158,6 @@ int VAR_ClearDirtyFlags( VARSERVER_HANDLE hVarServer )
 {
     int result = EINVAL;
     VarQuery query;
-    VarObject obj;
 
     memset( &query, 0, sizeof( VarQuery ) );
 
@@ -168,12 +166,12 @@ int VAR_ClearDirtyFlags( VARSERVER_HANDLE hVarServer )
     result = VARSERVER_StrToFlags("dirty", &query.flags );
     if ( result == EOK )
     {
-        result = VAR_GetFirst( hVarServer, &query, &obj );
+        result = VAR_GetFirst( hVarServer, &query, NULL );
         while ( result == EOK )
         {
             result = VAR_ClearFlags( hVarServer, query.hVar, query.flags );
 
-            result = VAR_GetNext( hVarServer, &query, &obj );
+            result = VAR_GetNext( hVarServer, &query, NULL );
         }
     }
 

@@ -111,6 +111,7 @@ static const char *flagNames[] =
     "public",
     "trigger",
     "audit",
+    "password",
     NULL
 };
 
@@ -2651,8 +2652,7 @@ int VAR_GetFirst( VARSERVER_HANDLE hVarServer,
     VarClient *pVarClient = ValidateHandle( hVarServer );
 
     if( ( pVarClient != NULL ) &&
-        ( query != NULL ) &&
-        ( obj != NULL ) )
+        ( query != NULL ) )
     {
         pVarClient->requestType = VARREQUEST_GET_FIRST;
         pVarClient->requestVal = query->type;
@@ -2693,6 +2693,12 @@ int VAR_GetFirst( VARSERVER_HANDLE hVarServer,
 
                 /* get the handle of the variable we found */
                 query->hVar = pVarClient->variableInfo.hVar;
+
+                /* copy the variable object */
+                if ( obj != NULL )
+                {
+                    var_GetVarObject( pVarClient, obj );
+                }
             }
             else
             {
@@ -2742,8 +2748,7 @@ int VAR_GetNext( VARSERVER_HANDLE hVarServer,
     VarClient *pVarClient = ValidateHandle( hVarServer );
 
     if( ( pVarClient != NULL ) &&
-        ( query != NULL ) &&
-        ( obj != NULL ) )
+        ( query != NULL ) )
     {
         pVarClient->requestType = VARREQUEST_GET_NEXT;
         pVarClient->requestVal = query->context;
@@ -2765,6 +2770,12 @@ int VAR_GetNext( VARSERVER_HANDLE hVarServer,
 
                 /* get the handle of the variable we found */
                 query->hVar = pVarClient->variableInfo.hVar;
+
+                /* copy the variable object */
+                if ( obj != NULL )
+                {
+                    var_GetVarObject( pVarClient, obj );
+                }
             }
             else
             {

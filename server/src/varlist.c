@@ -359,6 +359,7 @@ int VARLIST_PrintByHandle( pid_t clientPID,
     VAR_HANDLE hVar;
     size_t n;
     uint32_t printHandle;
+    char *p;
 
     if( ( pVarInfo != NULL ) &&
         ( workbuf != NULL ) )
@@ -444,17 +445,34 @@ int VARLIST_PrintByHandle( pid_t clientPID,
 
                 if( pVarInfo->var.type == VARTYPE_STR )
                 {
-                    /* strings are passed back via the working buffer */
-                    n = strlen( pVarStorage->var.val.str );
-                    if( n < workbufsize )
+                    if ( pVarStorage->flags & VARFLAG_PASSWORD )
                     {
-                        /* copy the string */
-                        memcpy( workbuf, pVarStorage->var.val.str, n );
-                        workbuf[n] = '\0';
+                        p = "********";
+                        n = strlen( p );
                     }
                     else
                     {
-                        result = E2BIG;
+                        p = pVarStorage->var.val.str;
+                        n = strlen(p);
+                    }
+
+                    if ( p != NULL )
+                    {
+                        /* strings are passed back via the working buffer */
+                        if( n < workbufsize )
+                        {
+                            /* copy the string */
+                            memcpy( workbuf, p, n );
+                            workbuf[n] = '\0';
+                        }
+                        else
+                        {
+                            result = E2BIG;
+                        }
+                    }
+                    else
+                    {
+                        workbuf[0] = 0;
                     }
                 }
 
@@ -464,7 +482,7 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                     n = pVarStorage->var.len;
                     if( n <= workbufsize )
                     {
-                        /* copy the string */
+                        /* copy the blob */
                         memcpy( workbuf, pVarStorage->var.val.blob, n );
                     }
                     else

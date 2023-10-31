@@ -125,7 +125,6 @@ int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
 {
     int result = EINVAL;
     VarQuery query;
-    VarObject obj;
 
     memset( &query, 0, sizeof( VarQuery ) );
 
@@ -134,7 +133,7 @@ int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
     query.match = match;
     query.flags = flags;
 
-    result = VAR_GetFirst( hVarServer, &query, &obj );
+    result = VAR_GetFirst( hVarServer, &query, NULL );
     while ( result == EOK )
     {
         if ( query.instanceID == 0 )
@@ -154,7 +153,7 @@ int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
 
         dprintf(fd, "\n");
 
-        result = VAR_GetNext( hVarServer, &query, &obj );
+        result = VAR_GetNext( hVarServer, &query, NULL );
     }
 
     return result;
