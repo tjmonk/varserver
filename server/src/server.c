@@ -1977,6 +1977,11 @@ static int PrintClientInfo( VarInfo *pVarInfo, char *buf, size_t len )
                             pVarClient->blocked,
                             pVarClient->transactionCount,
                             pVarClient->client_pid );
+                if ( n > len-1 )
+                {
+                    offset = len-1;
+                    break;
+                }
 
                 offset += n;
                 len -= n;
