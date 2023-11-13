@@ -1971,7 +1971,7 @@ static int PrintClientInfo( VarInfo *pVarInfo, char *buf, size_t len )
             if( pVarClient != NULL )
             {
                 n = snprintf( &buf[offset],
-                            len,
+                            len-1,
                             "id: %d, blk: %d, txn: %"PRIu64", pid: %d\n",
                             pVarClient->clientid,
                             pVarClient->blocked,
