@@ -2999,7 +2999,7 @@ static int AssignVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo )
             strncpy( pVarStorage->formatspec,
                         pVarInfo->formatspec,
                         MAX_FORMATSPEC_LEN );
-            pVarStorage->formatspec[MAX_FORMATSPEC_LEN] = 0;
+            pVarStorage->formatspec[MAX_FORMATSPEC_LEN-1] = 0;
 
             /* set the variable permissions */
             pVarStorage->permissions = pVarInfo->permissions;
