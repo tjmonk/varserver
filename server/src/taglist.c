@@ -56,7 +56,7 @@ SOFTWARE.
 #include <errno.h>
 #include <fcntl.h>
 #include <semaphore.h>
-#include <string.h>
+#include <strings.h>
 #include <varserver/var.h>
 #include <varserver/varserver.h>
 #include "taglist.h"

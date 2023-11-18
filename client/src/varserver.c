@@ -62,7 +62,7 @@ SOFTWARE.
 #include <mqueue.h>
 #include <errno.h>
 #include <semaphore.h>
-#include <string.h>
+#include <strings.h>
 #include <inttypes.h>
 #include <pwd.h>
 #include <grp.h>

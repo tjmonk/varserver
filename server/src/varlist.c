@@ -54,7 +54,7 @@ SOFTWARE.
 #include <errno.h>
 #include <fcntl.h>
 #include <semaphore.h>
-#include <string.h>
+#include <strings.h>
 #include <syslog.h>
 #include <varserver/varclient.h>
 #include <varserver/varserver.h>
