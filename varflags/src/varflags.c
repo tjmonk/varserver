@@ -69,7 +69,7 @@ SOFTWARE.
 /*==============================================================================
        Type Definitions
 ==============================================================================*/
-typedef struct _varsState
+typedef struct _varFlagsState
 {
     /*! handle to the variable server */
     VARSERVER_HANDLE hVarServer;

@@ -59,7 +59,7 @@ typedef struct _VarStorage
     VarObject var;
 
     /*! variable flags */
-    VarFlags flags;
+    uint32_t flags;
 
     /*! variable tag specifiers */
     uint16_t tags[MAX_TAGS_LEN];

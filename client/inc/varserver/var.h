@@ -239,7 +239,7 @@ typedef struct _VarQuery
     char *match;
 
     /*! search results must contain all these flags */
-    VarFlags flags;
+    uint32_t flags;
 
     /*! search results must contain all these tags */
     char tagspec[MAX_TAGSPEC_LEN];

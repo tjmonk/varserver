@@ -136,7 +136,7 @@ int VAR_GetLength( VARSERVER_HANDLE hVarServer,
 
 int VAR_GetFlags( VARSERVER_HANDLE hVarServer,
                   VAR_HANDLE hVar,
-                  VarFlags *flags );
+                  uint32_t *flags );
 
 int VAR_GetInfo( VARSERVER_HANDLE hVarServer,
                  VAR_HANDLE hVar,
