@@ -63,7 +63,6 @@ SOFTWARE.
 #include <errno.h>
 #include <semaphore.h>
 #include <string.h>
-#include <strings.h>
 #include <inttypes.h>
 #include <pwd.h>
 #include <grp.h>
@@ -968,7 +967,7 @@ int VARSERVER_TypeNameToType( char *typeName, VarType *type )
 
         while( typeNames[i] != NULL )
         {
-            if( strcasecmp( typeNames[i], typeName ) == 0 )
+            if( strcmp( typeNames[i], typeName ) == 0 )
             {
                 *type = i;
                 result = EOK;
@@ -1095,7 +1094,7 @@ int VARSERVER_StrToFlags( char *flagsString,
                 while( flagNames[i] != NULL )
                 {
                     /* check for a case insensitive flag name match */
-                    if( strcasecmp( flagNames[i], flag ) == 0 )
+                    if( strcmp( flagNames[i], flag ) == 0 )
                     {
                         /* set the corresponding bit in the flags bitmap */
                         *flags |= ( 1 << ( i-1 ) );
