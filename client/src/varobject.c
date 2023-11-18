@@ -58,6 +58,7 @@ SOFTWARE.
 #include <fcntl.h>
 #include <errno.h>
 #include <semaphore.h>
+#include <string.h>
 #include <strings.h>
 #include <inttypes.h>
 #include <varserver/varobject.h>
