@@ -1093,11 +1093,13 @@ int VARSERVER_StrToFlags( char *flagsString,
                 i = 1;
                 while( flagNames[i] != NULL )
                 {
+                    printf("StrToFlags: %d, %s\n", i, flagNames[i]);
                     /* check for a case insensitive flag name match */
                     if( strcmp( flagNames[i], flag ) == 0 )
                     {
                         /* set the corresponding bit in the flags bitmap */
                         *flags |= ( 1 << ( i-1 ) );
+                        printf("StrToFlags: match: %s\n", flag);
                         break;
                     }
 
@@ -1107,6 +1109,7 @@ int VARSERVER_StrToFlags( char *flagsString,
 
                 if( flagNames[i] == NULL )
                 {
+                    printf("StrToFlags: NoMatch: %s %s\n", flag, flagsString);
                     result = ENOENT;
                 }
             }
