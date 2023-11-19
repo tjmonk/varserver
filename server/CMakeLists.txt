@@ -22,6 +22,7 @@ add_executable( ${PROJECT_NAME}
     src/validate.c
     src/varlist.c
     src/stats.c
+    src/hash.c
 )
 
 target_include_directories( ${PROJECT_NAME}

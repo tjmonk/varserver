@@ -68,15 +68,11 @@ SOFTWARE.
 #include "notify.h"
 #include "blocklist.h"
 #include "transaction.h"
+#include "hash.h"
 
 /*==============================================================================
         Private definitions
 ==============================================================================*/
-
-/*! Maximum number of clients */
-#ifndef VARSERVER_MAX_VARIABLES
-#define VARSERVER_MAX_VARIABLES                 ( 65535 )
-#endif
 
 /*==============================================================================
         Type definitions
@@ -181,6 +177,8 @@ static int varlist_Audit( pid_t clientPID,
                           VarStorage *pVarStorage,
                           VarInfo *pVarInfo );
 
+static VarStorage *varlist_FindStorage( VarInfo *pVarInfo );
+
 /*==============================================================================
         Public function definitions
 ==============================================================================*/
@@ -211,6 +209,8 @@ int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle )
     int result = EINVAL;
     int varhandle;
     VarStorage *pVarStorage;
+    char buf[256];
+    char *name;
 
     if( ( pVarInfo != NULL ) &&
         ( pVarHandle != NULL ) )
@@ -223,22 +223,32 @@ int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle )
             /* get the variable handle for the new variable */
             varhandle = varcount + 1;
 
-
             if( result == EOK )
             {
                 /* get a pointer to the variable storage for the new variable */
                 pVarStorage = &varstore[varhandle];
 
-                /* copy the variable information from the VarInfo object
-                   to the VarStorage object */
-                result = AssignVarInfo( pVarStorage, pVarInfo );
-                if( result == EOK )
-                {
-                    /* increment the number of variables */
-                    varcount++;
+                /* construct the fully qualified variable name */
+                name = VARLIST_FQN( pVarInfo, buf, sizeof( buf ) );
 
-                    /* assign the variable handle */
-                    *pVarHandle = varhandle;
+                /* add the VarStorage object to the Hash Table */
+                result = HASH_Add( name, pVarStorage );
+                if ( result == EOK )
+                {
+                    /* copy the variable information from the VarInfo object
+                    to the VarStorage object */
+                    result = AssignVarInfo( pVarStorage, pVarInfo );
+                    if( result == EOK )
+                    {
+                        /* increment the number of variables */
+                        varcount++;
+
+                        /* set the variable handle */
+                        pVarStorage->hVar = varhandle;
+
+                        /* assign the variable handle */
+                        *pVarHandle = varhandle;
+                    }
                 }
             }
         }
@@ -249,6 +259,50 @@ int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle )
     }
 
     return result;
+}
+
+/*============================================================================*/
+/*  varlist_FindStorage                                                       */
+/*!
+    Find a variable storage object given its name and instance ID
+
+    The varlist_FindStorage function finds the VarStorage object
+    in the Hash Table given its name and instance identifier.
+
+    @param[in]
+        pVarInfo
+            Pointer to the variable definition containing the name and
+            instance identifier of the variable to find
+
+    @retval pointer to the VarStorage object found
+    @retval NULL if no VarStorage object was found
+
+==============================================================================*/
+static VarStorage *varlist_FindStorage( VarInfo *pVarInfo )
+{
+    VarStorage *pVarStorage = NULL;
+    char buf[256];
+    char *name;
+
+    if( pVarInfo != NULL )
+    {
+        /* check if this variable has an instance identifier */
+        if ( pVarInfo->instanceID != 0 )
+        {
+            /* get the variable's fully qualified name */
+            name = VARLIST_FQN( pVarInfo, buf, sizeof( buf ) );
+        }
+        else
+        {
+            /* get the variable name */
+            name = pVarInfo->name;
+        }
+
+        /* find the VarStorage given its name */
+        pVarStorage = HASH_Find( name );
+    }
+
+    return pVarStorage;
 }
 
 /*============================================================================*/
@@ -277,7 +331,7 @@ int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle )
 int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle )
 {
     int result = EINVAL;
-    VAR_HANDLE hVar;
+    VarStorage *pVarStorage;
 
     if( ( pVarInfo != NULL ) &&
         ( pVarHandle != NULL ) )
@@ -288,22 +342,115 @@ int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle )
         /* store VAR_INVALID in the variable handle */
         *pVarHandle = VAR_INVALID;
 
-        /* iterate through the VarStorage */
-        for( hVar = 1; hVar <= (VAR_HANDLE)varcount; hVar++ )
+        /* find the VarStorage object */
+        pVarStorage = varlist_FindStorage( pVarInfo );
+        if ( pVarStorage != NULL )
         {
-            /* case insensitive name comparison */
-            if( ( pVarInfo->instanceID == varstore[hVar].instanceID ) &&
-                ( strcasecmp( pVarInfo->name, varstore[hVar].name ) == 0 ) &&
-                ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] )))
+            /* check if we have read permissions on the variable */
+            if ( varlist_CheckReadPermissions( pVarInfo, pVarStorage ))
             {
-                *pVarHandle = hVar;
+                *pVarHandle = pVarStorage->hVar;
                 result = EOK;
-                break;
             }
         }
     }
 
     return result;
+}
+
+/*============================================================================*/
+/*  VARLIST_Exists                                                            */
+/*!
+    Check if a variable exists
+
+    The VARLIST_Exists function searches the variable list to see if the
+    variable with the specified name and instance identifier exists.
+
+    @param[in]
+        pVarInfo
+            Pointer to the variable definition containing the name and
+            instance identifier of the variable to check
+
+    @retval EOK the variable exists
+    @retval ENOENT the variable does not exist
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+int VARLIST_Exists( VarInfo *pVarInfo )
+{
+    int result = EINVAL;
+
+    if ( pVarInfo != NULL )
+    {
+        result = ( varlist_FindStorage( pVarInfo ) != NULL ) ? EOK : ENOENT;
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VARLIST_FQN                                                               */
+/*!
+    Construct a Fully Qualified Name (FQN) for the specified variable
+
+    The VARLIST_FQN function constructs a fully qualified name from the
+    specicied variable info using its name and instance identifier.
+
+    @param[in]
+        pVarInfo
+            Pointer to the variable definition containing the name and
+            instance identifier of the variable
+
+    @param[in,out]
+        buf
+            Pointer to the output buffer to write the fully qualified name into
+
+    @param[in]
+        len
+            specifies the length of the output buffer
+
+    @retval pointer to the Fully Qualified Name
+    @retval NULL if the Fully qualified name could not be constructed
+
+==============================================================================*/
+char *VARLIST_FQN( VarInfo *pVarInfo, char *buf, size_t len )
+{
+    char *p = NULL;
+    int n;
+
+    if ( ( pVarInfo != NULL ) &&
+         ( buf != NULL ) &&
+         ( len > 0 ) )
+    {
+        if ( pVarInfo->instanceID != 0 )
+        {
+            /* construct the fully qualified name */
+            n = snprintf( buf,
+                          len,
+                          "[%" PRIu32 "]%s",
+                          pVarInfo->instanceID,
+                          pVarInfo->name );
+        }
+        else
+        {
+            /* copy the name */
+            n = snprintf( buf,
+                          len,
+                          "%s",
+                          pVarInfo->name );
+        }
+
+        if ( ( n > 0 ) && ( (size_t)n < len ) )
+        {
+            /* NUL terminate */
+            buf[n] = 0;
+
+            /* set the return value */
+            p = buf;
+        }
+    }
+
+    return p;
 }
 
 /*============================================================================*/

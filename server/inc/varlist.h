@@ -38,12 +38,20 @@ SOFTWARE.
         Public definitions
 ============================================================================*/
 
+/*! Maximum number of clients */
+#ifndef VARSERVER_MAX_VARIABLES
+#define VARSERVER_MAX_VARIABLES                 ( 65535 )
+#endif
+
 /*============================================================================
         Public function declarations
 ============================================================================*/
 
 int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle );
 int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle );
+int VARLIST_Exists( VarInfo *pVarInfo );
+char *VARLIST_FQN( VarInfo *pVarInfo, char *buf, size_t len );
+
 int VARLIST_PrintByHandle( pid_t clientPID,
                            VarInfo *pVarInfo,
                            char *workbuf,

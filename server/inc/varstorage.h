@@ -46,6 +46,9 @@ SOFTWARE.
     encapsulate all the information about a single variable */
 typedef struct _VarStorage
 {
+    /*! handle to the variable */
+    VAR_HANDLE hVar;
+
     /*! instance identifier for this variable */
     uint32_t instanceID;
 

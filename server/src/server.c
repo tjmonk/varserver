@@ -68,6 +68,7 @@ SOFTWARE.
 #include "blocklist.h"
 #include "transaction.h"
 #include "stats.h"
+#include "hash.h"
 #include "server.h"
 
 /*==============================================================================
@@ -356,6 +357,9 @@ int main(int argc, char **argv)
 
     /* get the user id of the user running varserver */
     VARLIST_SetUser();
+
+    /* initialize the Hash Table */
+    HASH_Init( VARSERVER_MAX_VARIABLES );
 
     /* initialize the varserver statistics */
     InitStats();
@@ -906,6 +910,7 @@ static int ProcessVarRequestNew( VarClient *pVarClient )
     int result = EINVAL;
     uint32_t varhandle;
     int rc;
+    VarInfo *pVarInfo;
 
     /* validate the client object */
     result = ValidateClient( pVarClient );
@@ -925,16 +930,28 @@ static int ProcessVarRequestNew( VarClient *pVarClient )
             pVarClient->variableInfo.var.val.blob = &pVarClient->workbuf;
         }
 
-        /* add the new variable to the variable list */
-        rc = VARLIST_AddNew( &pVarClient->variableInfo, &varhandle );
-        if( rc == EOK )
+        /* get a pointer to the VariableInfo  */
+        pVarInfo = &pVarClient->variableInfo;
+
+        /* check if the variable already exists */
+        if ( VARLIST_Exists( pVarInfo ) == EOK )
         {
-            /* return the new variable's handle */
-            pVarClient->responseVal = varhandle;
+            /* indicate that the variable already exists and cannot be added */
+            pVarClient->responseVal = VAR_INVALID;
         }
         else
         {
-            pVarClient->responseVal = VAR_INVALID;
+            /* add the new variable to the variable list */
+            rc = VARLIST_AddNew( pVarInfo, &varhandle );
+            if( rc == EOK )
+            {
+                /* return the new variable's handle */
+                pVarClient->responseVal = varhandle;
+            }
+            else
+            {
+                pVarClient->responseVal = VAR_INVALID;
+            }
         }
     }
 
