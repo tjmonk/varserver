@@ -49,6 +49,7 @@ SOFTWARE.
 int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
                      int searchType,
                      char *match,
+                     char *tagspec,
                      uint32_t instanceID,
                      uint32_t flags,
                      int fd );

@@ -92,6 +92,9 @@ typedef struct _varsState
     /*! user name */
     char *username;
 
+    /* tagspec */
+    char *tagspec;
+
 } VarsState;
 
 /*==============================================================================
@@ -178,6 +181,7 @@ int main(int argC, char *argV[])
             (void)VARQUERY_Search( pState->hVarServer,
                                    pState->searchType,
                                    pState->searchText,
+                                   pState->tagspec,
                                    pState->instanceID,
                                    pState->flags,
                                    pState->fd );
@@ -256,7 +260,7 @@ static int ProcessOptions( int argC,
 {
     int c;
     int result = EINVAL;
-    const char *options = "hvn:f:i:u:";
+    const char *options = "hvn:f:i:u:t:";
 
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
@@ -284,6 +288,11 @@ static int ProcessOptions( int argC,
                 case 'f':
                     pState->searchType |= QUERY_FLAGS;
                     VARSERVER_StrToFlags( optarg, &pState->flags );
+                    break;
+
+                case 't':
+                    pState->searchType |= QUERY_TAGS;
+                    pState->tagspec = optarg;
                     break;
 
                 case 'u':

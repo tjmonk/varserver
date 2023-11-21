@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-set(VARSERVER_VERSION 0.1)
+set(VARSERVER_VERSION 0.32)
 
 # set the project name
 project(varserver

@@ -93,6 +93,9 @@ typedef struct _searchContext
     /*! query parameters */
     VarQuery query;
 
+    /*! variable tag specifiers */
+    uint16_t tags[MAX_TAGS_LEN];
+
     /*! context */
     void *context;
 
@@ -152,6 +155,7 @@ static SearchContext *varlist_FindSearchContext( pid_t clientPID,
                                                  int context );
 
 static int varlist_Match( VAR_HANDLE hVar, SearchContext *ctx );
+static int varlist_MatchTags( uint16_t *pHaystack, uint16_t *pNeedle );
 
 static int assign_BlobVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int assign_StringVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo );
@@ -3640,6 +3644,9 @@ static SearchContext *varlist_NewSearchContext( pid_t clientPID,
         p->query.type = searchType;
         memcpy(&(p->query.tagspec), &(pVarInfo->tagspec), MAX_TAGSPEC_LEN );
         p->query.match = strdup( searchText );
+        TAGLIST_Parse( pVarInfo->tagspec,
+                       p->tags,
+                       MAX_TAGS_LEN );
     }
 
     return p;
@@ -3790,7 +3797,86 @@ static int varlist_Match( VAR_HANDLE hVar, SearchContext *ctx )
             found &= match;
         }
 
+        /* all tags matching */
+        if ( searchtype & QUERY_TAGS )
+        {
+            match = ( varlist_MatchTags( pVarStorage->tags, ctx->tags ) == EOK )
+                  ? true
+                  : false;
+
+            found &= match;
+        }
+
         result = ( found == true ) ? EOK : ENOENT;
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  varlist_MatchTags                                                         */
+/*!
+    Match all tags
+
+    The varlist_MatchTags function checks if all of the tags in the
+    needle list are found in the haystack list.
+
+    @param[in]
+        pHaystack
+            pointer to the list of tags to search
+
+    @param[in]
+        pNeedle
+            pointer to the list of tags to find
+
+    @retval EOK all the tags in the needle list were found in the haystack list
+    @retval EINVAL invalid arguments
+    @retval ENOENT one or more of the tags could not be found
+
+==============================================================================*/
+static int varlist_MatchTags( uint16_t *pHaystack, uint16_t *pNeedle )
+{
+    int result = EINVAL;
+    int i;
+    int j;
+    bool found;
+
+    if ( ( pHaystack != NULL ) &&
+         ( pNeedle != NULL ) )
+    {
+        /* assume we have found all needles until we have not */
+        result = EOK;
+
+        /* we must find ALL the needles in the haystack or the search fails */
+        for( i = 0; i < MAX_TAGS_LEN ; i++ )
+        {
+            if ( pNeedle[i] == 0 )
+            {
+                break;
+            }
+
+            found = false;
+
+            /* search the haystack for the needle */
+            for ( j = 0; j < MAX_TAGS_LEN; j++ )
+            {
+                if ( pHaystack[j] == 0 )
+                {
+                    break;
+                }
+
+                if ( pHaystack[j] == pNeedle[i] )
+                {
+                    found = true;
+                }
+            }
+
+            /* if the needle is not found, the match fails */
+            if ( found == false )
+            {
+                result = ENOENT;
+            }
+        }
     }
 
     return result;

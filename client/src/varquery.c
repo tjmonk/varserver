@@ -103,6 +103,10 @@ SOFTWARE.
             QUERY_MATCH, otherwise this parameter is ignored.
 
     @param[in]
+        tagspec
+            comma separated list of tags to search for
+
+    @param[in]
         instanceID
             used for instance ID matching if QUERY_INSTANCEID is specified,
             otherwise it is ignored.
@@ -119,12 +123,14 @@ SOFTWARE.
 int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
                      int searchType,
                      char *match,
+                     char *tagspec,
                      uint32_t instanceID,
                      uint32_t flags,
                      int fd )
 {
     int result = EINVAL;
     VarQuery query;
+    size_t len;
 
     memset( &query, 0, sizeof( VarQuery ) );
 
@@ -132,6 +138,15 @@ int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
     query.instanceID = instanceID;
     query.match = match;
     query.flags = flags;
+
+    if ( tagspec != NULL )
+    {
+        len = strlen( tagspec );
+        if ( len < MAX_TAGSPEC_LEN )
+        {
+            strcpy( query.tagspec, tagspec );
+        }
+    }
 
     result = VAR_GetFirst( hVarServer, &query, NULL );
     while ( result == EOK )
