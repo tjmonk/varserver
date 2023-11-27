@@ -99,6 +99,10 @@ static mqd_t notify_GetQueue( pid_t pid );
             notification type
 
     @param[in]
+        hVar
+            handle to the variable associated with the notification
+
+    @param[in]
         pid
             process id of the client to be notified
 
@@ -109,6 +113,7 @@ static mqd_t notify_GetQueue( pid_t pid );
 ==============================================================================*/
 int NOTIFY_Add( Notification **ppNotification,
                 NotificationType type,
+                VAR_HANDLE hVar,
                 pid_t pid )
 {
     int result = EINVAL;
@@ -172,6 +177,7 @@ int NOTIFY_Add( Notification **ppNotification,
                 /* populate the notification structure */
                 pNotification->pid = pid;
                 pNotification->type = type;
+                pNotification->hVar = hVar;
 
                 /* notification successfully registered */
                 result = EOK;
@@ -280,6 +286,7 @@ int NOTIFY_Signal( pid_t pid,
     Notification *pNotification;
     int sig = -1;
     int done = 0;
+    int handleToSend = handle;
 
     if( ppNotification != NULL )
     {
@@ -298,6 +305,12 @@ int NOTIFY_Signal( pid_t pid,
                         if ( pNotification->pending == true )
                         {
                             sig = SIGRTMIN+10;
+
+                            /* override handle so the client receiving the
+                            notification gets the handle they requested and
+                            not a different one in case of aliasing */
+
+                            handleToSend = pNotification->hVar;
                             pNotification->pending = false;
                         }
                         else
@@ -309,6 +322,10 @@ int NOTIFY_Signal( pid_t pid,
                         break;
 
                     case NOTIFY_MODIFIED:
+                        /* override handle so the client receiving the
+                        notification gets the handle they requested and
+                        not a different one in case of aliasing */
+                        handleToSend = pNotification->hVar;
                         sig = SIGRTMIN+6;
                         break;
 
@@ -321,6 +338,10 @@ int NOTIFY_Signal( pid_t pid,
                         }
                         else
                         {
+                            /* override handle so the client receiving the
+                            notification gets the handle they requested and
+                            not a different one in case of aliasing */
+                            handleToSend = pNotification->hVar;
                             sig = SIGRTMIN+7;
                         }
                         done = 1;
@@ -361,7 +382,7 @@ int NOTIFY_Signal( pid_t pid,
                 if( sig != -1 )
                 {
                     /* send the notification */
-                    result = notify_Send( pNotification, handle, sig );
+                    result = notify_Send( pNotification, handleToSend, sig );
                     if( result == EOK )
                     {
                         if( sentTo != NULL )
@@ -378,6 +399,49 @@ int NOTIFY_Signal( pid_t pid,
     }
 
     return result;
+}
+
+/*============================================================================*/
+/*  NOTIFY_GetVarHandle                                                       */
+/*!
+    Get the variable handle associated with a notification type
+
+    The NOTIFY_GetVarHandle function iterates through the Notification
+    List and returns the variable handle of the first notification which
+    matches the soecified notification type.
+
+    This is usually used to get the handle associated with PRINT, VALIDATE, and
+    CALC notifications when aliases are used.
+
+    @param[in]
+        pNotification
+            Pointer to the first notification in the notification request list
+
+    @param[in]
+        type
+            notification type
+
+    @retval variable handle associated with the notification type
+    @retval VAR_INVALID no notification found with the given type
+
+==============================================================================*/
+VAR_HANDLE NOTIFY_GetVarHandle( Notification *pNotification,
+                                NotificationType type )
+{
+    VAR_HANDLE hVar = VAR_INVALID;
+
+    while( pNotification != NULL )
+    {
+        if( pNotification->type == type )
+        {
+            hVar = pNotification->hVar;
+            break;
+        }
+
+        pNotification = pNotification->pNext;
+    }
+
+    return hVar;
 }
 
 /*============================================================================*/

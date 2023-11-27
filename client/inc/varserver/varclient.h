@@ -94,6 +94,9 @@ typedef enum _varRequest
     /*! New Variable request */
     VARREQUEST_NEW,
 
+    /*! Alias Variable request */
+    VARREQUEST_ALIAS,
+
     /*! Find Variable request */
     VARREQUEST_FIND,
 

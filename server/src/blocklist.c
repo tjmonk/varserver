@@ -76,8 +76,8 @@ typedef struct _BlockedClient
     /*! pointer to the variable client which is blocked */
     VarClient *pVarClient;
 
-    /*! handle of the variable the client is blocked on */
-    VAR_HANDLE hVar;
+    /*! reference to the VarStorage object the client is blocked on */
+    uint32_t storageRef;
 
     /*! pointer to the next blocked client */
     struct _BlockedClient *pNext;
@@ -151,7 +151,7 @@ int BlockClient( VarClient *pVarClient, NotificationType notifyType )
             /* populate the blocked client object */
             pBlockedClient->notifyType = notifyType;
             pBlockedClient->pVarClient = pVarClient;
-            pBlockedClient->hVar = pVarClient->variableInfo.hVar;
+            pBlockedClient->storageRef = pVarClient->variableInfo.storageRef;
             pBlockedClient->pNext = NULL;
 
             /* insert the blocked client on the tail of the blocked
@@ -194,8 +194,8 @@ int BlockClient( VarClient *pVarClient, NotificationType notifyType )
     Any matching blocked clients are unblocked
 
     @param[in]
-        hVar
-            variable the client is blocked against
+        storageRef
+            reference to the VarStorage object the client is blocked against
 
     @param[in]
         notifyType
@@ -205,7 +205,7 @@ int BlockClient( VarClient *pVarClient, NotificationType notifyType )
     @retval ENOENT no blocked clients were found
 
 ==============================================================================*/
-int UnblockClients( VAR_HANDLE hVar,
+int UnblockClients( uint32_t storageRef,
                     NotificationType notifyType,
                     int (*cb)( VarClient *pVarClient, void *arg ),
                     void *arg )
@@ -223,7 +223,7 @@ int UnblockClients( VAR_HANDLE hVar,
             /* get a pointer to the blocked varclient */
             pVarClient = pBlockedClient->pVarClient;
             if( ( pBlockedClient->notifyType == notifyType ) &&
-                ( pBlockedClient->hVar == hVar ) )
+                ( pBlockedClient->storageRef == storageRef ) )
             {
                 /* found a match */
                 if( pVarClient->debug >= LOG_DEBUG )
@@ -270,7 +270,7 @@ int UnblockClients( VAR_HANDLE hVar,
                 /* move the blocked client to the free list */
                 pBlockedClient->notifyType = NOTIFY_NONE;
                 pBlockedClient->pVarClient = NULL;
-                pBlockedClient->hVar = VAR_INVALID;
+                pBlockedClient->storageRef = 0;
 
                 /* put the blocked client object back on the free list */
                 pBlockedClient->pNext = freelist;

@@ -31,6 +31,7 @@ SOFTWARE.
 
 #include <stdint.h>
 #include <sys/types.h>
+#include <varserver/var.h>
 
 /*============================================================================
         Public function declarations
@@ -38,12 +39,13 @@ SOFTWARE.
 
 int TRANSACTION_New( pid_t clientPID,
                      void *pData,
+                     VAR_HANDLE hVar,
                      uint32_t *pHandle );
 
-void *TRANSACTION_Get( uint32_t transactionID );
+void *TRANSACTION_Get( uint32_t transactionID, VAR_HANDLE *hVar );
 
 void *TRANSACTION_Remove( uint32_t transactionID );
 
-void *TRANSACTION_FindByRequestor( pid_t requestor );
+void *TRANSACTION_FindByRequestor( pid_t requestor, VAR_HANDLE *hVar );
 
 #endif

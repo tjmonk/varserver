@@ -59,6 +59,7 @@ SOFTWARE.
 #include <sys/stat.h>
 #include <sys/signalfd.h>
 #include <fcntl.h>
+#include <ctype.h>
 #include <mqueue.h>
 #include <errno.h>
 #include <semaphore.h>
@@ -112,6 +113,7 @@ static const char *flagNames[] =
     "trigger",
     "audit",
     "password",
+    "alias",
     NULL
 };
 
@@ -585,7 +587,6 @@ int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,
             pVarInfo->hVar = VAR_INVALID;
             result = rc;
         }
-
     }
 
     return result;
@@ -2494,6 +2495,81 @@ int VAR_Set( VARSERVER_HANDLE hVarServer,
         if( result == EOK )
         {
             result = pVarClient->responseVal;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VAR_Alias                                                                 */
+/*!
+    Create a variable alias
+
+    The VAR_Alias function creates a variable alias which is another name
+    for an already existing variable which references the same storage
+    object.
+
+    @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[in]
+        hVar
+            handle to the variable to be aliased
+
+    @param[in]
+        alias
+            pointer to the alias name for the variable
+
+    @param[in]
+        hAlias
+            pointer to a location to store the handle to the alias
+
+    @retval EOK - the variable was set ok
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+int VAR_Alias( VARSERVER_HANDLE hVarServer,
+               VAR_HANDLE hVar,
+               char *alias,
+               VAR_HANDLE *hAlias )
+{
+    int result = EINVAL;
+    VarClient *pVarClient = ValidateHandle( hVarServer );
+    VarInfo *pVarInfo;
+
+    if( ( pVarClient != NULL ) &&
+        ( alias != NULL ) )
+    {
+        pVarInfo = &pVarClient->variableInfo;
+        pVarClient->requestType = VARREQUEST_ALIAS;
+        pVarInfo->hVar = hVar;
+
+        /* copy the alias to the variable info request */
+        var_parseName( pVarClient->variableInfo.name,
+                       MAX_NAME_LEN,
+                       alias,
+                       &pVarClient->variableInfo.instanceID );
+
+        /* send the request to the server */
+        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+        if( result == EOK )
+        {
+            pVarInfo->hVar = pVarClient->responseVal;
+            if ( pVarInfo->hVar != VAR_INVALID )
+            {
+                if ( hAlias != NULL )
+                {
+                    *hAlias = pVarInfo->hVar;
+                }
+                result = EOK;
+            }
+            else
+            {
+                result = EINVAL;
+                pVarInfo->hVar = VAR_INVALID;
+            }
         }
     }
 

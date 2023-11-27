@@ -48,6 +48,8 @@ SOFTWARE.
 ============================================================================*/
 
 int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle );
+int VARLIST_Alias( VarInfo *pVarInfo, uint32_t *pVarHandle );
+
 int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle );
 int VARLIST_Exists( VarInfo *pVarInfo );
 char *VARLIST_FQN( VarInfo *pVarInfo, char *buf, size_t len );

@@ -132,7 +132,10 @@ typedef enum _VarFlags
     VARFLAG_AUDIT = 64,
 
     /*! password variable */
-    VARFLAG_PASSWORD = 128
+    VARFLAG_PASSWORD = 128,
+
+    /*! variable has aliases */
+    VARFLAG_ALIAS = 256
 
 } VarFlags;
 
@@ -186,6 +189,9 @@ typedef struct _VarInfo
 {
     /*! variable handle */
     VAR_HANDLE hVar;
+
+    /*! storage reference identifier */
+    uint32_t storageRef;
 
     /*! variable instance identifier */
     uint32_t instanceID;

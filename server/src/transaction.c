@@ -55,6 +55,7 @@ SOFTWARE.
 #include <fcntl.h>
 #include <semaphore.h>
 #include <string.h>
+#include <varserver/var.h>
 #include "transaction.h"
 
 /*==============================================================================
@@ -78,6 +79,9 @@ typedef struct _Transaction
     /*! the requestor is the process identifier of the client which
         initiated the transaction */
     pid_t requestor;
+
+    /*! handle to the variable associated with the transaction */
+    VAR_HANDLE hVar;
 
     /*! opaque pointer to the transaction information */
     void *pInfo;
@@ -126,6 +130,10 @@ static uint32_t TransactionCounter = 0L;
             pointer to the opaque data object associated with the new
             transaction
 
+    @param[in]
+        hVar
+            handle to the variable associated with the transaction
+
     @param[out]
         pHandle
             pointer to a location to store the transaction handle
@@ -137,6 +145,7 @@ static uint32_t TransactionCounter = 0L;
 ==============================================================================*/
 int TRANSACTION_New( pid_t clientPID,
                      void *pData,
+                     VAR_HANDLE hVar,
                      uint32_t *pHandle )
 {
     uint32_t result = EINVAL;
@@ -162,6 +171,7 @@ int TRANSACTION_New( pid_t clientPID,
             /* populate the ValidationReqeuest object */
             pTransaction->requestor = clientPID;
             pTransaction->pInfo = pData;
+            pTransaction->hVar = hVar;
             pTransaction->transactionID = ++TransactionCounter;
 
             *pHandle = pTransaction->transactionID;
@@ -194,11 +204,16 @@ int TRANSACTION_New( pid_t clientPID,
         transactionID
             the transaction identifier to search for
 
+    @param[in,out]
+        hVar
+            pointer to the location to store the variable handle associated
+            with the transaction
+
     @retval pointer to the transaction information
     @retval NULL the transaction identifier was not found
 
 ==============================================================================*/
-void *TRANSACTION_Get( uint32_t transactionID )
+void *TRANSACTION_Get( uint32_t transactionID, VAR_HANDLE *hVar )
 {
     Transaction *pTransaction;
     void *pTransactionInfo = NULL;
@@ -210,6 +225,12 @@ void *TRANSACTION_Get( uint32_t transactionID )
         if( pTransaction->transactionID == transactionID )
         {
             pTransactionInfo = pTransaction->pInfo;
+
+            if ( hVar != NULL )
+            {
+                *hVar = pTransaction->hVar;
+            }
+
             break;
         }
 
@@ -231,11 +252,16 @@ void *TRANSACTION_Get( uint32_t transactionID )
         requestor
             the transaction identifier to search for
 
+    @param[in,out]
+        hVar
+            pointer to the location to store the variable handle associated
+            with the transaction
+
     @retval pointer to the transaction information
     @retval NULL the transaction was not found
 
 ==============================================================================*/
-void *TRANSACTION_FindByRequestor( pid_t requestor )
+void *TRANSACTION_FindByRequestor( pid_t requestor, VAR_HANDLE *hVar )
 {
     Transaction *pTransaction;
     void *pTransactionInfo = NULL;
@@ -247,6 +273,11 @@ void *TRANSACTION_FindByRequestor( pid_t requestor )
         if( pTransaction->requestor == requestor )
         {
             pTransactionInfo = pTransaction->pInfo;
+
+            if ( hVar != NULL )
+            {
+                *hVar = pTransaction->hVar;
+            }
             break;
         }
 

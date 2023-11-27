@@ -46,17 +46,12 @@ SOFTWARE.
     encapsulate all the information about a single variable */
 typedef struct _VarStorage
 {
-    /*! handle to the variable */
-    VAR_HANDLE hVar;
+    /*! reference counter counts the number of variables
+        associated with this storage */
+    uint16_t refCount;
 
-    /*! instance identifier for this variable */
-    uint32_t instanceID;
-
-    /*! name of the variable */
-    char name[MAX_NAME_LEN+1];
-
-    /*! globally unique identifier for the variable */
-    uint32_t guid;
+    /*! storage reference id */
+    uint32_t storageRef;
 
     /*! variable data */
     VarObject var;

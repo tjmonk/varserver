@@ -57,6 +57,7 @@ SOFTWARE.
 #include <string.h>
 #include <strings.h>
 #include <syslog.h>
+#include <ctype.h>
 #include <varserver/varclient.h>
 #include <varserver/varserver.h>
 #include <varserver/varobject.h>
@@ -103,6 +104,25 @@ typedef struct _searchContext
     struct _searchContext *pNext;
 } SearchContext;
 
+typedef struct _var_id
+{
+    /*! handle to the variable */
+    VAR_HANDLE hVar;
+
+    /*! instance identifier for this variable */
+    uint32_t instanceID;
+
+    /*! name of the variable */
+    char name[MAX_NAME_LEN+1];
+
+    /*! globally unique identifier for the variable */
+    uint32_t guid;
+
+    /* pointer to the VarStorage object associated with this VarID */
+    VarStorage *pVarStorage;
+
+} VarID;
+
 /*==============================================================================
         Private file scoped variables
 ==============================================================================*/
@@ -111,7 +131,7 @@ typedef struct _searchContext
 static int varcount = 0;
 
 /*! variable storage */
-static VarStorage varstore[ VARSERVER_MAX_VARIABLES ] = {0};
+static VarID varstore[ VARSERVER_MAX_VARIABLES ] = {0};
 
 /*! search contexts */
 static SearchContext *pSearchContexts = NULL;
@@ -122,11 +142,16 @@ static int contextIdent = 0;
 /*! id of user that started varserver */
 static uid_t varserver_uid;
 
+/*! Number of VarStorage objects we have created */
+static uint32_t NumVarStorage = 0;
+
 /*==============================================================================
         Private function declarations
 ==============================================================================*/
 
-static int AssignVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo );
+static int AssignVarInfo( VarID *pVarID,
+                          VarStorage *pVarStorage,
+                          VarInfo *pVarInfo );
 static int varlist_Set16( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int varlist_Set16s( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int varlist_Set32( VarStorage *pVarStorage, VarInfo *pVarInfo );
@@ -154,7 +179,7 @@ static int varlist_DeleteSearchContext( SearchContext *ctx );
 static SearchContext *varlist_FindSearchContext( pid_t clientPID,
                                                  int context );
 
-static int varlist_Match( VAR_HANDLE hVar, SearchContext *ctx );
+static int varlist_Match( VarID *pVarID, SearchContext *ctx );
 static int varlist_MatchTags( uint16_t *pHaystack, uint16_t *pNeedle );
 
 static int assign_BlobVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo );
@@ -172,16 +197,18 @@ static void *varlist_GetNotificationPayload( VAR_HANDLE hVar,
 static void varlist_SetDirty( VarStorage *pVarStorage );
 
 static bool varlist_CheckReadPermissions( VarInfo *pVarInfo,
-                                          VarStorage *pVarStorage );
+                                          VarID *pVarID );
 
 static bool varlist_CheckWritePermissions( VarInfo *pVarInfo,
-                                           VarStorage *pVarStorage );
+                                           VarID *pVarStorage );
 
 static int varlist_Audit( pid_t clientPID,
-                          VarStorage *pVarStorage,
+                          VarID *pVarID,
                           VarInfo *pVarInfo );
 
-static VarStorage *varlist_FindStorage( VarInfo *pVarInfo );
+static VarID *varlist_FindVar( VarInfo *pVarInfo );
+
+static VarID *varlist_GetVarID( VarInfo *pVarInfo );
 
 /*==============================================================================
         Public function definitions
@@ -213,6 +240,7 @@ int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle )
     int result = EINVAL;
     int varhandle;
     VarStorage *pVarStorage;
+    VarID *pVarID;
     char buf[256];
     char *name;
 
@@ -230,35 +258,51 @@ int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle )
             if( result == EOK )
             {
                 /* get a pointer to the variable storage for the new variable */
-                pVarStorage = &varstore[varhandle];
-
-                /* construct the fully qualified variable name */
-                name = VARLIST_FQN( pVarInfo, buf, sizeof( buf ) );
-
-                /* add the VarStorage object to the Hash Table */
-                result = HASH_Add( name, pVarStorage );
-                if ( result == EOK )
+                pVarID = &varstore[varhandle];
+                pVarStorage = calloc( 1, sizeof( VarStorage ) );
+                if ( pVarStorage != NULL )
                 {
-                    /* copy the variable information from the VarInfo object
-                    to the VarStorage object */
-                    result = AssignVarInfo( pVarStorage, pVarInfo );
-                    if( result == EOK )
+                    /* set the storage reference */
+                    pVarStorage->storageRef = ++NumVarStorage;
+
+                    /* set the variable storage pointer */
+                    pVarID->pVarStorage = pVarStorage;
+
+                    /* construct the fully qualified variable name */
+                    name = VARLIST_FQN( pVarInfo, buf, sizeof( buf ) );
+
+                    /* add the VarStorage object to the Hash Table */
+                    result = HASH_Add( name, pVarID );
+                    if ( result == EOK )
                     {
-                        /* increment the number of variables */
-                        varcount++;
+                        /* copy the variable information from the VarInfo object
+                        to the VarStorage object */
+                        result = AssignVarInfo( pVarID, pVarStorage, pVarInfo );
+                        if( result == EOK )
+                        {
+                            /* increment the number of variables */
+                            varcount++;
 
-                        /* set the variable handle */
-                        pVarStorage->hVar = varhandle;
+                            /* increment the storage reference counter */
+                            pVarStorage->refCount = 1;
 
-                        /* assign the variable handle */
-                        *pVarHandle = varhandle;
+                            /* set the variable handle */
+                            pVarID->hVar = varhandle;
+
+                            /* assign the variable handle */
+                            *pVarHandle = varhandle;
+                        }
                     }
                 }
+                else
+                {
+                    result = ENOMEM;
+                }
             }
-        }
-        else
-        {
-            result = ENOMEM;
+            else
+            {
+                result = ENOMEM;
+            }
         }
     }
 
@@ -266,11 +310,128 @@ int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle )
 }
 
 /*============================================================================*/
-/*  varlist_FindStorage                                                       */
+/*  VARLIST_Alias                                                             */
 /*!
-    Find a variable storage object given its name and instance ID
+    Create a variable alias for an existing variable
 
-    The varlist_FindStorage function finds the VarStorage object
+    The VARLIST_Alias function creates a new variable alias for an existing
+    variable.
+
+    @param[in]
+        pVarInfo
+            Pointer to the new variable to add
+
+    @param[out]
+        pVarHandle
+            pointer to a location to store the handle to the new variable
+
+    @retval EOK the new alias was create
+    @retval ENOENT the variable to be aliased does not exist
+    @retval EEXIST the variable already exists
+    @retval ENOMEM memory allocation failure
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+int VARLIST_Alias( VarInfo *pVarInfo, uint32_t *pVarHandle )
+{
+    int result = EINVAL;
+    VarID *pAliasVarID;
+    VarID *pVarID;
+    int varhandle;
+    VarStorage *pVarStorage;
+    char buf[256];
+    char *name;
+
+    if ( pVarInfo != NULL )
+    {
+        /* check if the variable already exists */
+        pAliasVarID = varlist_FindVar( pVarInfo );
+        if ( pAliasVarID == NULL )
+        {
+            /* find the variable to be aliased */
+            pVarID = varlist_GetVarID( pVarInfo );
+            if ( pVarID != NULL )
+            {
+                /* get the storage location for the variable */
+                pVarStorage = pVarID->pVarStorage;
+                if ( pVarStorage != NULL )
+                {
+                    /* check if we have enough space for another variable */
+                    if( varcount < VARSERVER_MAX_VARIABLES )
+                    {
+                        /* get a pointer to the alias Variable identifier */
+                        varhandle = ++varcount;
+                        pAliasVarID = &varstore[varhandle];
+
+                        /* copy the variable name */
+                        strncpy( pAliasVarID->name,
+                                 pVarInfo->name,
+                                 MAX_NAME_LEN );
+                        pAliasVarID->name[MAX_NAME_LEN-1] = 0;
+
+                        /* construct the fully qualified variable name */
+                        name = VARLIST_FQN( pVarInfo, buf, sizeof( buf ) );
+
+                        /* populate the VarID data */
+                        pAliasVarID->guid = pVarInfo->guid;
+                        pAliasVarID->hVar = varhandle;
+                        pAliasVarID->instanceID = pVarInfo->instanceID;
+                        pAliasVarID->pVarStorage = pVarStorage;
+
+                        pVarStorage->refCount++;
+                        if ( pVarStorage->refCount > 1 )
+                        {
+                            /* we have more than one reference, so
+                                set the alias flag on this storage */
+                            pVarStorage->flags |= VARFLAG_ALIAS;
+                        }
+
+                        /* return the storage reference identifier */
+                        pVarInfo->storageRef = pVarStorage->storageRef;
+
+                        if ( pVarHandle != NULL )
+                        {
+                            /* return the new variable handle */
+                            *pVarHandle = pAliasVarID->hVar;
+                        }
+
+                        /* add the VarStorage object to the Hash Table */
+                        result = HASH_Add( name, pVarID );
+                    }
+                    else
+                    {
+                        /* no space for more variables */
+                        result = ENOMEM;
+                    }
+                }
+                else
+                {
+                    /* no storage object associated with the variable id */
+                    result = ENOMEM;
+                }
+            }
+            else
+            {
+                /* cannot find the variable to be aliased */
+                result = ENOENT;
+            }
+        }
+        else
+        {
+            /* a variable with the requested name already exists */
+            result = EEXIST;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  varlist_FindVar                                                           */
+/*!
+    Find a variable object given its name and instance ID
+
+    The varlist_FindVar function finds the VarID object
     in the Hash Table given its name and instance identifier.
 
     @param[in]
@@ -278,35 +439,26 @@ int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle )
             Pointer to the variable definition containing the name and
             instance identifier of the variable to find
 
-    @retval pointer to the VarStorage object found
+    @retval pointer to the VarID object found
     @retval NULL if no VarStorage object was found
 
 ==============================================================================*/
-static VarStorage *varlist_FindStorage( VarInfo *pVarInfo )
+static VarID *varlist_FindVar( VarInfo *pVarInfo )
 {
-    VarStorage *pVarStorage = NULL;
+    VarID *pVarID = NULL;
     char buf[256];
     char *name;
 
     if( pVarInfo != NULL )
     {
-        /* check if this variable has an instance identifier */
-        if ( pVarInfo->instanceID != 0 )
-        {
-            /* get the variable's fully qualified name */
-            name = VARLIST_FQN( pVarInfo, buf, sizeof( buf ) );
-        }
-        else
-        {
-            /* get the variable name */
-            name = pVarInfo->name;
-        }
+        /* get the variable's fully qualified name */
+        name = VARLIST_FQN( pVarInfo, buf, sizeof( buf ) );
 
         /* find the VarStorage given its name */
-        pVarStorage = HASH_Find( name );
+        pVarID = HASH_Find( name );
     }
 
-    return pVarStorage;
+    return pVarID;
 }
 
 /*============================================================================*/
@@ -335,7 +487,7 @@ static VarStorage *varlist_FindStorage( VarInfo *pVarInfo )
 int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle )
 {
     int result = EINVAL;
-    VarStorage *pVarStorage;
+    VarID *pVarID;
 
     if( ( pVarInfo != NULL ) &&
         ( pVarHandle != NULL ) )
@@ -346,14 +498,14 @@ int VARLIST_Find( VarInfo *pVarInfo, VAR_HANDLE *pVarHandle )
         /* store VAR_INVALID in the variable handle */
         *pVarHandle = VAR_INVALID;
 
-        /* find the VarStorage object */
-        pVarStorage = varlist_FindStorage( pVarInfo );
-        if ( pVarStorage != NULL )
+        /* find the VarID object */
+        pVarID = varlist_FindVar( pVarInfo );
+        if ( pVarID != NULL )
         {
             /* check if we have read permissions on the variable */
-            if ( varlist_CheckReadPermissions( pVarInfo, pVarStorage ))
+            if ( varlist_CheckReadPermissions( pVarInfo, pVarID ))
             {
-                *pVarHandle = pVarStorage->hVar;
+                *pVarHandle = pVarID->hVar;
                 result = EOK;
             }
         }
@@ -386,7 +538,7 @@ int VARLIST_Exists( VarInfo *pVarInfo )
 
     if ( pVarInfo != NULL )
     {
-        result = ( varlist_FindStorage( pVarInfo ) != NULL ) ? EOK : ENOENT;
+        result = ( varlist_FindVar( pVarInfo ) != NULL ) ? EOK : ENOENT;
     }
 
     return result;
@@ -398,7 +550,8 @@ int VARLIST_Exists( VarInfo *pVarInfo )
     Construct a Fully Qualified Name (FQN) for the specified variable
 
     The VARLIST_FQN function constructs a fully qualified name from the
-    specicied variable info using its name and instance identifier.
+    specified variable info using its name and instance identifier.
+    The name is converted to lower case
 
     @param[in]
         pVarInfo
@@ -420,36 +573,37 @@ int VARLIST_Exists( VarInfo *pVarInfo )
 char *VARLIST_FQN( VarInfo *pVarInfo, char *buf, size_t len )
 {
     char *p = NULL;
-    int n;
+    int i = 0;
+    int j = 0;
+    char *name;
 
     if ( ( pVarInfo != NULL ) &&
          ( buf != NULL ) &&
          ( len > 0 ) )
     {
+        name = pVarInfo->name;
+
+        /* prepend the name with the instance identifier */
         if ( pVarInfo->instanceID != 0 )
         {
             /* construct the fully qualified name */
-            n = snprintf( buf,
+            i = snprintf( buf,
                           len,
-                          "[%" PRIu32 "]%s",
-                          pVarInfo->instanceID,
-                          pVarInfo->name );
-        }
-        else
-        {
-            /* copy the name */
-            n = snprintf( buf,
-                          len,
-                          "%s",
-                          pVarInfo->name );
+                          "[%" PRIu32 "]",
+                          pVarInfo->instanceID );
+            len -= i;
         }
 
-        if ( ( n > 0 ) && ( (size_t)n < len ) )
+        /* copy the name and map to lower case */
+        while ( ( (size_t)i < len ) && ( name[j] != 0 ) )
+        {
+            buf[i++] = tolower( name[j++] );
+        }
+
+        if ( (size_t)i < len )
         {
             /* NUL terminate */
-            buf[n] = 0;
-
-            /* set the return value */
+            buf[i] = 0;
             p = buf;
         }
     }
@@ -506,32 +660,45 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                            void *clientInfo,
                            pid_t *handler )
 {
-    VarStorage *pVarStorage;
+    VarID *pVarID;
+    VarStorage *pVarStorage = NULL;
     int result = EINVAL;
-    VAR_HANDLE hVar;
+    VAR_HANDLE hVar = VAR_INVALID;
+    VAR_HANDLE hTransactionVar = VAR_INVALID;
     size_t n;
     uint32_t printHandle;
     char *p;
+    Notification *pNotifications;
 
     if( ( pVarInfo != NULL ) &&
         ( workbuf != NULL ) )
     {
-        hVar = pVarInfo->hVar;
-
-        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) &&
-            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
         {
-            /* get a pointer to the variable storage for this variable */
-            pVarStorage = &varstore[hVar];
+            pVarStorage = pVarID->pVarStorage;
+            hVar = pVarID->hVar;
+        }
+
+        if( ( pVarStorage != NULL ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
+        {
+            /* get the storage reference identifier */
+            pVarInfo->storageRef = pVarStorage->storageRef;
 
             /* check if this variable has a PRINT handler attached */
             if( pVarStorage->notifyMask & NOTIFY_MASK_PRINT )
             {
+                /* get the handle associated with the PRINT notification */
+                pNotifications = pVarStorage->pNotifications;
+                hTransactionVar = NOTIFY_GetVarHandle( pNotifications,
+                                                       NOTIFY_PRINT );
+
                 /* create a PRINT transaction */
                 result = TRANSACTION_New( clientPID,
-                                            clientInfo,
-                                            &printHandle );
+                                          clientInfo,
+                                          hTransactionVar,
+                                          &printHandle );
                 if( result == EOK )
                 {
                     /* send a PRINT notification */
@@ -688,22 +855,27 @@ int VARLIST_GetByHandle( pid_t clientPID,
                          char *buf,
                          size_t bufsize )
 {
-    VarStorage *pVarStorage;
+    VarStorage *pVarStorage = NULL;
+    VarID *pVarID;
     int result = EINVAL;
-    VAR_HANDLE hVar;
+    VAR_HANDLE hVar = VAR_INVALID;
     size_t n;
 
     if( ( pVarInfo != NULL ) &&
         ( buf != NULL ) )
     {
-        hVar = pVarInfo->hVar;
-
-        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) &&
-            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
         {
-            /* get a pointer to the variable storage for this variable */
-            pVarStorage = &varstore[hVar];
+            pVarStorage = pVarID->pVarStorage;
+            hVar = pVarID->hVar;
+        }
+
+        if ( ( pVarStorage != NULL ) &&
+             ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
+        {
+            /* get the storage reference identifier */
+            pVarInfo->storageRef = pVarStorage->storageRef;
 
             /* check if this variable has a CALC handler attached */
             if( pVarStorage->notifyMask & NOTIFY_MASK_CALC )
@@ -793,10 +965,22 @@ int VARLIST_GetByHandle( pid_t clientPID,
     For variables with a validation notification, the client will
     be blocked until the validation can be completed
 
+    @param[in]
+        clientPID
+            the process ID of the client setting the variable
+
     @param[in,out]
         pVarInfo
             Pointer to the variable definition containing the handle
             of the variable to set and the value to set it to
+
+    @param[in,out]
+        validationInProgress
+            pointer to the location to store the validationInProgress flag
+
+    @param[in]
+        clientInfo
+            opaque pointer to the client VarClient object
 
     @retval EOK the variable was successfully set
     @retval ENOTSUP the variable was not the appropriate type
@@ -811,29 +995,36 @@ int VARLIST_Set( pid_t clientPID,
                  void *clientInfo )
 {
     int result = EINVAL;
-    VarStorage *pVarStorage;
-    VAR_HANDLE hVar;
+    VarID *pVarID;
+    VarStorage *pVarStorage = NULL;
+    VAR_HANDLE hVar = VAR_INVALID;
     uint32_t validateHandle;
+    Notification *pNotifications;
+    VAR_HANDLE hTransactionVar = VAR_INVALID;
     int rc;
 
     if( pVarInfo != NULL )
     {
-        hVar = pVarInfo->hVar;
-
-        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) &&
-            ( validationInProgress != NULL ) &&
-            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
         {
-            /* get a pointer to the variable storage for this variable */
-            pVarStorage = &varstore[hVar];
+            pVarStorage = pVarID->pVarStorage;
+            hVar = pVarID->hVar;
+        }
 
+        if ( ( pVarStorage != NULL ) &&
+             ( validationInProgress != NULL ) &&
+             ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
+        {
             /* check if we have write permissions on this variable */
-            rc = varlist_CheckWritePermissions( pVarInfo, pVarStorage );
+            rc = varlist_CheckWritePermissions( pVarInfo, pVarID );
             if ( rc == false )
             {
                 return EACCES;
             }
+
+            /* get the storage reference identifier */
+            pVarInfo->storageRef = pVarStorage->storageRef;
 
             /* handle trigger notifications */
             rc = varlist_HandleTrigger( clientPID, pVarStorage, hVar );
@@ -847,13 +1038,20 @@ int VARLIST_Set( pid_t clientPID,
             if( ( pVarStorage->notifyMask & NOTIFY_MASK_VALIDATE ) &&
                 ( *validationInProgress == false ) )
             {
+                /* prevent self-notification */
                 if( NOTIFY_Find( pVarStorage->pNotifications,
                                  NOTIFY_VALIDATE,
                                  clientPID ) == NULL )
                 {
+                    /* get the handle associated with the PRINT notification */
+                    pNotifications = pVarStorage->pNotifications;
+                    hTransactionVar = NOTIFY_GetVarHandle( pNotifications,
+                                                           NOTIFY_VALIDATE );
+
                     /* create a validation transaction */
                     result = TRANSACTION_New( clientPID,
                                               clientInfo,
+                                              hTransactionVar,
                                               &validateHandle );
                     if( result == EOK )
                     {
@@ -933,7 +1131,7 @@ int VARLIST_Set( pid_t clientPID,
 
             if ( pVarStorage->flags & VARFLAG_AUDIT )
             {
-                varlist_Audit( clientPID, pVarStorage, pVarInfo );
+                varlist_Audit( clientPID, pVarID, pVarInfo );
             }
 
             if ( ( result == EOK ) ||
@@ -943,7 +1141,7 @@ int VARLIST_Set( pid_t clientPID,
                 if( pVarStorage->notifyMask & NOTIFY_MASK_HAS_CALC_BLOCK )
                 {
                     /* unblock the first CALC blocked client */
-                    UnblockClients( hVar,
+                    UnblockClients( pVarStorage->storageRef,
                                     NOTIFY_CALC,
                                     varlist_Calc,
                                     (void *)pVarInfo );
@@ -990,8 +1188,8 @@ int VARLIST_Set( pid_t clientPID,
             process id of the client requesting the change
 
     @param[in]
-        pVarStorage
-            pointer to the variable storage object that was changed
+        pVarID
+            pointer to the variable ID object that was changed
 
     @param[in]
         pVarInfo
@@ -1003,119 +1201,125 @@ int VARLIST_Set( pid_t clientPID,
 
 ==============================================================================*/
 static int varlist_Audit( pid_t clientPID,
-                          VarStorage *pVarStorage,
+                          VarID *pVarID,
                           VarInfo *pVarInfo )
 {
     int result = EINVAL;
+    VarStorage *pVarStorage = NULL;
     uid_t uid;
     char *varname;
 
     if ( ( pVarInfo != NULL ) &&
-         ( pVarStorage != NULL ) )
+         ( pVarID != NULL ) )
     {
         uid = pVarInfo->creds[0];
-        varname = pVarStorage->name;
+        varname = pVarID->name;
 
-        result = EOK;
-
-        switch( pVarStorage->var.type )
+        pVarStorage = pVarID->pVarStorage;
+        if ( pVarStorage != NULL )
         {
-            case VARTYPE_FLOAT:
-                syslog( LOG_INFO,
-                        "'%s' changed to '%f' by user %d from process %d",
-                        varname,
-                        pVarStorage->var.val.f,
-                        uid,
-                        clientPID  );
-                break;
+            result = EOK;
 
-            case VARTYPE_BLOB:
-                syslog( LOG_INFO,
-                        "'%s' changed by user %d from process %d",
-                        varname,
-                        uid,
-                        clientPID  );
-                result = EOK;
-                break;
-
-            case VARTYPE_STR:
-                if ( pVarStorage->var.val.str != NULL )
-                {
+            switch( pVarStorage->var.type )
+            {
+                case VARTYPE_FLOAT:
                     syslog( LOG_INFO,
-                            "'%s' changed to '%s' by user %d from process %d",
+                            "'%s' changed to '%f' by user %d from process %d",
                             varname,
-                            pVarStorage->var.val.str,
+                            pVarStorage->var.val.f,
                             uid,
                             clientPID  );
-                }
-                result = EOK;
-                break;
+                    break;
 
-            case VARTYPE_UINT16:
-                syslog( LOG_INFO,
-                        "'%s' changed to '%u' by user %d from process %d",
-                        varname,
-                        pVarStorage->var.val.ui,
-                        uid,
-                        clientPID  );
-                break;
+                case VARTYPE_BLOB:
+                    syslog( LOG_INFO,
+                            "'%s' changed by user %d from process %d",
+                            varname,
+                            uid,
+                            clientPID  );
+                    result = EOK;
+                    break;
 
-            case VARTYPE_INT16:
-                syslog( LOG_INFO,
-                        "'%s' changed to '%d' by user %d from process %d",
-                        varname,
-                        pVarStorage->var.val.i,
-                        uid,
-                        clientPID  );
-                break;
+                case VARTYPE_STR:
+                    if ( pVarStorage->var.val.str != NULL )
+                    {
+                        syslog( LOG_INFO,
+                                "'%s' changed to '%s' by user %d "
+                                "from process %d",
+                                varname,
+                                pVarStorage->var.val.str,
+                                uid,
+                                clientPID  );
+                    }
+                    result = EOK;
+                    break;
 
-            case VARTYPE_UINT32:
-                syslog( LOG_INFO,
-                        "'%s' changed to '"
-                        "%" PRIu32
-                        "' by user %d from process %d",
-                        varname,
-                        pVarStorage->var.val.ul,
-                        uid,
-                        clientPID  );
-                break;
+                case VARTYPE_UINT16:
+                    syslog( LOG_INFO,
+                            "'%s' changed to '%u' by user %d from process %d",
+                            varname,
+                            pVarStorage->var.val.ui,
+                            uid,
+                            clientPID  );
+                    break;
 
-            case VARTYPE_INT32:
-                syslog( LOG_INFO,
-                        "'%s' changed to '"
-                        "%" PRId32
-                        "' by user %d from process %d",
-                        varname,
-                        pVarStorage->var.val.l,
-                        uid,
-                        clientPID  );
-                break;
+                case VARTYPE_INT16:
+                    syslog( LOG_INFO,
+                            "'%s' changed to '%d' by user %d from process %d",
+                            varname,
+                            pVarStorage->var.val.i,
+                            uid,
+                            clientPID  );
+                    break;
 
-            case VARTYPE_UINT64:
-                syslog( LOG_INFO,
-                        "'%s' changed to '"
-                        "%" PRIu64
-                        "' by user %d from process %d",
-                        varname,
-                        pVarStorage->var.val.ull,
-                        uid,
-                        clientPID  );
-                break;
+                case VARTYPE_UINT32:
+                    syslog( LOG_INFO,
+                            "'%s' changed to '"
+                            "%" PRIu32
+                            "' by user %d from process %d",
+                            varname,
+                            pVarStorage->var.val.ul,
+                            uid,
+                            clientPID  );
+                    break;
 
-            case VARTYPE_INT64:
-                syslog( LOG_INFO,
-                        "'%s' changed to '"
-                        "%" PRId64
-                        "' by user %d from process %d",
-                        varname,
-                        pVarStorage->var.val.ll,
-                        uid,
-                        clientPID  );
-                break;
+                case VARTYPE_INT32:
+                    syslog( LOG_INFO,
+                            "'%s' changed to '"
+                            "%" PRId32
+                            "' by user %d from process %d",
+                            varname,
+                            pVarStorage->var.val.l,
+                            uid,
+                            clientPID  );
+                    break;
 
-            default:
-                result = ENOTSUP;
-                break;
+                case VARTYPE_UINT64:
+                    syslog( LOG_INFO,
+                            "'%s' changed to '"
+                            "%" PRIu64
+                            "' by user %d from process %d",
+                            varname,
+                            pVarStorage->var.val.ull,
+                            uid,
+                            clientPID  );
+                    break;
+
+                case VARTYPE_INT64:
+                    syslog( LOG_INFO,
+                            "'%s' changed to '"
+                            "%" PRId64
+                            "' by user %d from process %d",
+                            varname,
+                            pVarStorage->var.val.ll,
+                            uid,
+                            clientPID  );
+                    break;
+
+                default:
+                    result = ENOTSUP;
+                    break;
+            }
         }
     }
 
@@ -1144,28 +1348,32 @@ static int varlist_Audit( pid_t clientPID,
 int VARLIST_SetFlags( VarInfo *pVarInfo )
 {
     int result = EINVAL;
-    VarStorage *pVarStorage;
-    VAR_HANDLE hVar;
+    VarStorage *pVarStorage = NULL;
+    VarID *pVarID;
     bool rc;
 
     if( pVarInfo != NULL )
     {
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
+        {
+            pVarStorage = pVarID->pVarStorage;
+        }
+
         result = ENOENT;
 
-        hVar = pVarInfo->hVar;
-
-        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) &&
-            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
+        if ( ( pVarStorage != NULL ) &&
+             ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
         {
-            /* get a pointer to the variable storage for this variable */
-            pVarStorage = &varstore[hVar];
-
             /* check if we have write permissions on this variable */
-            rc = varlist_CheckWritePermissions( pVarInfo, pVarStorage );
+            rc = varlist_CheckWritePermissions( pVarInfo, pVarID );
             if ( rc == true )
             {
                 pVarStorage->flags |= pVarInfo->flags;
+
+                /* get the storage reference identifier */
+                pVarInfo->storageRef = pVarStorage->storageRef;
+
                 result = EOK;
             }
             else
@@ -1200,28 +1408,32 @@ int VARLIST_SetFlags( VarInfo *pVarInfo )
 int VARLIST_ClearFlags( VarInfo *pVarInfo )
 {
     int result = EINVAL;
-    VarStorage *pVarStorage;
-    VAR_HANDLE hVar;
+    VarStorage *pVarStorage = NULL;
+    VarID *pVarID;
     int rc;
 
     if( pVarInfo != NULL )
     {
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
+        {
+            pVarStorage = pVarID->pVarStorage;
+        }
+
         result = ENOENT;
 
-        hVar = pVarInfo->hVar;
-
-        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) &&
-            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
+        if( ( pVarStorage != NULL ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
         {
-            /* get a pointer to the variable storage for this variable */
-            pVarStorage = &varstore[hVar];
-
             /* check if we have write permissions on this variable */
-            rc = varlist_CheckWritePermissions( pVarInfo, pVarStorage );
+            rc = varlist_CheckWritePermissions( pVarInfo, pVarID );
             if ( rc == true )
             {
                 pVarStorage->flags &= ~(pVarInfo->flags);
+
+                /* get the storage reference identifier */
+                pVarInfo->storageRef = pVarStorage->storageRef;
+
                 result = EOK;
             }
             else
@@ -1404,40 +1616,53 @@ static int varlist_Calc( VarClient *pVarClient, void *arg )
     VarInfo *pVarInfo = (VarInfo *)arg;
     VarType varType;
     size_t len;
-    VAR_HANDLE hVar;
+    VarID *pVarID;
+    VarStorage *pVarStorage = NULL;
 
     if( ( pVarClient != NULL ) &&
         ( pVarInfo != NULL ) )
     {
-        hVar = pVarInfo->hVar;
-
-        /* copy the format specifier */
-        memcpy( pVarClient->variableInfo.formatspec,
-                varstore[hVar].formatspec,
-                MAX_FORMATSPEC_LEN );
-
-        /* copy the variable type from the varstore */
-        varType = varstore[hVar].var.type;
-        pVarClient->variableInfo.var.type = varType;
-
-        /* copy the variable length from the varstore */
-        len = varstore[hVar].var.len;
-        pVarClient->variableInfo.var.len = len;
-
-        if( varType == VARTYPE_STR )
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
         {
-            result = varlist_CopyVarInfoStringToClient( pVarClient, pVarInfo );
+            pVarStorage = pVarID->pVarStorage;
         }
-        else if ( varType == VARTYPE_BLOB )
-        {
-            result = varlist_CopyVarInfoBlobToClient( pVarClient, pVarInfo );
-        }
-        else
-        {
-            /* copy the source VarObject to the VarClient */
-            pVarClient->variableInfo.var.val = pVarInfo->var.val;
 
-            result = EOK;
+        if ( pVarStorage != NULL )
+        {
+            /* get the storage reference identifier */
+            pVarInfo->storageRef = pVarStorage->storageRef;
+
+            /* copy the format specifier */
+            memcpy( pVarClient->variableInfo.formatspec,
+                    pVarStorage->formatspec,
+                    MAX_FORMATSPEC_LEN );
+
+            /* copy the variable type from the varstore */
+            varType = pVarStorage->var.type;
+            pVarClient->variableInfo.var.type = varType;
+
+            /* copy the variable length from the varstore */
+            len = pVarStorage->var.len;
+            pVarClient->variableInfo.var.len = len;
+
+            if( varType == VARTYPE_STR )
+            {
+                result = varlist_CopyVarInfoStringToClient( pVarClient,
+                                                            pVarInfo );
+            }
+            else if ( varType == VARTYPE_BLOB )
+            {
+                result = varlist_CopyVarInfoBlobToClient( pVarClient,
+                                                          pVarInfo );
+            }
+            else
+            {
+                /* copy the source VarObject to the VarClient */
+                pVarClient->variableInfo.var.val = pVarInfo->var.val;
+
+                result = EOK;
+            }
         }
     }
 
@@ -2741,22 +2966,26 @@ static int varlist_SetBlob( VarStorage *pVarStorage, VarInfo *pVarInfo )
 int VARLIST_GetType( VarInfo *pVarInfo )
 {
     int result = EINVAL;
-    VarStorage *pVarStorage;
-    VAR_HANDLE hVar;
+    VarStorage *pVarStorage = NULL;
+    VarID *pVarID;
 
     if( pVarInfo != NULL )
     {
-        hVar = pVarInfo->hVar;
-
-        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) &&
-            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
         {
             /* get a pointer to the variable storage for this variable */
-            pVarStorage = &varstore[hVar];
+            pVarStorage = pVarID->pVarStorage;
+        }
 
+        if( ( pVarStorage != NULL ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
+        {
             /* retrieve the type */
             pVarInfo->var.type = pVarStorage->var.type;
+
+            /* get the storage reference identifier */
+            pVarInfo->storageRef = pVarStorage->storageRef;
 
             result = EOK;
         }
@@ -2790,23 +3019,23 @@ int VARLIST_GetType( VarInfo *pVarInfo )
 int VARLIST_GetName( VarInfo *pVarInfo )
 {
     int result = EINVAL;
-    VarStorage *pVarStorage;
-    VAR_HANDLE hVar;
+    VarID *pVarID;
 
     if( pVarInfo != NULL )
     {
-        hVar = pVarInfo->hVar;
-
-        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) &&
-            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
         {
-            /* get a pointer to the variable storage for this variable */
-            pVarStorage = &varstore[hVar];
-
-            /* retrieve the name */
-            memcpy( pVarInfo->name, pVarStorage->name, MAX_NAME_LEN+1 );
-            result = EOK;
+            if( ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
+            {
+                /* retrieve the name */
+                memcpy( pVarInfo->name, pVarID->name, MAX_NAME_LEN+1 );
+                result = EOK;
+            }
+            else
+            {
+                result = ENOENT;
+            }
         }
         else
         {
@@ -2838,22 +3067,27 @@ int VARLIST_GetName( VarInfo *pVarInfo )
 int VARLIST_GetLength( VarInfo *pVarInfo )
 {
     int result = EINVAL;
-    VarStorage *pVarStorage;
-    VAR_HANDLE hVar;
+    VarStorage *pVarStorage = NULL;
+    VarID *pVarID;
 
     if( pVarInfo != NULL )
     {
-        hVar = pVarInfo->hVar;
-
-        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) &&
-            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
         {
             /* get a pointer to the variable storage for this variable */
-            pVarStorage = &varstore[hVar];
+            pVarStorage = pVarID->pVarStorage;
+        }
 
+        if( ( pVarStorage != NULL ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
+        {
             /* retrieve the type */
             pVarInfo->var.len = pVarStorage->var.len;
+
+            /* get the storage reference identifier */
+            pVarInfo->storageRef = pVarStorage->storageRef;
+
             result = EOK;
         }
         else
@@ -2886,22 +3120,27 @@ int VARLIST_GetLength( VarInfo *pVarInfo )
 int VARLIST_GetFlags( VarInfo *pVarInfo )
 {
     int result = EINVAL;
-    VarStorage *pVarStorage;
-    VAR_HANDLE hVar;
+    VarStorage *pVarStorage = NULL;
+    VarID *pVarID;
 
     if( pVarInfo != NULL )
     {
-        hVar = pVarInfo->hVar;
-
-        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) &&
-            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
         {
             /* get a pointer to the variable storage for this variable */
-            pVarStorage = &varstore[hVar];
+            pVarStorage = pVarID->pVarStorage;
+        }
 
+        if( ( pVarStorage != NULL ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
+        {
             /* retrieve the flags */
             pVarInfo->flags = pVarStorage->flags;
+
+            /* get the storage reference identifier */
+            pVarInfo->storageRef = pVarStorage->storageRef;
+
             result = EOK;
         }
         else
@@ -2934,29 +3173,31 @@ int VARLIST_GetFlags( VarInfo *pVarInfo )
 int VARLIST_GetInfo( VarInfo *pVarInfo )
 {
     int result = EINVAL;
-    VarStorage *pVarStorage;
-    VAR_HANDLE hVar;
+    VarStorage *pVarStorage = NULL;
+    VarID *pVarID;
 
     if( pVarInfo != NULL )
     {
-        hVar = pVarInfo->hVar;
-
-        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) &&
-            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
         {
             /* get a pointer to the variable storage for this variable */
-            pVarStorage = &varstore[hVar];
+            pVarStorage = pVarID->pVarStorage;
+        }
 
+        if( ( pVarStorage != NULL ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
+        {
             /* retrieve the VarInfo object */
+            pVarInfo->storageRef = pVarStorage->storageRef;
             pVarInfo->flags = pVarStorage->flags;
             memcpy( pVarInfo->formatspec,
                     pVarStorage->formatspec,
                     MAX_FORMATSPEC_LEN );
 
-            pVarInfo->guid = pVarStorage->guid;
-            pVarInfo->instanceID = pVarStorage->instanceID;
-            memcpy( pVarInfo->name, pVarStorage->name, MAX_NAME_LEN );
+            pVarInfo->guid = pVarID->guid;
+            pVarInfo->instanceID = pVarID->instanceID;
+            memcpy( pVarInfo->name, pVarID->name, MAX_NAME_LEN );
             pVarInfo->permissions = pVarStorage->permissions;
             TAGLIST_TagsToString( pVarStorage->tags,
                                   MAX_TAGS_LEN,
@@ -3000,28 +3241,37 @@ int VARLIST_GetInfo( VarInfo *pVarInfo )
 int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
 {
     int result = EINVAL;
-    VarStorage *pVarStorage;
-    VAR_HANDLE hVar;
+    VarStorage *pVarStorage = NULL;
     NotificationType notifyType;
+    VarID *pVarID;
+    VAR_HANDLE hVar = VAR_INVALID;
 
     if( pVarInfo != NULL )
     {
-        hVar = pVarInfo->hVar;
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
+        {
+            /* get a pointer to the variable storage for this variable */
+            pVarStorage = pVarID->pVarStorage;
+
+            /* get the handle of the variable for the notification request */
+            hVar = pVarInfo->hVar;
+        }
 
         /* get the notification type */
         notifyType = pVarInfo->notificationType;
 
-        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
-            ( hVar <= (VAR_HANDLE)varcount ) &&
-            ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) ) )
+        if( ( pVarStorage != NULL ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
         {
-            /* get a pointer to the variable storage for this variable */
-            pVarStorage = &varstore[hVar];
+            /* get the storage reference identifier */
+            pVarInfo->storageRef = pVarStorage->storageRef;
 
             if( notifyType == NOTIFY_MODIFIED )
             {
                 result = NOTIFY_Add( &pVarStorage->pNotifications,
                                      notifyType,
+                                     hVar,
                                      pid );
                 if( result == EOK )
                 {
@@ -3032,6 +3282,7 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
             {
                 result = NOTIFY_Add( &pVarStorage->pNotifications,
                                      notifyType,
+                                     hVar,
                                      pid );
                 if ( result == EOK )
                 {
@@ -3042,6 +3293,7 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
             {
                 result = NOTIFY_Add( &pVarStorage->pNotifications,
                                      notifyType,
+                                     hVar,
                                      pid );
                 if( result == EOK )
                 {
@@ -3052,6 +3304,7 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
             {
                 result = NOTIFY_Add( &pVarStorage->pNotifications,
                                      notifyType,
+                                     hVar,
                                      pid );
                 if( result == EOK )
                 {
@@ -3062,6 +3315,7 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
             {
                 result = NOTIFY_Add( &pVarStorage->pNotifications,
                                      notifyType,
+                                     hVar,
                                      pid );
                 if( result == EOK )
                 {
@@ -3079,7 +3333,6 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
     return result;
 }
 
-
 /*============================================================================*/
 /*  AssignVarInfo                                                             */
 /*!
@@ -3091,6 +3344,10 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
     VarStorage <- VarInfo
 
     It allocates memory for string and blob type variables
+
+    @param[in]
+        pVarID
+            Pointer to the variable identifier
 
     @param[in]
         pVarStorage
@@ -3106,7 +3363,9 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
     @retval EINVAL invalid arguments
 
 ==============================================================================*/
-static int AssignVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo )
+static int AssignVarInfo( VarID *pVarID,
+                          VarStorage *pVarStorage,
+                          VarInfo *pVarInfo )
 {
     int result = EINVAL;
 
@@ -3129,14 +3388,14 @@ static int AssignVarInfo( VarStorage *pVarStorage, VarInfo *pVarInfo )
         if( result == EOK )
         {
             /* set the variable's instance identifier */
-            pVarStorage->instanceID = pVarInfo->instanceID;
+            pVarID->instanceID = pVarInfo->instanceID;
 
             /* copy the variable name */
-            strncpy(pVarStorage->name, pVarInfo->name, MAX_NAME_LEN );
-            pVarStorage->name[MAX_NAME_LEN-1] = 0;
+            strncpy(pVarID->name, pVarInfo->name, MAX_NAME_LEN );
+            pVarID->name[MAX_NAME_LEN-1] = 0;
 
             /* set the variable's GUID */
-            pVarStorage->guid = pVarInfo->guid;
+            pVarID->guid = pVarInfo->guid;
 
             /* set the variable type */
             pVarStorage->var.type = pVarInfo->var.type;
@@ -3366,7 +3625,8 @@ int VARLIST_GetFirst( pid_t clientPID,
     int result = EINVAL;
     VAR_HANDLE hVar;
     SearchContext *ctx;
-    VarStorage *pVarStorage;
+    VarStorage *pVarStorage = NULL;
+    VarID *pVarID;
 
     if( ( pVarInfo != NULL ) &&
         ( buf != NULL ) &&
@@ -3386,20 +3646,25 @@ int VARLIST_GetFirst( pid_t clientPID,
             while( ( hVar < VARSERVER_MAX_VARIABLES ) &&
                    ( hVar <= (VAR_HANDLE)varcount ) )
             {
-                if ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) )
+                pVarID = &varstore[hVar];
+                if ( pVarID != NULL )
                 {
-                    if( varlist_Match( hVar, ctx ) == EOK )
-                    {
-                        /* get a pointer to the storage for this variable */
-                        pVarStorage = &varstore[hVar];
+                    /* get a pointer to the storage for this variable */
+                    pVarStorage = pVarID->pVarStorage;
+                }
 
+                if ( ( pVarStorage != NULL ) &&
+                     ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
+                {
+                    if( varlist_Match( pVarID, ctx ) == EOK )
+                    {
                         /* copy the name */
                         memcpy( pVarInfo->name,
-                                pVarStorage->name,
+                                pVarID->name,
                                 MAX_NAME_LEN+1 );
 
                         /* copy the instanceID */
-                        pVarInfo->instanceID = pVarStorage->instanceID;
+                        pVarInfo->instanceID = pVarID->instanceID;
 
                         /* copy the format specifier */
                         memcpy( pVarInfo->formatspec,
@@ -3415,12 +3680,11 @@ int VARLIST_GetFirst( pid_t clientPID,
                         /* get the variable value */
                         pVarInfo->hVar = hVar;
                         result = VARLIST_GetByHandle( clientPID,
-                                                    pVarInfo,
-                                                    buf,
-                                                    bufsize );
+                                                      pVarInfo,
+                                                      buf,
+                                                      bufsize );
                         break;
                     }
-
                 }
 
                 hVar++;
@@ -3495,7 +3759,8 @@ int VARLIST_GetNext( pid_t clientPID,
     int result = EINVAL;
     VAR_HANDLE hVar;
     SearchContext *ctx;
-    VarStorage *pVarStorage;
+    VarStorage *pVarStorage = NULL;
+    VarID *pVarID;
 
     /* get the search context */
     ctx = varlist_FindSearchContext( clientPID, context );
@@ -3510,19 +3775,24 @@ int VARLIST_GetNext( pid_t clientPID,
         while( ( hVar < VARSERVER_MAX_VARIABLES ) &&
                ( hVar <= (VAR_HANDLE)varcount ) )
         {
-            if ( varlist_CheckReadPermissions( pVarInfo, &varstore[hVar] ) )
+            pVarID = &varstore[hVar];
+            if ( pVarID != NULL )
+            {
+                /* get a pointer to the storage for this variable */
+                pVarStorage = pVarID->pVarStorage;
+            }
+
+            if ( ( pVarStorage != NULL ) &&
+                 ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
             {
                 /* check if the current variable matches the search criteria */
-                if( varlist_Match( hVar, ctx ) == EOK )
+                if( varlist_Match( pVarID, ctx ) == EOK )
                 {
-                    /* get a pointer to the storage for this variable */
-                    pVarStorage = &varstore[hVar];
-
                     /* copy the name */
-                    memcpy( pVarInfo->name, pVarStorage->name, MAX_NAME_LEN+1 );
+                    memcpy( pVarInfo->name, pVarID->name, MAX_NAME_LEN+1 );
 
                     /* copy the instanceID */
-                    pVarInfo->instanceID = pVarStorage->instanceID;
+                    pVarInfo->instanceID = pVarID->instanceID;
 
                     /* copy the format specifier */
                     memcpy( pVarInfo->formatspec,
@@ -3743,8 +4013,8 @@ static SearchContext *varlist_FindSearchContext( pid_t clientPID,
     matches the query conditions in the specified search context
 
     @param[in]
-        hVar
-            handle to the variable to match
+        pVarID
+            pointer to the variable to match
 
     @param[in]
         ctx
@@ -3755,56 +4025,64 @@ static SearchContext *varlist_FindSearchContext( pid_t clientPID,
     @retval ENOENT the variable did not match the search context
 
 ==============================================================================*/
-static int varlist_Match( VAR_HANDLE hVar, SearchContext *ctx )
+static int varlist_Match( VarID *pVarID, SearchContext *ctx )
 {
     int result = EINVAL;
-    VarStorage *pVarStorage;
+    VarStorage *pVarStorage = NULL;
     int searchtype;
-    bool found = true;
+    bool found = false;
     bool match;
 
     if ( ( ctx != NULL ) &&
-         ( hVar < VARSERVER_MAX_VARIABLES ) &&
-         ( hVar <= (VAR_HANDLE)varcount ) )
+         ( pVarID != NULL ) )
     {
         /* get a pointer to the variable storage for this variable */
-        pVarStorage = &varstore[hVar];
-
-        searchtype = ctx->query.type;
-
-        /* dont find hidden variables in vars queries */
-        if( pVarStorage->flags & VARFLAG_HIDDEN )
+        pVarStorage = pVarID->pVarStorage;
+        if ( pVarStorage != NULL )
         {
-            found = false;
-        }
+            found = true;
 
-        /* name matching */
-        if( searchtype & QUERY_MATCH )
-        {
-            found &= (strcasestr(pVarStorage->name, ctx->query.match) != NULL );
-        }
+            searchtype = ctx->query.type;
 
-        /* instance ID matching */
-        if( searchtype & QUERY_INSTANCEID )
-        {
-            found &= (ctx->query.instanceID == pVarStorage->instanceID );
-        }
+            /* dont find hidden variables in vars queries */
+            if( pVarStorage->flags & VARFLAG_HIDDEN )
+            {
+                found = false;
+            }
 
-        /* any flags matching */
-        if( searchtype & QUERY_FLAGS )
-        {
-            match = (ctx->query.flags & pVarStorage->flags ) ? true : false;
-            found &= match;
-        }
+            /* name matching */
+            if( searchtype & QUERY_MATCH )
+            {
+                found &= (strcasestr(pVarID->name, ctx->query.match) != NULL );
+            }
 
-        /* all tags matching */
-        if ( searchtype & QUERY_TAGS )
-        {
-            match = ( varlist_MatchTags( pVarStorage->tags, ctx->tags ) == EOK )
-                  ? true
-                  : false;
+            /* instance ID matching */
+            if( searchtype & QUERY_INSTANCEID )
+            {
+                found &= (ctx->query.instanceID == pVarID->instanceID );
+            }
 
-            found &= match;
+            /* any flags matching */
+            if( searchtype & QUERY_FLAGS )
+            {
+                match = (ctx->query.flags & pVarStorage->flags ) ? true : false;
+                found &= match;
+            }
+
+            /* all tags matching */
+            if ( searchtype & QUERY_TAGS )
+            {
+                if ( varlist_MatchTags( pVarStorage->tags, ctx->tags ) == EOK )
+                {
+                    match = true;
+                }
+                else
+                {
+                    match = false;
+                }
+
+                found &= match;
+            }
         }
 
         result = ( found == true ) ? EOK : ENOENT;
@@ -3899,12 +4177,26 @@ static int varlist_MatchTags( uint16_t *pHaystack, uint16_t *pNeedle )
 ==============================================================================*/
 VarObject *VARLIST_GetObj( VAR_HANDLE hVar )
 {
-    VarStorage *pVarStorage;
+    VarID *pVarID;
+    VarStorage *pVarStorage = NULL;
+    VarInfo info;
+    VarObject *pVarObject = NULL;
 
-    /* get a pointer to the variable storage for this variable */
-    pVarStorage = &varstore[hVar];
+    /* set up an info object */
+    info.hVar = hVar;
 
-    return &(pVarStorage->var);
+    pVarID = varlist_GetVarID( &info );
+    if ( pVarID != NULL )
+    {
+        /* get a pointer to the variable storage for this variable */
+        pVarStorage = pVarID->pVarStorage;
+        if ( pVarStorage != NULL )
+        {
+            pVarObject = &pVarStorage->var;
+        }
+    }
+
+    return pVarObject;
 }
 
 /*============================================================================*/
@@ -4011,8 +4303,8 @@ static void *varlist_GetNotificationPayload( VAR_HANDLE hVar,
             read permissions
 
     @param[in]
-        pVarStorage
-            pointer to the variable storage containing the variable
+        pVarID
+            pointer to the variable ID containing the variable
             read permissions
 
     @retval true the client has permission to read
@@ -4020,7 +4312,7 @@ static void *varlist_GetNotificationPayload( VAR_HANDLE hVar,
 
 ==============================================================================*/
 static bool varlist_CheckReadPermissions( VarInfo *pVarInfo,
-                                          VarStorage *pVarStorage )
+                                          VarID *pVarID )
 {
     register size_t n;
     register size_t m;
@@ -4029,6 +4321,12 @@ static bool varlist_CheckReadPermissions( VarInfo *pVarInfo,
     register bool access = false;
     register gid_t *p;
     register gid_t *q;
+    VarStorage *pVarStorage = NULL;
+
+    if ( pVarID != NULL )
+    {
+        pVarStorage = pVarID->pVarStorage;
+    }
 
     if ( ( pVarInfo != NULL ) &&
          ( pVarStorage != NULL ) )
@@ -4075,8 +4373,8 @@ static bool varlist_CheckReadPermissions( VarInfo *pVarInfo,
             read/write permissions
 
     @param[in]
-        pVarStorage
-            pointer to the variable storage containing the variable
+        pVarID
+            pointer to the variable ID containing the variable
             write permissions
 
     @retval true the client has permission to write
@@ -4084,7 +4382,7 @@ static bool varlist_CheckReadPermissions( VarInfo *pVarInfo,
 
 ==============================================================================*/
 static bool varlist_CheckWritePermissions( VarInfo *pVarInfo,
-                                           VarStorage *pVarStorage )
+                                           VarID *pVarID )
 {
     register size_t n;
     register size_t m;
@@ -4093,33 +4391,39 @@ static bool varlist_CheckWritePermissions( VarInfo *pVarInfo,
     register bool access = false;
     register gid_t *p;
     register gid_t *q;
+    VarStorage *pVarStorage;
 
     if ( ( pVarInfo != NULL ) &&
-         ( pVarStorage != NULL ) )
+         ( pVarID != NULL ) )
     {
-        /* client group IDs are always in the varInfo read list
-           even when checking for write permissions */
-        n = pVarInfo->ncreds;
-        m = pVarStorage->permissions.nwrites;
-        p = pVarInfo->creds;
-        q = pVarStorage->permissions.write;
-
-        for(i = 0 ; i < n && !access ; i++ )
+        pVarStorage = pVarID->pVarStorage;
+        if ( pVarStorage != NULL )
         {
-            if ( ( p[i] == 0 ) || ( p[i] == varserver_uid ) )
+            /* client group IDs are always in the varInfo read list
+            even when checking for write permissions */
+            n = pVarInfo->ncreds;
+            m = pVarStorage->permissions.nwrites;
+            p = pVarInfo->creds;
+            q = pVarStorage->permissions.write;
+
+            for(i = 0 ; i < n && !access ; i++ )
             {
-                access = true;
-            }
-            else
-            {
-                for( j = 0; j < m && !access ; j++ )
+                if ( ( p[i] == 0 ) || ( p[i] == varserver_uid ) )
                 {
-                    if ( p[i] == q[j])
+                    access = true;
+                }
+                else
+                {
+                    for( j = 0; j < m && !access ; j++ )
                     {
-                        access = true;
+                        if ( p[i] == q[j])
+                        {
+                            access = true;
+                        }
                     }
                 }
             }
+
         }
     }
 
@@ -4143,6 +4447,43 @@ void VARLIST_SetUser( void )
     /* get the user identifier of the user that started the variable server */
     varserver_uid = getuid();
 }
+
+/*============================================================================*/
+/*  varlist_GetVarID                                                          */
+/*!
+    Get a pointer to the VarID object
+
+    The varlist_GetVarID function gets a pointer to the VarID object
+    given the pointer to the VarInfo object.
+
+    @param[in]
+        pVarInfo
+            pointer to the VarInfo request containing the client's
+            read/write permissions
+
+    @retval pointer to the VarID object
+    @retval NULL if the VarID object cannot be retrieved
+
+==============================================================================*/
+static VarID *varlist_GetVarID( VarInfo *pVarInfo )
+{
+    VAR_HANDLE hVar;
+    VarID *pVarID = NULL;
+
+    if ( pVarInfo != NULL )
+    {
+        hVar = pVarInfo->hVar;
+
+        if( ( hVar < VARSERVER_MAX_VARIABLES ) &&
+            ( hVar <= (VAR_HANDLE)varcount ) )
+        {
+            pVarID = &varstore[hVar];
+        }
+    }
+
+    return pVarID;
+}
+
 
 /*! @}
  * end of varlist group */

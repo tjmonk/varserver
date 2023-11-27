@@ -119,6 +119,7 @@ static int ProcessVarRequestInvalid( VarClient *pVarClient );
 static int ProcessVarRequestClose( VarClient *pVarClient );
 static int ProcessVarRequestEcho( VarClient *pVarClient );
 static int ProcessVarRequestNew( VarClient *pVarClient );
+static int ProcessVarRequestAlias( VarClient *pVarClient );
 static int ProcessVarRequestFind( VarClient *pVarClient );
 static int ProcessVarRequestPrint( VarClient *pVarClient );
 static int ProcessVarRequestSet( VarClient *pVarClient );
@@ -193,6 +194,13 @@ static RequestHandler RequestHandlers[] =
         "NEW",
         ProcessVarRequestNew,
         "/varserver/stats/new",
+        NULL
+    },
+    {
+        VARREQUEST_ALIAS,
+        "ALIAS",
+        ProcessVarRequestAlias,
+        "/varserver/stats/alias",
         NULL
     },
     {
@@ -959,6 +967,46 @@ static int ProcessVarRequestNew( VarClient *pVarClient )
 }
 
 /*============================================================================*/
+/*  ProcessVarRequestAlias                                                    */
+/*!
+    Process an ALIAS variable request from a client
+
+    The ProcessVarRequestAlias function handles an "ALIAS variable" request
+    from a client to create a new variable alias for an existing variable.
+
+    @param[in]
+        pVarClient
+            Pointer to the client data structure
+
+    @retval EOK the alias was created
+    @retval EINVAL the client is invalid
+    @retval ENOTSUP the client is the wrong version
+    @retval ENOENT the variable was not found
+    @retval ENOMEM no memory for a new variable
+    @retval EEXIST a variable with the requested name already exists
+
+==============================================================================*/
+static int ProcessVarRequestAlias( VarClient *pVarClient )
+{
+    int result = EINVAL;
+    VarInfo *pVarInfo;
+
+    /* validate the client object */
+    result = ValidateClient( pVarClient );
+    if( result == EOK)
+    {
+        pVarInfo = &pVarClient->variableInfo;
+        result = VARLIST_Alias( pVarInfo, &pVarInfo->hVar );
+        if ( result != EOK )
+        {
+            pVarClient->responseVal = VAR_INVALID;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
 /*  ProcessVarRequestFind                                                     */
 /*!
     Process a FIND variable request from a client
@@ -1145,17 +1193,19 @@ static int ProcessVarRequestOpenPrintSession( VarClient *pVarClient )
 {
     int result = EINVAL;
     VarClient *pRequestor;
+    VAR_HANDLE hVar;
 
     /* validate the client object */
     result = ValidateClient( pVarClient );
     if( result == EOK)
     {
         /* get the print session transaction */
-        pRequestor = (VarClient *)TRANSACTION_Get( pVarClient->requestVal );
+        pRequestor = (VarClient *)TRANSACTION_Get( pVarClient->requestVal,
+                                                   &hVar );
         if( pRequestor != NULL )
         {
             /* get the handle for the variable being requested */
-            pVarClient->variableInfo.hVar = pRequestor->variableInfo.hVar;
+            pVarClient->variableInfo.hVar = hVar;
 
             /* get the PID of the client requesting the print */
             pVarClient->peer_pid = pRequestor->client_pid;
@@ -1214,7 +1264,7 @@ static int ProcessVarRequestClosePrintSession( VarClient *pVarClient )
         pRequestor = (VarClient *)TRANSACTION_Remove( pVarClient->requestVal );
         if( pRequestor != NULL )
         {
-            /* unblock the reqeusting client */
+            /* unblock the requesting client */
             UnblockClient( pRequestor );
 
             result = EOK;
@@ -1741,13 +1791,15 @@ static int ProcessValidationRequest( VarClient *pVarClient )
 {
     int result = EINVAL;
     VarClient *pSetClient;
+    VAR_HANDLE hVar;
 
     /* validated the client object */
     result = ValidateClient( pVarClient );
     if( result == EOK )
     {
         /* get a pointer to the client requesting the validation */
-        pSetClient = (VarClient *)TRANSACTION_Get( pVarClient->requestVal );
+        pSetClient = (VarClient *)TRANSACTION_Get( pVarClient->requestVal,
+                                                   &hVar );
         if( pSetClient != NULL )
         {
             if( pSetClient->variableInfo.var.type == VARTYPE_STR )
@@ -1769,7 +1821,7 @@ static int ProcessValidationRequest( VarClient *pVarClient )
 
             /* copy the variable handle from the setting client to the
                validating client */
-            pVarClient->variableInfo.hVar = pSetClient->variableInfo.hVar;
+            pVarClient->variableInfo.hVar = hVar;
 
             /* copy the Variable object from the setter to the validator */
             result = VAROBJECT_Copy( &pVarClient->variableInfo.var,

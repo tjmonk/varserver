@@ -171,6 +171,11 @@ int VAR_GetName( VARSERVER_HANDLE hVarServer,
 
 int dumpmem( uint8_t *p, size_t n);
 
+int VAR_Alias( VARSERVER_HANDLE hVarServer,
+               VAR_HANDLE hVar,
+               char *alias,
+               VAR_HANDLE *hAlias );
+
 int VAR_Set( VARSERVER_HANDLE hVarServer,
              VAR_HANDLE hVar,
              VarObject *pVarObject );
