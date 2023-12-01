@@ -210,6 +210,14 @@ static VarID *varlist_FindVar( VarInfo *pVarInfo );
 
 static VarID *varlist_GetVarID( VarInfo *pVarInfo );
 
+static int varlist_NewAlias( VarInfo *pVarInfo,
+                             VarID *pVarID,
+                             uint32_t *pVarHandle );
+
+static int varlist_MoveAlias( VarID *pAliasID,
+                              VarID *pVarID,
+                              uint32_t *pVarHandle );
+
 /*==============================================================================
         Public function definitions
 ==============================================================================*/
@@ -315,7 +323,7 @@ int VARLIST_AddNew( VarInfo *pVarInfo, uint32_t *pVarHandle )
     Create a variable alias for an existing variable
 
     The VARLIST_Alias function creates a new variable alias for an existing
-    variable.
+    variable or moves an existing alias to a new variable.
 
     @param[in]
         pVarInfo
@@ -337,89 +345,259 @@ int VARLIST_Alias( VarInfo *pVarInfo, uint32_t *pVarHandle )
     int result = EINVAL;
     VarID *pAliasVarID;
     VarID *pVarID;
-    int varhandle;
-    VarStorage *pVarStorage;
-    char buf[256];
-    char *name;
 
     if ( pVarInfo != NULL )
     {
-        /* check if the variable already exists */
-        pAliasVarID = varlist_FindVar( pVarInfo );
-        if ( pAliasVarID == NULL )
+        /* find the variable to be aliased and confirm we have
+           access to read it */
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( varlist_CheckReadPermissions( pVarInfo, pVarID ) == true )
         {
-            /* find the variable to be aliased */
-            pVarID = varlist_GetVarID( pVarInfo );
-            if ( pVarID != NULL )
+            /* see if the alias already exists */
+            pAliasVarID = varlist_FindVar( pVarInfo );
+            if ( pAliasVarID != NULL )
             {
-                /* get the storage location for the variable */
-                pVarStorage = pVarID->pVarStorage;
-                if ( pVarStorage != NULL )
+                /* confirm we have read access to the alias too */
+                if ( varlist_CheckReadPermissions( pVarInfo,
+                                                   pAliasVarID ) == true )
                 {
-                    /* check if we have enough space for another variable */
-                    if( varcount < VARSERVER_MAX_VARIABLES )
-                    {
-                        /* get a pointer to the alias Variable identifier */
-                        varhandle = ++varcount;
-                        pAliasVarID = &varstore[varhandle];
-
-                        /* copy the variable name */
-                        strncpy( pAliasVarID->name,
-                                 pVarInfo->name,
-                                 MAX_NAME_LEN );
-                        pAliasVarID->name[MAX_NAME_LEN-1] = 0;
-
-                        /* construct the fully qualified variable name */
-                        name = VARLIST_FQN( pVarInfo, buf, sizeof( buf ) );
-
-                        /* populate the VarID data */
-                        pAliasVarID->guid = pVarInfo->guid;
-                        pAliasVarID->hVar = varhandle;
-                        pAliasVarID->instanceID = pVarInfo->instanceID;
-                        pAliasVarID->pVarStorage = pVarStorage;
-
-                        pVarStorage->refCount++;
-                        if ( pVarStorage->refCount > 1 )
-                        {
-                            /* we have more than one reference, so
-                                set the alias flag on this storage */
-                            pVarStorage->flags |= VARFLAG_ALIAS;
-                        }
-
-                        /* return the storage reference identifier */
-                        pVarInfo->storageRef = pVarStorage->storageRef;
-
-                        if ( pVarHandle != NULL )
-                        {
-                            /* return the new variable handle */
-                            *pVarHandle = pAliasVarID->hVar;
-                        }
-
-                        /* add the VarStorage object to the Hash Table */
-                        result = HASH_Add( name, pVarID );
-                    }
-                    else
-                    {
-                        /* no space for more variables */
-                        result = ENOMEM;
-                    }
+                    /* move the alias to the new variable */
+                    result = varlist_MoveAlias( pAliasVarID,
+                                                pVarID,
+                                                pVarHandle );
                 }
                 else
                 {
-                    /* no storage object associated with the variable id */
-                    result = ENOMEM;
+                    /* we do not have permission to read the alias variable */
+                    result = ENOENT;
                 }
             }
             else
             {
-                /* cannot find the variable to be aliased */
-                result = ENOENT;
+                /* create a new alias to the variable */
+                result = varlist_NewAlias( pVarInfo,
+                                           pVarID,
+                                           pVarHandle );
             }
         }
         else
         {
-            /* a variable with the requested name already exists */
-            result = EEXIST;
+            /* cannot find variable to be aliased */
+            result = ENOENT;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  varlist_NewAlias                                                          */
+/*!
+    Create a new alias for the specified variable
+
+    The varlist_NewAlias function creates a new variable alias for an existing
+    variable.
+
+    @param[in]
+        pVarInfo
+            Pointer to the new variable to add containing the
+            name, instance ID, and credentials.
+
+    @param[in]
+        pVarID
+            pointer to the existing variable to alias
+
+    @param[out]
+        pVarHandle
+            pointer to a location to store the handle to the new variable
+
+    @retval EOK the new alias was create
+    @retval ENOENT the variable to be aliased does not exist
+    @retval EEXIST the variable already exists
+    @retval ENOMEM memory allocation failure
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+static int varlist_NewAlias( VarInfo *pVarInfo,
+                             VarID *pVarID,
+                             uint32_t *pVarHandle )
+{
+    int result = EINVAL;
+    int varhandle;
+    VarStorage *pVarStorage;
+    VarID *pAliasVarID;
+    char buf[256];
+    char *name;
+
+    if ( ( pVarID != NULL ) &&
+         ( pVarInfo != NULL ) )
+    {
+        /* get the storage location for the variable */
+        pVarStorage = pVarID->pVarStorage;
+        if ( pVarStorage != NULL )
+        {
+            /* check if we have enough space for another variable */
+            if( varcount < VARSERVER_MAX_VARIABLES )
+            {
+                /* get a pointer to the alias Variable identifier */
+                varhandle = ++varcount;
+                pAliasVarID = &varstore[varhandle];
+
+                /* copy the variable name */
+                strncpy( pAliasVarID->name,
+                            pVarInfo->name,
+                            MAX_NAME_LEN );
+                pAliasVarID->name[MAX_NAME_LEN-1] = 0;
+
+                /* construct the fully qualified variable name */
+                name = VARLIST_FQN( pVarInfo, buf, sizeof( buf ) );
+
+                /* populate the VarID data */
+                pAliasVarID->guid = pVarInfo->guid;
+                pAliasVarID->hVar = varhandle;
+                pAliasVarID->instanceID = pVarInfo->instanceID;
+                pAliasVarID->pVarStorage = pVarStorage;
+
+                pVarStorage->refCount++;
+                if ( pVarStorage->refCount > 1 )
+                {
+                    /* we have more than one reference, so
+                        set the alias flag on this storage */
+                    pVarStorage->flags |= VARFLAG_ALIAS;
+                }
+
+                /* return the storage reference identifier */
+                pVarInfo->storageRef = pVarStorage->storageRef;
+
+                if ( pVarHandle != NULL )
+                {
+                    /* return the new variable handle */
+                    *pVarHandle = pAliasVarID->hVar;
+                }
+
+                /* add the Alias VarID object to the Hash Table */
+                result = HASH_Add( name, pAliasVarID );
+            }
+            else
+            {
+                /* no space for more variables */
+                result = ENOMEM;
+            }
+        }
+        else
+        {
+            /* no storage object associated with the variable id */
+            result = ENOMEM;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  varlist_MoveAlias                                                          */
+/*!
+    Move an alias to a new variable
+
+    The varlist_MoveAlias function moves an alias from one variable
+    to another.  In order to complete the move, we have to also move
+    any notifications from the old variable (the one losing the alias) to
+    the new variable (the one gaining the alias).  The move can only
+    be completed if the new variable does not already have any CALC,
+    VALIDATE, or PRINT notifications which would be replaced by those
+    coming with the alias.
+
+    @param[in]
+        pAliasID
+            Pointer to the VarID object associated with the alias to be moved
+
+    @param[in]
+        pVarID
+            pointer to the VarID object of the destination variable
+
+    @param[in,out]
+        pVarHandle
+            pointer to a location to store the handle of the alias variable
+
+    @retval EOK the alias was moved
+    @retval ENOENT the variable to be aliased does not exist
+    @retval ENOTSUP the alias cannot be moved due to a conflict
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+static int varlist_MoveAlias( VarID *pAliasID,
+                              VarID *pVarID,
+                              uint32_t *pVarHandle )
+{
+    int result = EINVAL;
+    VarStorage *pVarStorage;
+    VarStorage *pAliasStorage;
+
+    if ( ( pAliasID != NULL ) &&
+         ( pVarID != NULL ) &&
+         ( pAliasID->pVarStorage != NULL ) &&
+         ( pVarID->pVarStorage != NULL ) )
+    {
+        pVarStorage = pVarID->pVarStorage;
+        pAliasStorage = pAliasID->pVarStorage;
+
+        if ( ( pAliasID == pVarID ) ||
+             ( pVarStorage == pAliasStorage ) ||
+             ( pAliasStorage->refCount == 1 ) )
+        {
+            /* we cannot move an alias to itself */
+            /* we cannot move an alias if it is the last reference to a var */
+            result = ENOTSUP;
+        }
+        else
+        {
+            /* check if we can move the notifications */
+            result = NOTIFY_CheckMove( pAliasID->hVar,
+                                       pAliasStorage->pNotifications,
+                                       pVarStorage->pNotifications );
+            if ( result == EOK )
+            {
+                /* move the alias notifications to the target variable */
+                result = NOTIFY_Move( pAliasID->hVar,
+                                      &(pAliasStorage->pNotifications),
+                                      &(pVarStorage->pNotifications) );
+                if ( result == EOK )
+                {
+                    /* recalculate the notification list masks */
+                    pAliasStorage->notifyMask =
+                        NOTIFY_GetMask( pAliasStorage->pNotifications );
+
+                    pVarStorage->notifyMask =
+                        NOTIFY_GetMask( pVarStorage->pNotifications );
+
+                    /* update the data storage pointer for the alias */
+                    pAliasID->pVarStorage = pVarStorage;
+
+                    /* decrement the reference count on the previously
+                       aliased variable and clear the alias flag if
+                       it has no more aliases */
+                    pAliasStorage->refCount--;
+                    if ( pAliasStorage->refCount <= 1 )
+                    {
+                        pAliasStorage->flags &= ~VARFLAG_ALIAS;
+                    }
+
+                    /* increment the reference count on the newly
+                       aliased variable and set the alias flag
+                       if it has more than one reference */
+                    pVarStorage->refCount++;
+                    if ( pVarStorage->refCount > 1 )
+                    {
+                        pVarStorage->flags |= VARFLAG_ALIAS;
+                    }
+
+                    if ( pVarHandle != NULL )
+                    {
+                        /* store the handle to the alias variable */
+                        *pVarHandle = pAliasID->hVar;
+                    }
+                }
+            }
         }
     }
 

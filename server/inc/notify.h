@@ -40,28 +40,36 @@ SOFTWARE.
 #define EOK 0
 #endif
 
-/*! bitmask to indicate if the variable has an associated NOTIFY_MODIFIED notification */
+/*! bitmask to indicate if the variable has
+    an associated NOTIFY_MODIFIED notification */
 #define NOTIFY_MASK_MODIFIED    ( 1 << 1 )
 
-/*! bitmask to indicate if the variable has an associated NOTIFY_CALC notification */
+/*! bitmask to indicate if the variable has
+    an associated NOTIFY_CALC notification */
 #define NOTIFY_MASK_CALC        ( 1 << 2 )
 
-/*! bitmask to indicate if the variable has an associated NOTIFY_VALIDATE notification */
+/*! bitmask to indicate if the variable has
+    an associated NOTIFY_VALIDATE notification */
 #define NOTIFY_MASK_VALIDATE    ( 1 << 3 )
 
-/*! bitmask to indicate if the variable has an associated NOTIFY_PRINT notification */
+/*! bitmask to indicate if the variable has
+    an associated NOTIFY_PRINT notification */
 #define NOTIFY_MASK_PRINT       ( 1 << 4 )
 
-/*! bitmask to indicate if the variable has clients blocked on a PRINT notification */
+/*! bitmask to indicate if the variable has clients
+    blocked on a PRINT notification */
 #define NOTIFY_MASK_HAS_PRINT_BLOCK ( 1 << 5 )
 
-/*! bitmask to indicate if the variable has clients blocked on a CALC notification */
+/*! bitmask to indicate if the variable has clients
+    blocked on a CALC notification */
 #define NOTIFY_MASK_HAS_CALC_BLOCK  ( 1 << 6 )
 
-/*! bitmask to indicate if the variable has clients blocked on a VALIDATE notification */
+/*! bitmask to indicate if the variable has clients
+    blocked on a VALIDATE notification */
 #define NOTIFY_MASK_HAS_VALIDATE_BLOCK  ( 1 << 7 )
 
-/*! bitmask to indiciate if a variable has clients with queue notification */
+/*! bitmask to indiciate if a variable has clients
+    with queue notification */
 #define NOTIFY_MASK_MODIFIED_QUEUE ( 1 << 8 )
 
 /*! The Notification object is used for storing notifications
@@ -91,9 +99,9 @@ typedef struct _Notification
 
 } Notification;
 
-/*============================================================================
+/*==============================================================================
         Public function declarations
-============================================================================*/
+==============================================================================*/
 
 int NOTIFY_Signal( pid_t pid,
                    Notification **ppNotification,
@@ -116,5 +124,15 @@ int NOTIFY_Add( Notification **ppNotification,
 
 VAR_HANDLE NOTIFY_GetVarHandle( Notification *pNotification,
                                 NotificationType type );
+
+int NOTIFY_CheckMove( VAR_HANDLE hVar,
+                      Notification *pSrc,
+                      Notification *pDst );
+
+int NOTIFY_Move( VAR_HANDLE hVar,
+                 Notification **ppSrc,
+                 Notification **ppDst );
+
+uint16_t NOTIFY_GetMask( Notification *pNotification );
 
 #endif

@@ -619,5 +619,222 @@ static mqd_t notify_GetQueue( pid_t pid )
     return mq;
 }
 
+/*============================================================================*/
+/*  NOTIFY_CheckMove                                                          */
+/*!
+    Check of we can move the source notifications to the destination list
+
+    The NOTIFY_CheckMove function checks if we can move the notifications
+    in the source list with the specified variable handle to the destination
+    list.
+
+    @param[in]
+        hVar
+            handle of the variable associated with the notifications to move
+
+    @param[in]
+        pSrc
+            pointer to the source notification list
+
+    @param[in]
+        pDst
+            pointer to the destination notification list
+
+    @retval EOK the source list can be moved to the destination list
+    @retval ENOTSUP the source list conflicts with the destination list
+
+==============================================================================*/
+int NOTIFY_CheckMove( VAR_HANDLE hVar,
+                      Notification *pSrc,
+                      Notification *pDst )
+{
+    int result = EOK;
+    int numCalcs = 0;
+    int numValidates = 0;
+    int numPrints = 0;
+
+    /* count the number of calc, validate, and print handlers we have
+       on the destination notification list */
+    while ( pDst != NULL )
+    {
+        if ( pDst->type == NOTIFY_CALC )
+        {
+            numCalcs++;
+        }
+        else if ( pDst->type == NOTIFY_VALIDATE )
+        {
+            numValidates++;
+        }
+        else if ( pDst->type == NOTIFY_PRINT )
+        {
+            numPrints++;
+        }
+
+        pDst = pDst->pNext;
+    }
+
+    /* check the source notification list to see if we can copy/move
+       it to the destination notification list */
+    while ( pSrc != NULL )
+    {
+        if ( pSrc->hVar == hVar )
+        {
+            if( ( pSrc->type == NOTIFY_CALC ) &&
+                ( numCalcs > 0 ) )
+            {
+                /* we can only have one calc handler and one already exists */
+                result = ENOTSUP;
+                break;
+            }
+
+            if ( ( pSrc->type == NOTIFY_VALIDATE ) &&
+                ( numValidates > 0 ) )
+            {
+                /* we can only have one validate handler
+                   and one already exists */
+                result = ENOTSUP;
+                break;
+            }
+
+            if ( ( pSrc->type == NOTIFY_PRINT ) &&
+                ( numPrints > 0 ) )
+            {
+                /* we can only have one print handler and one already exists */
+                result = ENOTSUP;
+                break;
+            }
+        }
+
+        pSrc = pSrc->pNext;
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  NOTIFY_Move                                                               */
+/*!
+    Move notifications from the src list to the destination list
+
+    The NOTIFY_Move function moves all notifications from the source list
+    to the destination list which match the specified notification variable
+    handle.
+
+    @param[in]
+        hVar
+            handle of the variable associated with the notifications to move
+
+    @param[in]
+        ppSrc
+            pointer to the pointer to the source notification list
+
+    @param[in]
+        pDst
+            pointer to the pointer to the destination notification list
+
+    @retval EOK the source list can be moved to the destination list
+    @retval ENOTSUP the source list conflicts with the destination list
+
+==============================================================================*/
+int NOTIFY_Move( VAR_HANDLE hVar,
+                 Notification **ppSrc,
+                 Notification **ppDst )
+{
+    Notification *p;
+    Notification *pNext;
+    int result = EINVAL;
+
+    if ( ( ppSrc != NULL ) && ( ppDst != NULL ) )
+    {
+        result = EOK;
+
+        /* initialize the pointer to point to the head of the source list */
+        p = *ppSrc;
+
+        while ( p != NULL )
+        {
+            /* get a pointer to the next notification in the src list */
+            pNext = p->pNext;
+
+            if ( p->hVar == hVar )
+            {
+                printf("moving %d:%d\n", p->type, p->pid);
+
+                /* insert the notificaton onto the head of the
+                   destination list */
+                p->pNext = *ppDst;
+                *ppDst = p;
+
+                /* update the source pointer to skip over the removed
+                   notification */
+                *ppSrc = pNext;
+            }
+            else
+            {
+                /* update the pointer to be modified for the next removal */
+                ppSrc = &(p->pNext);
+            }
+
+            /* move to the next notification in the source list */
+            p = pNext;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  NOTIFY_GetMask                                                            */
+/*!
+    Calculate the notification mask
+
+    The NOTIFY_GetMask function calculates the notification mask based on
+    the type of notifications in the specified notification list.
+
+    @param[in]
+        pNotification
+            pointer to the notification list to calculate the mask for
+
+    @retval notification mask value
+
+==============================================================================*/
+uint16_t NOTIFY_GetMask( Notification *pNotification )
+{
+    uint16_t notifyMask = 0;
+
+    while ( pNotification != NULL )
+    {
+        switch( pNotification->type )
+        {
+            case NOTIFY_CALC:
+                notifyMask |= NOTIFY_MASK_CALC;
+                break;
+
+            case NOTIFY_MODIFIED:
+                notifyMask |= NOTIFY_MASK_MODIFIED;
+                break;
+
+            case NOTIFY_MODIFIED_QUEUE:
+                notifyMask |= NOTIFY_MASK_MODIFIED_QUEUE;
+                break;
+
+            case NOTIFY_PRINT:
+                notifyMask |= NOTIFY_MASK_PRINT;
+                break;
+
+            case NOTIFY_VALIDATE:
+                notifyMask |= NOTIFY_MASK_VALIDATE;
+                break;
+
+            default:
+                break;
+        }
+
+        pNotification = pNotification->pNext;
+    }
+
+    return notifyMask;
+}
+
 /*! @}
  * end of notify group */
