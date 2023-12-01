@@ -758,8 +758,6 @@ int NOTIFY_Move( VAR_HANDLE hVar,
 
             if ( p->hVar == hVar )
             {
-                printf("moving %d:%d\n", p->type, p->pid);
-
                 /* insert the notificaton onto the head of the
                    destination list */
                 p->pNext = *ppDst;
