@@ -26,3 +26,9 @@ jobs:
         working-directory: ${{runner.workspace}}/build
         run: cmake --build .
     
+
+      - name: Run tests
+        env:
+            CTEST_OUTPUT_ON_FAILURE: 1
+        working-directory: ${{runner.workspace}}/build
+        run: ctest

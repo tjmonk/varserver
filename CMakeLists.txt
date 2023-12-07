@@ -8,6 +8,21 @@ project(varserver
     DESCRIPTION "Variable Server"
 )
 
+# Pull in Catch2 from the web
+include(FetchContent)
+FetchContent_Declare(
+  Catch2
+  GIT_SHALLOW    TRUE
+  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+  GIT_TAG        v3.4.0)
+FetchContent_MakeAvailable(Catch2)
+
+# For catch v3 or later, make Catch.cmake and its macros available
+list(APPEND CMAKE_MODULE_PATH ${Catch2_SOURCE_DIR}/extras)
+
+include(CTest)
+include(Catch)
+
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
