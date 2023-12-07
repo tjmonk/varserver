@@ -120,6 +120,7 @@ static int ProcessVarRequestClose( VarClient *pVarClient );
 static int ProcessVarRequestEcho( VarClient *pVarClient );
 static int ProcessVarRequestNew( VarClient *pVarClient );
 static int ProcessVarRequestAlias( VarClient *pVarClient );
+static int ProcessVarRequestGetAliases( VarClient *pVarClient );
 static int ProcessVarRequestFind( VarClient *pVarClient );
 static int ProcessVarRequestPrint( VarClient *pVarClient );
 static int ProcessVarRequestSet( VarClient *pVarClient );
@@ -203,6 +204,14 @@ static RequestHandler RequestHandlers[] =
         "/varserver/stats/alias",
         NULL
     },
+    {
+        VARREQUEST_GET_ALIASES,
+        "GET_ALIASES",
+        ProcessVarRequestGetAliases,
+        "/varserver/stats/getaliases",
+        NULL
+    },
+
     {
         VARREQUEST_FIND,
         "FIND",
@@ -1001,6 +1010,51 @@ static int ProcessVarRequestAlias( VarClient *pVarClient )
         {
             pVarClient->responseVal = VAR_INVALID;
         }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  ProcessVarRequestGetAliases                                               */
+/*!
+    Process a GET_ALIASES request from a client
+
+    The ProcessVarRequestGetAliases function handles a "Get Aliases" request
+    from a client to retrieve the list of aliases for the specified variable
+
+    @param[in]
+        pVarClient
+            Pointer to the client data structure
+
+    @retval EOK the alias list was returned
+    @retval EINVAL the client is invalid
+    @retval E2BIG alias list does not fit in the return buffer
+    @retval ENOENT there are no aliases
+
+==============================================================================*/
+static int ProcessVarRequestGetAliases( VarClient *pVarClient )
+{
+    int result = EINVAL;
+    VarInfo *pVarInfo;
+    size_t len;
+
+    /* validate the client object */
+    result = ValidateClient( pVarClient );
+    if( result == EOK)
+    {
+        pVarInfo = &pVarClient->variableInfo;
+
+        /* get the maximum number of aliases we can retrieve */
+        len = pVarClient->workbufsize / sizeof( VAR_HANDLE );
+
+        /* retrieve the list of aliases */
+        result = VARLIST_GetAliases( pVarInfo,
+                                     (VAR_HANDLE *)&pVarClient->workbuf,
+                                     len );
+
+        /* return the result */
+        pVarClient->responseVal = result;
     }
 
     return result;

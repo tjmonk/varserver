@@ -176,6 +176,12 @@ int VAR_Alias( VARSERVER_HANDLE hVarServer,
                char *alias,
                VAR_HANDLE *hAlias );
 
+int VAR_GetAliases( VARSERVER_HANDLE hVarServer,
+                    VAR_HANDLE hVar,
+                    VAR_HANDLE *aliases,
+                    size_t len,
+                    size_t *n );
+
 int VAR_Set( VARSERVER_HANDLE hVarServer,
              VAR_HANDLE hVar,
              VarObject *pVarObject );

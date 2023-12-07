@@ -59,6 +59,11 @@ SOFTWARE.
         Private definitions
 ==============================================================================*/
 
+/*! maximum number of aliases */
+#ifndef MAX_ALIASES
+#define MAX_ALIASES 32
+#endif
+
 /*! VarAlias state object used to customize the behavior of the application */
 typedef struct _var_alias_state
 {
@@ -75,6 +80,9 @@ typedef struct _var_alias_state
 
     /*! user name */
     char *username;
+
+    /*! show aliases */
+    bool show_aliases;
 
 } VarAliasState;
 
@@ -120,6 +128,10 @@ int main(int argc, char **argv)
     int rc;
     VAR_HANDLE hVar;
     VAR_HANDLE hAlias;
+    VAR_HANDLE aliases[MAX_ALIASES];
+    size_t numAliases = 0;
+    size_t i;
+    char varname[BUFSIZ];
 
     memset( &state, 0, sizeof(VarAliasState));
 
@@ -156,19 +168,52 @@ int main(int argc, char **argv)
             hVar = VAR_FindByName( state.hVarServer, state.varname );
             if ( hVar != VAR_INVALID )
             {
-                result = VAR_Alias( state.hVarServer,
-                                    hVar,
-                                    state.alias,
-                                    &hAlias );
-                if ( state.verbose == true )
+                if ( state.alias != NULL )
                 {
-                    if ( result != EOK )
+                    result = VAR_Alias( state.hVarServer,
+                                        hVar,
+                                        state.alias,
+                                        &hAlias );
+                    if ( state.verbose == true )
                     {
-                        fprintf(stderr, "VARALIAS: %s\n", strerror( result ) );
+                        if ( result != EOK )
+                        {
+                            fprintf( stderr,
+                                     "VARALIAS: %s\n",
+                                     strerror( result ) );
+                        }
+                        else
+                        {
+                            printf("OK\n");
+                        }
                     }
-                    else
+                }
+
+                if ( state.show_aliases == true )
+                {
+                    result = VAR_GetAliases( state.hVarServer,
+                                             hVar,
+                                             aliases,
+                                             MAX_ALIASES,
+                                             &numAliases );
+                    if ( result == EOK )
                     {
-                        printf("OK\n");
+                        for ( i = 0 ; i < numAliases ; i++ )
+                        {
+                            if ( aliases[i] != hVar )
+                            {
+                                /* get the alias name */
+                                rc = VAR_GetName( state.hVarServer,
+                                                aliases[i],
+                                                varname,
+                                                sizeof( varname) );
+                                if ( rc == EOK )
+                                {
+                                    /* print the alias name */
+                                    fprintf( stdout, "%s\n", varname );
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -224,7 +269,7 @@ static int ProcessOptions( int argC,
 {
     int c;
     int result = EINVAL;
-    const char *options = "hvu:";
+    const char *options = "hvu:s";
     int errcount = 0;
     bool display_help = false;
 
@@ -247,6 +292,10 @@ static int ProcessOptions( int argC,
                     display_help = true;
                     break;
 
+                case 's':
+                    pState->show_aliases = true;
+                    break;
+
                 default:
                     errcount++;
                     break;
@@ -254,13 +303,22 @@ static int ProcessOptions( int argC,
             }
         }
 
-        if ( optind < argC - 1)
+        if ( optind <= argC - 1 )
         {
             pState->varname = argV[optind++];
-            pState->alias = argV[optind];
-            result = EOK;
         }
-        else
+
+        if ( optind <= argC - 1 )
+        {
+            pState->alias = argV[optind];
+        }
+
+        if ( pState->varname == NULL )
+        {
+            errcount++;
+        }
+
+        if ( ( pState->alias == NULL ) && ( pState->show_aliases == false ) )
         {
             errcount++;
         }

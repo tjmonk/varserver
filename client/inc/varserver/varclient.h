@@ -1,4 +1,4 @@
-/*============================================================================
+/*==============================================================================
 MIT License
 
 Copyright (c) 2023 Trevor Monk
@@ -20,14 +20,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-============================================================================*/
+==============================================================================*/
 
 #ifndef VARCLIENT_H
 #define VARCLIENT_H
 
-/*============================================================================
+/*==============================================================================
         Includes
-============================================================================*/
+==============================================================================*/
 
 #include <semaphore.h>
 #include <signal.h>
@@ -37,9 +37,9 @@ SOFTWARE.
 #include "varobject.h"
 #include "var.h"
 
-/*============================================================================
+/*==============================================================================
         Public definitions
-============================================================================*/
+==============================================================================*/
 
 /*! Signal used to create a new client */
 #define SIG_NEWCLIENT SIGRTMIN+1
@@ -85,7 +85,8 @@ typedef enum _varRequest
     /*! A new client is requesting an interface to the variable server */
     VARREQUEST_OPEN,
 
-    /*! A client is requesting to terminate its interface to the variable server */
+    /*! A client is requesting to terminate its interface
+        to the variable server */
     VARREQUEST_CLOSE,
 
     /*! echo test */
@@ -96,6 +97,9 @@ typedef enum _varRequest
 
     /*! Alias Variable request */
     VARREQUEST_ALIAS,
+
+    /*! Get Variable Alias list */
+    VARREQUEST_GET_ALIASES,
 
     /*! Find Variable request */
     VARREQUEST_FIND,
@@ -246,9 +250,9 @@ typedef struct _varClient
 
 } VarClient;
 
-/*============================================================================
+/*==============================================================================
         Public function declarations
-============================================================================*/
+==============================================================================*/
 
 VarClient *ValidateHandle( VARSERVER_HANDLE hVarServer );
 

@@ -99,4 +99,6 @@ void VARLIST_SetUser( void );
 int VARLIST_SetFlags( VarInfo *pVarInfo );
 int VARLIST_ClearFlags( VarInfo *pVarInfo );
 
+int VARLIST_GetAliases( VarInfo *pVarInfo, VAR_HANDLE *aliases, size_t len );
+
 #endif

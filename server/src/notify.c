@@ -48,6 +48,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <errno.h>
@@ -56,7 +57,6 @@ SOFTWARE.
 #include <string.h>
 #include <mqueue.h>
 #include <varserver/var.h>
-#include "varstorage.h"
 #include "notify.h"
 #include "stats.h"
 

@@ -2576,6 +2576,84 @@ int VAR_Alias( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
+
+/*============================================================================*/
+/*  VAR_GetAliases                                                            */
+/*!
+    Get Aliases of the specified variable
+
+    The VAR_GetAliases function gets the aliases of the specified variable.
+
+    @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[in]
+        hVar
+            handle to the variable to get the aliases for
+
+    @param[in]
+        aliases
+            pointer to a buffer to store the aliases
+
+    @param[in]
+        len
+            length of the buffer to store the aliases
+
+    @param[in,out]
+        n
+            pointer to a location to store the number of retrieved aliases
+
+    @retval EOK - the aliases were retrieved ok
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+int VAR_GetAliases( VARSERVER_HANDLE hVarServer,
+                    VAR_HANDLE hVar,
+                    VAR_HANDLE *aliases,
+                    size_t len,
+                    size_t *n )
+{
+    int result = EINVAL;
+    VarClient *pVarClient = ValidateHandle( hVarServer );
+    VarInfo *pVarInfo;
+    VAR_HANDLE *pVarHandle;
+    size_t count = 0;
+
+    if( ( pVarClient != NULL ) &&
+        ( aliases != NULL ) &&
+        ( n != NULL ) &&
+        ( len > 0 ) )
+    {
+        pVarInfo = &pVarClient->variableInfo;
+        pVarClient->requestType = VARREQUEST_GET_ALIASES;
+        pVarInfo->hVar = hVar;
+
+        /* send the request to the server */
+        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+        if( result == EOK )
+        {
+            result = pVarClient->responseVal;
+            if ( result == EOK )
+            {
+                /* the aliases are returned in the working buffer */
+                pVarHandle = (VAR_HANDLE *)&(pVarClient->workbuf);
+                while ( ( *pVarHandle != VAR_INVALID ) && ( count < len ) )
+                {
+                    /* copy the alias handle */
+                    aliases[count] = pVarHandle[count];
+                    count++;
+                }
+
+                /* return the number of aliases */
+                *n = count;
+            }
+        }
+    }
+
+    return result;
+}
+
 /*============================================================================*/
 /*  var_CopyStringVarObjectToWorkbuf                                          */
 /*!
