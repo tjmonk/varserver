@@ -1198,6 +1198,9 @@ int VARSERVER_FlagsToStr( uint32_t flags,
                        length of the flag name */
                     offset += len;
                     remaining -= len;
+
+                    /* increment the flags count */
+                    count++;
                 }
                 else
                 {
