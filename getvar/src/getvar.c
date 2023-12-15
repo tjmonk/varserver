@@ -51,6 +51,7 @@ SOFTWARE.
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <time.h>
 #include <unistd.h>
 #include <inttypes.h>
 #include <pwd.h>
@@ -98,11 +99,17 @@ typedef struct _get_var_state
     /*! user name */
     char *username;
 
+    /*! signal mask */
+    sigset_t mask;
+
 } GetVarState;
 
 /*==============================================================================
         Private file scoped variables
 ==============================================================================*/
+
+/*! timer */
+timer_t timerID;
 
 /*==============================================================================
         Private function declarations
@@ -116,6 +123,8 @@ static int ProcessQuery( GetVarState *pState );
 static int PrintVar( GetVarState *pState, VAR_HANDLE hVar, int fd );
 static int TimingTest( GetVarState *pState, VAR_HANDLE hVar );
 static int SetUser( GetVarState *pState );
+static int SetupTimer( GetVarState *pState );
+static void CreateTimer( uint32_t timeoutms );
 
 /*==============================================================================
         Function definitions
@@ -180,6 +189,12 @@ int main(int argc, char **argv)
                 }
             }
 
+            /* set up the timer */
+            SetupTimer(&state);
+
+            /* set up the VarServer signal mask to receive notifications */
+            state.mask = VARSERVER_SigMask();
+
             /* process the vars query */
             result = ProcessQuery( &state );
 
@@ -215,7 +230,7 @@ int main(int argc, char **argv)
     -h : display help
     -o : specify an output file
     -n : specify the number of times to get the variable
-    -w : specifies the wait time (in milliseconds) between queries
+    -d : specifies the delay time (in milliseconds) between queries
     -r : repeat forever
     -c : show query count
     -t : timing test mode
@@ -241,7 +256,7 @@ int main(int argc, char **argv)
 ==============================================================================*/
 static int ProcessOptions( int argc, char **argv, GetVarState *pState )
 {
-    const char *options = "hvo:n:w:rcNtu:";
+    const char *options = "hvo:n:d:rcNtu:";
     int c;
     int errcount = 0;
     bool display_help = false;
@@ -271,7 +286,7 @@ static int ProcessOptions( int argc, char **argv, GetVarState *pState )
                         pState->outfile = optarg;
                         break;
 
-                    case 'w':
+                    case 'd':
                         pState->delayMS = strtoul( optarg, NULL, 0 );
                         break;
 
@@ -528,6 +543,75 @@ static int ProcessQuery( GetVarState *pState )
 }
 
 /*============================================================================*/
+/*  SetupTimer                                                                */
+/*!
+    Set up Timer notification
+
+    The SetupTimer function sets up a repeating timer with a delay
+    specified in milliseconds (min interval = 1ms).  This timer is
+    used to trigger blob get/set actions.
+
+    @param[in]
+        pState
+            pointer to the GetVarState object containing the timer delay
+
+==============================================================================*/
+static int SetupTimer( GetVarState *pState )
+{
+    int result = EINVAL;
+
+    if ( pState != NULL )
+    {
+        /* setup timer */
+        if ( pState->delayMS > 0 )
+        {
+            CreateTimer( pState->delayMS );
+        }
+
+        result = EOK;
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  CreateTimer                                                               */
+/*!
+    Create a repeating timer
+
+    The CreateTimer function creates a timer used for periodic test
+    execution.
+
+@param[in]
+    timeoutms
+        timer interval in milliseconds
+
+==============================================================================*/
+static void CreateTimer( uint32_t timeoutms )
+{
+    struct sigevent te;
+    struct itimerspec its;
+    int sigNo = SIG_VAR_TIMER;
+    long secs;
+    long msecs;
+
+    secs = timeoutms / 1000;
+    msecs = timeoutms % 1000;
+
+    /* Set and enable alarm */
+    te.sigev_notify = SIGEV_SIGNAL;
+    te.sigev_signo = sigNo;
+    te.sigev_value.sival_int = 1;
+    timer_create(CLOCK_REALTIME, &te, &timerID);
+
+    its.it_interval.tv_sec = secs;
+    its.it_interval.tv_nsec = msecs * 1000000L;
+    its.it_value.tv_sec = secs;
+    its.it_value.tv_nsec = msecs * 1000000L;
+    timer_settime(timerID, 0, &its, NULL);
+}
+
+/*============================================================================*/
 /*  PrintVar                                                                  */
 /*!
     Query and output the variable N times
@@ -563,6 +647,8 @@ static int ProcessQuery( GetVarState *pState )
 static int PrintVar( GetVarState *pState, VAR_HANDLE hVar, int fd )
 {
     int result = EINVAL;
+    int sig;
+    siginfo_t info;
 
     if( (  pState != NULL ) &&
         (  hVar != VAR_INVALID ) )
@@ -587,7 +673,12 @@ static int PrintVar( GetVarState *pState, VAR_HANDLE hVar, int fd )
         {
             if ( pState->delayMS != 0 )
             {
-                usleep( pState->delayMS * 1000 );
+                /* wait for timer signal */
+                do
+                {
+                    sig = sigwaitinfo( &pState->mask, &info );
+                } while ( sig != SIG_VAR_TIMER );
+                //usleep( pState->delayMS * 1000 );
             }
 
             /* check if we are repeating forever */
@@ -640,6 +731,8 @@ static int TimingTest( GetVarState *pState, VAR_HANDLE hVar )
     int result = EINVAL;
     VarObject obj;
     char buffer[BUFSIZ];
+    int sig;
+    siginfo_t info;
 
     /* specify the receive buffer and buffer length */
     obj.val.str = buffer;
@@ -658,7 +751,12 @@ static int TimingTest( GetVarState *pState, VAR_HANDLE hVar )
         {
             if ( pState->delayMS != 0 )
             {
-                usleep( pState->delayMS * 1000 );
+                /* wait for timer signal */
+                do
+                {
+                    sig = sigwaitinfo( &pState->mask, &info );
+                } while ( sig != SIG_VAR_TIMER );
+//                usleep( pState->delayMS * 1000 );
             }
 
             /* check if we are repeating forever */
