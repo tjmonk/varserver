@@ -185,12 +185,13 @@ int main(int argc, char **argv)
 ==============================================================================*/
 static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
 {
-    const char *options = "hn:i:v:g:f:F:t:T:l:V";
+    const char *options = "hn:i:v:g:f:F:t:T:l:Vr:w:";
     int c;
     int errcount = 0;
     size_t len;
     VarType type;
     int rc;
+    VarInfo *pVarInfo;
 
     if( ( pState != NULL ) &&
         ( argv != NULL ) )
@@ -301,6 +302,32 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                         else
                         {
                             fprintf(stderr, "Illegal length\n" );
+                            errcount++;
+                        }
+                        break;
+
+                    case 'r':
+                        pVarInfo = &pState->variableInfo;
+                        pVarInfo->permissions.nreads = VARSERVER_MAX_UIDS;
+                        if( VARSERVER_ParsePermissionSpec(
+                                    optarg,
+                                    pVarInfo->permissions.read,
+                                    &pVarInfo->permissions.nreads ) != EOK )
+                        {
+                            fprintf( stderr, "Illegal read permissions\n" );
+                            errcount++;
+                        }
+                        break;
+
+                    case 'w':
+                        pVarInfo = &pState->variableInfo;
+                        pVarInfo->permissions.nwrites = VARSERVER_MAX_UIDS;
+                        if( VARSERVER_ParsePermissionSpec(
+                                    optarg,
+                                    pVarInfo->permissions.write,
+                                    &pVarInfo->permissions.nwrites ) != EOK )
+                        {
+                            fprintf( stderr, "Illegal write permissions\n" );
                             errcount++;
                         }
                         break;

@@ -935,9 +935,10 @@ sigset_t VARSERVER_SigMask( void )
             and location to store the actual number of
             permissions parsed
 
-    @retval EOK - the flags parsing was successful
+    @retval EOK - the permission parsing was successful
     @retval EINVAL - invalid arguments
     @retval E2BIG - the specified permission list is too big
+    @retval ENOENT - one or more users/groups were not found
 
 ==============================================================================*/
 int VARSERVER_ParsePermissionSpec( char *permissionSpec,
@@ -990,6 +991,10 @@ int VARSERVER_ParsePermissionSpec( char *permissionSpec,
                         if ( gr != NULL )
                         {
                             permissions[i++] = gr->gr_gid;
+                        }
+                        else
+                        {
+                            result = ENOENT;
                         }
                     }
                 }
