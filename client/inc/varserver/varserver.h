@@ -101,6 +101,7 @@ int VARSERVER_Debug( VARSERVER_HANDLE hVarServer, int debug );
 int VARSERVER_GetWorkingBuffer( VARSERVER_HANDLE hVarServer,
                                 char **pBuf,
                                 size_t *pLen );
+size_t VARSERVER_GetWorkingBufferLength( VARSERVER_HANDLE hVarServer );
 int VARSERVER_Close( VARSERVER_HANDLE hVarServer );
 int VARSERVER_Test( VARSERVER_HANDLE hVarServer );
 int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,

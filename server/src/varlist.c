@@ -1409,6 +1409,12 @@ int VARLIST_Set( pid_t clientPID,
              ( validationInProgress != NULL ) &&
              ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
         {
+            /* check if this variable is readonly */
+            if ( pVarStorage->flags & VARFLAG_READONLY )
+            {
+                return ENOTSUP;
+            }
+
             /* check if we have write permissions on this variable */
             rc = varlist_CheckWritePermissions( pVarInfo, pVarID );
             if ( rc == false )

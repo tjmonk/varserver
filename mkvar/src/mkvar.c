@@ -128,6 +128,10 @@ int main(int argc, char **argv)
         {
             /* process the vars query */
             result = MakeVar( &state );
+            if ( state.verbose == true )
+            {
+                printf( "%s\n", result == EOK ? "EOK" : strerror(result));
+            }
 
             /* close the variable server */
             VARSERVER_Close( state.hVarServer );
@@ -181,7 +185,7 @@ int main(int argc, char **argv)
 ==============================================================================*/
 static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
 {
-    const char *options = "n:i:v:g:f:F:t:T:l:";
+    const char *options = "hn:i:v:g:f:F:t:T:l:V";
     int c;
     int errcount = 0;
     size_t len;
@@ -205,6 +209,15 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
             {
                 switch ( c )
                 {
+                    case 'h':
+                        usage( argv[0] );
+                        exit(0);
+                        break;
+
+                    case 'V':
+                        pState->verbose = true;
+                        break;
+
                     case 'n':
                         if ( strlen( optarg ) <= MAX_NAME_LEN )
                         {
@@ -281,7 +294,7 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
 
                     case 'l':
                         len = strtoul( optarg, NULL, 0);
-                        if ( ( len > 0 ) && ( len <= 16384 ) )
+                        if ( len > 0 )
                         {
                             pState->variableInfo.var.len = len;
                         }
@@ -317,7 +330,6 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
 
         if( errcount > 0 )
         {
-            printf("errcount=%d\n", errcount);
             usage( argv[0] );
         }
         else
@@ -361,8 +373,10 @@ static void usage( char *name )
 {
     if( name != NULL )
     {
-        printf("usage: %s [-h] [-v] [-c] [-N] [-t] [-n <num>] [-o <outfile> ]"
-               "[-w <wait time>] <variable name>\n\n", name );
+        printf("usage: %s [-h] [-v] [-c] [-N] [-t <type>] [-n <name>] "
+               "[-F <formatspec>] [-T <tag list>] [-f <flag list>] "
+               "[-i <instanceID>] "
+               "[-g <guid>] [-l <length>] [-v <value>]\n\n", name );
         printf("-n : variable name\n");
         printf("-i : variable instance identifier\n");
         printf("-v : variable initial value\n");
@@ -372,6 +386,7 @@ static void usage( char *name )
         printf("-t : variable type\n");
         printf("-T : variable tags\n");
         printf("-l : variable length\n");
+        printf("\n");
     }
 }
 

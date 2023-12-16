@@ -498,6 +498,38 @@ int VARSERVER_GetWorkingBuffer( VARSERVER_HANDLE hVarServer,
 }
 
 /*============================================================================*/
+/*  VARSERVER_GetWorkingBufferLength                                          */
+/*!
+    Get the length of the variable server working buffer
+
+    The VARSERVER_GetWorkingBufferLength function gets the length of the
+    working buffer, which is the maximum size for data transfers for this
+    client for transfering strings and blobs between the client and the
+    variable server.
+
+    @param[in]
+        hVarServer
+            handle to the Variable Server
+
+    @retval length of the working buffer
+    @retval 0 if the variable server handle is invalid
+
+==============================================================================*/
+size_t VARSERVER_GetWorkingBufferLength( VARSERVER_HANDLE hVarServer )
+{
+    size_t len = 0L;
+
+    VarClient *pVarClient = ValidateHandle( hVarServer );
+
+    if ( pVarClient != NULL )
+    {
+        len = pVarClient->workbufsize;
+    }
+
+    return len;
+}
+
+/*============================================================================*/
 /*  VARSERVER_Debug                                                           */
 /*!
     Set the Var Server debugging verbosity level
@@ -556,6 +588,7 @@ int VARSERVER_Debug( VARSERVER_HANDLE hVarServer, int debug )
             pointer to the location to store the working buffer length
 
     @retval EOK - the working buffer pointer was successfully retrieved
+    @retval EMSGSIZE - the object is too large to create
     @retval EINVAL - invalid arguments
 
 ==============================================================================*/
@@ -565,27 +598,70 @@ int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,
     int result = EINVAL;
     int rc;
     VarClient *pVarClient = ValidateHandle( hVarServer );
+    void *pDst;
 
     if( ( pVarClient != NULL ) &&
         ( pVarInfo != NULL ) )
     {
+        /* assume everything is ok until it is not */
+        result = EOK;
+
         /* copy the variable information */
         memcpy( &pVarClient->variableInfo, pVarInfo, sizeof( VarInfo ) );
 
-        pVarClient->requestType = VARREQUEST_NEW;
-        rc = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-        if( rc == EOK )
+        /* copy the blob/string initial value */
+        if( ( pVarInfo->var.type == VARTYPE_STR ) ||
+            ( pVarInfo->var.type == VARTYPE_BLOB ) )
         {
-            pVarInfo->hVar = pVarClient->responseVal;
-            if ( pVarInfo->hVar != VAR_INVALID )
+            if ( pVarInfo->var.len > pVarClient->workbufsize )
             {
-                result = EOK;
+                result = EMSGSIZE;
+            }
+            else
+            {
+                pDst = (void *)&pVarClient->workbuf;
+                memset( pDst, 0, pVarInfo->var.len );
+
+                if ( ( pVarInfo->var.type == VARTYPE_STR ) &&
+                     ( pVarInfo->var.val.str != NULL ) )
+                {
+                    /* copy the initial string value */
+                    strcpy( (char *)pDst, pVarInfo->var.val.str );
+                    pVarClient->variableInfo.var.val.str = (char *)pDst;
+                }
+                else if ( ( pVarInfo->var.type == VARTYPE_BLOB ) &&
+                          ( pVarInfo->var.val.blob != NULL ) )
+                {
+                    /* copy the initial blob value */
+                    memcpy( pDst,
+                            pVarInfo->var.val.blob,
+                            pVarInfo->var.len );
+                    pVarClient->variableInfo.var.val.blob = pDst;
+                }
+            }
+        }
+
+        if ( result == EOK )
+        {
+            pVarClient->requestType = VARREQUEST_NEW;
+            rc = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+            if( rc == EOK )
+            {
+                pVarInfo->hVar = pVarClient->responseVal;
+                if ( pVarInfo->hVar != VAR_INVALID )
+                {
+                    result = EOK;
+                }
+            }
+            else
+            {
+                pVarInfo->hVar = VAR_INVALID;
+                result = rc;
             }
         }
         else
         {
             pVarInfo->hVar = VAR_INVALID;
-            result = rc;
         }
     }
 
