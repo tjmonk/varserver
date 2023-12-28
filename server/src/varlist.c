@@ -3755,65 +3755,120 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
             /* get the storage reference identifier */
             pVarInfo->storageRef = pVarStorage->storageRef;
 
-            if( notifyType == NOTIFY_MODIFIED )
+            /* add the notification */
+            result = NOTIFY_Add( &pVarStorage->pNotifications,
+                                 notifyType,
+                                 hVar,
+                                 pid );
+            if( result == EOK )
             {
-                result = NOTIFY_Add( &pVarStorage->pNotifications,
-                                     notifyType,
-                                     hVar,
-                                     pid );
-                if( result == EOK )
+                if( notifyType == NOTIFY_MODIFIED )
                 {
                     pVarStorage->notifyMask |= NOTIFY_MASK_MODIFIED;
                 }
-            }
-            else if ( notifyType == NOTIFY_MODIFIED_QUEUE )
-            {
-                result = NOTIFY_Add( &pVarStorage->pNotifications,
-                                     notifyType,
-                                     hVar,
-                                     pid );
-                if ( result == EOK )
+                else if ( notifyType == NOTIFY_MODIFIED_QUEUE )
                 {
                     pVarStorage->notifyMask |= NOTIFY_MASK_MODIFIED_QUEUE;
                 }
-            }
-            else if( notifyType == NOTIFY_CALC )
-            {
-                result = NOTIFY_Add( &pVarStorage->pNotifications,
-                                     notifyType,
-                                     hVar,
-                                     pid );
-                if( result == EOK )
+                else if( notifyType == NOTIFY_CALC )
                 {
                     pVarStorage->notifyMask |= NOTIFY_MASK_CALC;
                 }
-            }
-            else if( notifyType == NOTIFY_VALIDATE )
-            {
-                result = NOTIFY_Add( &pVarStorage->pNotifications,
-                                     notifyType,
-                                     hVar,
-                                     pid );
-                if( result == EOK )
+                else if( notifyType == NOTIFY_VALIDATE )
                 {
                     pVarStorage->notifyMask |= NOTIFY_MASK_VALIDATE;
                 }
-            }
-            else if( notifyType == NOTIFY_PRINT )
-            {
-                result = NOTIFY_Add( &pVarStorage->pNotifications,
-                                     notifyType,
-                                     hVar,
-                                     pid );
-                if( result == EOK )
+                else if( notifyType == NOTIFY_PRINT )
                 {
                     pVarStorage->notifyMask |= NOTIFY_MASK_PRINT;
                 }
             }
-            else
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VARLIST_NotifyCancel                                                     */
+/*!
+    Handle a notification cancellation request from a client
+
+    The VARLIST_NotifyCancel function handles a notification cancellation
+    request from a client.
+
+    @param[in]
+        pVarInfo
+            Pointer to the variable definition containing the handle
+            of the variable to cancel the nofication for.
+
+    @param[in]
+        pid
+            process ID of the requester
+
+    @retval EOK the notification request was successfully registered
+    @retval ENOENT the variable does not exist
+    @retval ENOTSUP the notification type is not supported
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+int VARLIST_NotifyCancel( VarInfo *pVarInfo, pid_t pid )
+{
+    int result = EINVAL;
+    VarStorage *pVarStorage = NULL;
+    NotificationType notifyType;
+    VarID *pVarID;
+    VAR_HANDLE hVar = VAR_INVALID;
+    int count = -1;
+
+    if ( pVarInfo != NULL )
+    {
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
+        {
+            /* get a pointer to the variable storage for this variable */
+            pVarStorage = pVarID->pVarStorage;
+
+            /* get the handle of the variable for the notification request */
+            hVar = pVarInfo->hVar;
+        }
+
+        /* get the notification type */
+        notifyType = pVarInfo->notificationType;
+
+        if( ( pVarStorage != NULL ) &&
+            ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
+        {
+            /* cancel the specific notification for the specified client */
+            result = NOTIFY_Cancel( &pVarStorage->pNotifications,
+                                    notifyType,
+                                    hVar,
+                                    pid,
+                                    &count );
+            if ( ( result == EOK ) &&
+                 ( count == 0 ) )
             {
-                /* other notification types are not supported at this time */
-                result = ENOTSUP;
+                /* update the notification masks */
+                if( notifyType == NOTIFY_MODIFIED )
+                {
+                    pVarStorage->notifyMask &= ~NOTIFY_MASK_MODIFIED;
+                }
+                else if ( notifyType == NOTIFY_MODIFIED_QUEUE )
+                {
+                    pVarStorage->notifyMask &= ~NOTIFY_MASK_MODIFIED_QUEUE;
+                }
+                else if( notifyType == NOTIFY_CALC )
+                {
+                    pVarStorage->notifyMask &= ~NOTIFY_MASK_CALC;
+                }
+                else if( notifyType == NOTIFY_VALIDATE )
+                {
+                    pVarStorage->notifyMask &= ~NOTIFY_MASK_VALIDATE;
+                }
+                else if( notifyType == NOTIFY_PRINT )
+                {
+                    pVarStorage->notifyMask &= ~NOTIFY_MASK_PRINT;
+                }
             }
         }
     }

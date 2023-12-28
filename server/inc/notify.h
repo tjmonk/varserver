@@ -122,6 +122,12 @@ int NOTIFY_Add( Notification **ppNotification,
                 VAR_HANDLE hVar,
                 pid_t pid );
 
+int NOTIFY_Cancel( Notification **ppNotification,
+                   NotificationType type,
+                   VAR_HANDLE hVar,
+                   pid_t pid,
+                   int *count );
+
 VAR_HANDLE NOTIFY_GetVarHandle( Notification *pNotification,
                                 NotificationType type );
 

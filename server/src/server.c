@@ -131,6 +131,7 @@ static int ProcessVarRequestName( VarClient *pVarClient );
 static int ProcessVarRequestLength( VarClient *pVarClient );
 static int ProcessVarRequestGet( VarClient *pVarClient );
 static int ProcessVarRequestNotify( VarClient *pVarClient );
+static int ProcessVarRequestNotifyCancel( VarClient *pVarClient );
 static int ProcessValidationRequest( VarClient *pVarClient );
 static int ProcessValidationResponse( VarClient *pVarClient );
 static int ProcessVarRequestOpenPrintSession( VarClient *pVarClient );
@@ -280,6 +281,13 @@ static RequestHandler RequestHandlers[] =
         "NOTIFY",
         ProcessVarRequestNotify,
         "/varserver/stats/notify",
+        NULL
+    },
+    {
+        VARREQUEST_NOTIFY_CANCEL,
+        "NOTIFY_CANCEL",
+        ProcessVarRequestNotifyCancel,
+        "/varserver/stats/notify_cancel",
         NULL
     },
     {
@@ -1616,6 +1624,40 @@ static int ProcessVarRequestNotify( VarClient *pVarClient )
         /* register the notification request */
         result = VARLIST_RequestNotify( &(pVarClient->variableInfo),
                                         pVarClient->client_pid );
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  ProcessVarRequestNotifyCancel                                             */
+/*!
+    Process a NOTIFY_CANCEL variable request from a client
+
+    The ProcessVarRequestNotifyCancel function handles a variable notification
+    cancellation request from a client.
+
+    @param[in]
+        pVarClient
+            Pointer to the client data structure
+
+    @retval EOK the variable notification was successfully cancelled
+    @retval ENOENT the variable or notification was not found
+    @retval EINVAL the client is invalid
+    @retval ENOTSUP the client is the wrong version
+
+==============================================================================*/
+static int ProcessVarRequestNotifyCancel( VarClient *pVarClient )
+{
+    int result = EINVAL;
+
+    /* validate the client object */
+    result = ValidateClient( pVarClient );
+    if( result == EOK)
+    {
+        /* cancel the notification request */
+        result = VARLIST_NotifyCancel( &(pVarClient->variableInfo),
+                                       pVarClient->client_pid );
     }
 
     return result;

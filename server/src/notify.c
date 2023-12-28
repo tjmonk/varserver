@@ -68,9 +68,14 @@ SOFTWARE.
         Private file scoped variables
 ==============================================================================*/
 
+/* pointer to a free notification list */
+static Notification *FreeNotificationList = NULL;
+
 /*==============================================================================
         Private function declarations
 ==============================================================================*/
+
+static Notification *notify_New( void );
 
 static int notify_Send( Notification *pNotification,
                         int handle,
@@ -91,7 +96,7 @@ static mqd_t notify_GetQueue( pid_t pid );
     the specified variable notification list.
 
     @param[in,out]
-        ppNotificaiton
+        ppNotification
             Pointer to the notification request list
 
     @param[in]
@@ -156,7 +161,7 @@ int NOTIFY_Add( Notification **ppNotification,
                 {
                     /* a matching notification was not found
                     so let's create one */
-                    pNotification = calloc( 1, sizeof( Notification ) );
+                    pNotification = notify_New();
                     if( pNotification != NULL )
                     {
                         /* insert the new notification
@@ -186,6 +191,110 @@ int NOTIFY_Add( Notification **ppNotification,
             {
                 result = ENOMEM;
             }
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  NOTIFY_Cancel                                                             */
+/*!
+    Cancel an existing notification request
+
+    The NOTIFY_Cancel function cancels a notification request in
+    the specified variable notification list.
+
+    @param[in,out]
+        ppNotification
+            Pointer to the notification request list
+
+    @param[in]
+        type
+            notification type
+
+    @param[in]
+        hVar
+            handle to the variable associated with the notification
+
+    @param[in]
+        pid
+            process id of the client to be notified
+
+    @param[in,out]
+        count
+            number of notifications of the specified type still in the list
+
+    @retval EOK the notification was successfully added
+    @retval ENOTSUP the notification is not supported
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+int NOTIFY_Cancel( Notification **ppNotification,
+                   NotificationType type,
+                   VAR_HANDLE hVar,
+                   pid_t pid,
+                   int *count )
+{
+    int result = EINVAL;
+    Notification *p;
+    Notification *pNext;
+    Notification **ppDst = &FreeNotificationList;
+
+    if( ( ppNotification != NULL ) &&
+        ( count != NULL ) )
+    {
+        result = ENOENT;
+
+        /* initialize the counter */
+        *count = 0;
+
+        /* initialize the pointer to point to the head of the source list */
+        p = *ppNotification;
+
+        while ( p != NULL )
+        {
+            /* get a pointer to the next notification in the notify list */
+            pNext = p->pNext;
+
+            if ( p->type == type )
+            {
+                /* count the number of notifications of the specified
+                   type in the list */
+                (*count)++;
+            }
+
+            /* check if we have a map for the variable handle,
+               process identifier, and notification type */
+            if ( ( p->hVar == hVar ) &&
+                 ( p->pid == pid ) &&
+                 ( p->type == type ) )
+            {
+                /* insert the notificaton onto the head of the
+                   Free Notification List */
+                memset( p, 0, sizeof( Notification ) );
+                p->pNext = *ppDst;
+                *ppDst = p;
+
+                /* update the source pointer to skip over the removed
+                   notification */
+                *ppNotification = pNext;
+
+                /* decrement the number of notifications of the
+                   specified type in the list */
+                (*count)--;
+
+                /* indicate success */
+                result = EOK;
+            }
+            else
+            {
+                /* update the pointer to be modified for the next removal */
+                ppNotification = &(p->pNext);
+            }
+
+            /* move to the next notification in the source list */
+            p = pNext;
         }
     }
 
@@ -442,6 +551,39 @@ VAR_HANDLE NOTIFY_GetVarHandle( Notification *pNotification,
     }
 
     return hVar;
+}
+
+/*============================================================================*/
+/*  notify_New                                                                */
+/*!
+    Get a new Notification object
+
+    The notify_New function gets a new Notification object, either from the
+    Free Notification List, or from the heap if the Free Notification List
+    is empty.
+
+    @retval pointer to a new Notification object
+    @retval NULL if a new Notification object could not be allocated
+
+==============================================================================*/
+static Notification *notify_New( void )
+{
+    Notification *pNotification = NULL;
+
+    if ( FreeNotificationList != NULL )
+    {
+        /* get the notification from the free notification list */
+        pNotification = FreeNotificationList;
+        FreeNotificationList = pNotification->pNext;
+        memset( pNotification, 0, sizeof( Notification ) );
+    }
+    else
+    {
+        /* allocate the notification from the heap */
+        pNotification = calloc( 1, sizeof( Notification ) );
+    }
+
+    return pNotification;
 }
 
 /*============================================================================*/

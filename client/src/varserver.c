@@ -3073,6 +3073,50 @@ int VAR_Notify( VARSERVER_HANDLE hVarServer,
     return result;
 }
 
+/*============================================================================*/
+/*  VAR_NotifyCancel                                                          */
+/*!
+    Cancel a notification for a specific variable
+
+    The VAR_NotifyCancel function cancels a notification for an action
+    on the specified variable.
+
+    @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[in]
+        hVar
+            handle to the variable to be notified on
+
+    @param[in]
+        notification
+            the type of notification to be cancelled
+
+
+    @retval EOK - the notification request was cancelled successfully
+    @retval ENOENT - the notification request was not found
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+int VAR_NotifyCancel( VARSERVER_HANDLE hVarServer,
+                      VAR_HANDLE hVar,
+                      NotificationType notificationType )
+{
+    int result = EINVAL;
+    VarClient *pVarClient = ValidateHandle( hVarServer );
+
+    if( pVarClient != NULL )
+    {
+        pVarClient->requestType = VARREQUEST_NOTIFY_CANCEL;
+        pVarClient->variableInfo.hVar = hVar;
+        pVarClient->variableInfo.notificationType = notificationType;
+
+        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+    }
+
+    return result;
+}
 
 /*============================================================================*/
 /*  VAR_Print                                                                 */

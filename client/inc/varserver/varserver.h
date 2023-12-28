@@ -204,6 +204,10 @@ int VAR_Notify( VARSERVER_HANDLE hVarServer,
                 VAR_HANDLE hVar,
                 NotificationType notificationType );
 
+int VAR_NotifyCancel( VARSERVER_HANDLE hVarServer,
+                      VAR_HANDLE hVar,
+                      NotificationType notificationType );
+
 int VAR_GetValidationRequest( VARSERVER_HANDLE hVarServer,
                               uint32_t id,
                               VAR_HANDLE *hVar,

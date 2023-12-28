@@ -356,9 +356,10 @@ static void usage( char *name )
 {
     if( name != NULL )
     {
-        printf("usage: %s [-h] [-v] [-u <user>] varname alias\n", name );
+        printf("usage: %s [-h] [-v] [-u <user>] varname [alias]\n", name );
         printf("-h : display this help\n");
         printf("-v : enable verbose (debugging) output\n");
+        printf("-s : show aliases for variable\n");
         printf("-u : set user name\n");
     }
 }

@@ -73,6 +73,8 @@ int VARLIST_GetFlags( VarInfo *pVarInfo );
 int VARLIST_GetInfo( VarInfo *pVarInfo );
 
 int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid );
+int VARLIST_NotifyCancel( VarInfo *pVarInfo, pid_t pid );
+
 int VARLIST_GetByHandle( pid_t clientPID,
                          VarInfo *pVarInfo,
                          char *buf,

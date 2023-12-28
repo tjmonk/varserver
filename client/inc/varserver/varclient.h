@@ -131,6 +131,9 @@ typedef enum _varRequest
     /*! Request Variable Notification */
     VARREQUEST_NOTIFY,
 
+    /*! Cancel Variable Notification */
+    VARREQUEST_NOTIFY_CANCEL,
+
     /*! Request Validation Request Info */
     VARREQUEST_GET_VALIDATION_REQUEST,
 
