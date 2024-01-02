@@ -396,6 +396,7 @@ int VARCACHE_Map( VarCache *pVarCache,
     int result = EINVAL;
     size_t idx;
     VAR_HANDLE hVar;
+    int rc;
 
     if ( ( pVarCache != NULL ) &&
          ( pVarCache->pVars != NULL ) &&
@@ -411,7 +412,11 @@ int VARCACHE_Map( VarCache *pVarCache,
             hVar = pVarCache->pVars[idx];
 
             /* apply the map function and track the result */
-            result |= fn( hVar, arg );
+            rc = fn( hVar, arg );
+            if ( rc != EOK )
+            {
+                result = rc;
+            }
         }
     }
 
