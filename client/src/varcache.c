@@ -504,5 +504,51 @@ int VARCACHE_Clear( VarCache *pVarCache )
     return result;
 }
 
+/*============================================================================*/
+/*  VARCACHE_Free                                                             */
+/*!
+
+    Free the variable cache
+
+    The VARCACHE_Free function deallocates the memory used by the
+    variable cache and sets the variable cache pointer to NULL.
+
+@param[in]
+    ppVarCache
+        pointer to the pointer to the VarCache object to clear
+
+@retval EOK the variable cache was cleared
+@retval ENOENT the variable cache had not been initialized
+@retval EINVAL invalid arguments
+
+==============================================================================*/
+int VARCACHE_Free( VarCache **ppVarCache )
+{
+    int result = EINVAL;
+    VarCache *pVarCache;
+
+    if ( ppVarCache != NULL )
+    {
+        result = ENOENT;
+
+        pVarCache = *ppVarCache;
+        if ( pVarCache != NULL )
+        {
+            if ( pVarCache->pVars != NULL )
+            {
+                free( pVarCache->pVars );
+            }
+
+            memset( pVarCache, 0, sizeof( VarCache ) );
+
+            result = EOK;
+        }
+
+        *ppVarCache = NULL;
+    }
+
+    return result;
+}
+
 /*! @}
  * end of varcache group */

@@ -71,4 +71,6 @@ int VARCACHE_Map( VarCache *pVarCache,
 
 int VARCACHE_Clear( VarCache *pVarCache );
 
+int VARCACHE_Free( VarCache **ppVarCache );
+
 #endif
