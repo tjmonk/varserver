@@ -96,9 +96,6 @@ typedef struct _searchContext
     /*! variable tag specifiers */
     uint16_t tags[MAX_TAGS_LEN];
 
-    /*! context */
-    void *context;
-
     /*! pointer to the next search context */
     struct _searchContext *pNext;
 } SearchContext;
