@@ -32,6 +32,7 @@ SOFTWARE.
 #include <stdbool.h>
 #include <stdint.h>
 #include "varserver.h"
+#include "varcache.h"
 #include "var.h"
 
 /*============================================================================
@@ -53,5 +54,20 @@ int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
                      uint32_t instanceID,
                      uint32_t flags,
                      int fd );
+
+int VARQUERY_Map( VARSERVER_HANDLE hVarServer,
+                  VarQuery *pVarQuery,
+                  int (*mapfn)( VARSERVER_HANDLE hVarServer,
+                                VAR_HANDLE hVar,
+                                void *arg ),
+                  void *arg );
+
+int VARQUERY_Cache( VARSERVER_HANDLE hVarServer,
+                    VarQuery *pVarQuery,
+                    VarCache *pVarCache );
+
+int VARQUERY_CacheUnique( VARSERVER_HANDLE hVarServer,
+                          VarQuery *pVarQuery,
+                          VarCache *pVarCache );
 
 #endif

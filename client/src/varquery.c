@@ -57,6 +57,7 @@ SOFTWARE.
 #include <unistd.h>
 #include <varserver/var.h>
 #include <varserver/varserver.h>
+#include <varserver/varcache.h>
 #include <varserver/varquery.h>
 
 /*==============================================================================
@@ -70,6 +71,14 @@ SOFTWARE.
 /*==============================================================================
         Private function declarations
 ==============================================================================*/
+
+static int varquery_AddCache( VARSERVER_HANDLE hVarServer,
+                              VAR_HANDLE hVar,
+                              void *arg );
+
+static int varquery_AddCacheUnique( VARSERVER_HANDLE hVarServer,
+                                    VAR_HANDLE hVar,
+                                    void *arg );
 
 /*==============================================================================
         Function definitions
@@ -169,6 +178,264 @@ int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
         dprintf(fd, "\n");
 
         result = VAR_GetNext( hVarServer, &query, NULL );
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VARQUERY_Map                                                              */
+/*!
+    Perform a variable query and map a function across the variable query result
+
+    The VARQUERY_Map function searches for variables using the
+    specified criteria and then maps the specified mapping function
+    across the query result to perform an action on all of the
+    found variables.
+
+    @param[in]
+        hVarServer
+            handle to the Variable Server
+
+    @param[in]
+        pVarQuery
+            pointer to a populated variable query
+
+    @param[in]
+        mapfn
+            pointer to a map function of the form:
+            int mapfn( VARSERVER_HANDLE hVarServer, VAR_HANDLE hVar, void *arg )
+
+    @param[in]
+        arg
+            opaque void * argument to pass to the map function
+
+    @retval EOK - variable search was successful
+    @retval EINVAL - invalid arguments
+    @retval ENOENT - no variables matched the search criteria
+    @retval other error reported by the map function.
+
+==============================================================================*/
+int VARQUERY_Map( VARSERVER_HANDLE hVarServer,
+                  VarQuery *pVarQuery,
+                  int (*mapfn)( VARSERVER_HANDLE hVarServer,
+                                VAR_HANDLE hVar,
+                                void *arg ),
+                  void *arg )
+{
+    int result = EINVAL;
+    int errcount = 0;
+    int count = 0;
+    int rc;
+
+    if ( ( pVarQuery != NULL ) &&
+         ( mapfn != NULL ) )
+    {
+        /* get the first variable which matches the search criteria */
+        result = VAR_GetFirst( hVarServer, pVarQuery, NULL );
+        while ( result == EOK )
+        {
+            if ( pVarQuery->hVar != VAR_INVALID )
+            {
+                /* add the found variable to the cache */
+                rc = mapfn( hVarServer, pVarQuery->hVar, arg );
+                if ( rc == EOK )
+                {
+                    count++;
+                }
+                else
+                {
+                    errcount++;
+                }
+            }
+
+            /* get the next variable which matches the search criteria */
+            result = VAR_GetNext( hVarServer, pVarQuery, NULL );
+        }
+    }
+
+    if ( errcount == 0 )
+    {
+        if ( count > 0 )
+        {
+            result = EOK;
+        }
+        else
+        {
+            result = ENOENT;
+        }
+    }
+    else
+    {
+        /* report the error from VARCACHE_Add */
+        result = rc;
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VARQUERY_Cache                                                            */
+/*!
+    Populate a VarCache from a variable search
+
+    The VARQUERY_Cache function searches for variables using the
+    specified criteria and stores them in the specified variable
+    cache.
+
+    @param[in]
+        hVarServer
+            handle to the Variable Server
+
+    @param[in]
+        pVarQuery
+            pointer to a populated variable query
+
+    @param[in]
+        pVarCache
+            pointer to a Variable Cache to populate
+
+    @retval EOK - variable search was successful
+    @retval EINVAL - invalid arguments
+    @retval ENOENT - no variables matched the search criteria
+    @retval other error reported by the map function.
+
+==============================================================================*/
+int VARQUERY_Cache( VARSERVER_HANDLE hVarServer,
+                    VarQuery *pVarQuery,
+                    VarCache *pVarCache )
+{
+    /* map the varquery_AddCache function over the query result */
+    return VARQUERY_Map( hVarServer,
+                         pVarQuery,
+                         varquery_AddCache,
+                         (void *)pVarCache );
+}
+
+/*============================================================================*/
+/*  VARQUERY_CacheUnique                                                      */
+/*!
+    Populate a VarCache from a variable search
+
+    The VARQUERY_CacheUnique function searches for variables using the
+    specified criteria and stores them in the specified variable
+    cache, but only if they are not there already
+
+    @param[in]
+        hVarServer
+            handle to the Variable Server
+
+    @param[in]
+        pVarQuery
+            pointer to a populated variable query
+
+    @param[in]
+        pVarCache
+            pointer to a Variable Cache to populate
+
+    @retval EOK - variable search was successful
+    @retval EINVAL - invalid arguments
+    @retval ENOENT - no variables matched the search criteria
+    @retval other error reported by the map function.
+
+==============================================================================*/
+int VARQUERY_CacheUnique( VARSERVER_HANDLE hVarServer,
+                          VarQuery *pVarQuery,
+                          VarCache *pVarCache )
+{
+    /* map the varquery_AddCache function over the query result */
+    return VARQUERY_Map( hVarServer,
+                         pVarQuery,
+                         varquery_AddCacheUnique,
+                         (void *)pVarCache );
+}
+
+/*============================================================================*/
+/*  varquery_AddCache                                                         */
+/*!
+    Mapping callback function to add a variable to a cache
+
+    The varquery_AddCache callback function is used by the
+    VARQUERY_Map function to add a variable to a variable cache.
+
+    @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[in]
+        hVar
+            handle of variable to be added to the cache
+
+    @param[in]
+        arg
+            opaque pointer argument from the map function
+            which is converted to a VarCache *
+
+    @retval EOK - cache add was successful
+    @retval EINVAL - invalid arguments
+    @retval ENOMEM - memory allocation failure
+
+==============================================================================*/
+static int varquery_AddCache( VARSERVER_HANDLE hVarServer,
+                              VAR_HANDLE hVar,
+                              void *arg )
+{
+    int result = EINVAL;
+    VarCache *pVarCache = (VarCache *)arg;
+
+    /* hVarServer is not used */
+    (void)hVarServer;
+
+    if ( ( hVar != VAR_INVALID ) &&
+         ( pVarCache != NULL ) )
+    {
+        result = VARCACHE_Add( pVarCache, hVar );
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  varquery_AddCacheUnique                                                   */
+/*!
+    Mapping callback function to add a variable to a cache
+
+    The varquery_AddCacheUnique callback function is used by the
+    VARQUERY_Map function to add a variable to a variable cache,
+    but only if it is not there already.
+
+    @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[in]
+        hVar
+            handle of variable to be added to the cache
+
+    @param[in]
+        arg
+            opaque pointer argument from the map function
+            which is converted to a VarCache *
+
+    @retval EOK - cache add was successful
+    @retval EINVAL - invalid arguments
+    @retval ENOMEM - memory allocation failure
+
+==============================================================================*/
+static int varquery_AddCacheUnique( VARSERVER_HANDLE hVarServer,
+                                    VAR_HANDLE hVar,
+                                    void *arg )
+{
+    int result = EINVAL;
+    VarCache *pVarCache = (VarCache *)arg;
+
+    /* hVarServer is not used */
+    (void)hVarServer;
+
+    if ( ( hVar != VAR_INVALID ) &&
+         ( pVarCache != NULL ) )
+    {
+        result = VARCACHE_AddUnique( pVarCache, hVar );
     }
 
     return result;
