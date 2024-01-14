@@ -347,7 +347,7 @@ static int RunSignalfdHandlers( BlobTestState *pState )
     if ( pState != NULL )
     {
         /* set up the signal file descriptor to receive notifications */
-        fd = VARSERVER_Signalfd();
+        fd = VARSERVER_Signalfd( 0 );
 
         /* loop until pState->n reaches zero */
         while( pState->n )

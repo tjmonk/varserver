@@ -787,11 +787,15 @@ int VARSERVER_WaitSignal( int *sigval )
         - SIG_VAR_VALIDATE
         - SIG_VAR_TIMER
 
+    @param[in]
+        flags
+            signalfd flags
+
     @retval the signal file descriptor
     @retval -1 an error occurred (see errno)
 
 ==============================================================================*/
-int VARSERVER_Signalfd( void )
+int VARSERVER_Signalfd( int flags )
 {
     sigset_t mask;
 
@@ -815,7 +819,7 @@ int VARSERVER_Signalfd( void )
     sigprocmask( SIG_BLOCK, &mask, NULL );
 
     /* return the file descriptor to read to get signals */
-    return signalfd( -1, &mask, 0 );
+    return signalfd( -1, &mask, flags );
 }
 
 /*============================================================================*/

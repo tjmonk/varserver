@@ -242,7 +242,7 @@ int VAR_GetFromQueue( VARSERVER_HANDLE hVarServer,
                       char *buf,
                       size_t len );
 
-int VARSERVER_Signalfd( void );
+int VARSERVER_Signalfd( int flags );
 
 int VARSERVER_WaitSignalfd( int fd, int32_t *sigval );
 
