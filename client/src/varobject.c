@@ -803,7 +803,7 @@ static int str_to_var( char *str,
         }
         else
         {
-            /* the specified string will not fqit in the specified
+            /* the specified string will not fit in the specified
                 buffer size */
             result = E2BIG;
         }

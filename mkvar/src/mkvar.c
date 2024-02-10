@@ -133,6 +133,11 @@ int main(int argc, char **argv)
                 printf( "%s\n", result == EOK ? "EOK" : strerror(result));
             }
 
+            if ( state.value != NULL )
+            {
+                free( state.value );
+            }
+
             /* close the variable server */
             VARSERVER_Close( state.hVarServer );
         }
@@ -165,6 +170,9 @@ int main(int argc, char **argv)
     -t : variable type
     -T : variable tag specifiers
     -l : variable length (string variables)
+    -r : read user list
+    -w : write user list
+    -V : enable verbose output
 
     @param[in]
         argc
@@ -232,7 +240,7 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                         break;
 
                     case 'v':
-                        pState->value = optarg;
+                        pState->value = strdup(optarg);
                         break;
 
                     case 'g':
@@ -400,10 +408,13 @@ static void usage( char *name )
 {
     if( name != NULL )
     {
-        printf("usage: %s [-h] [-v] [-c] [-N] [-t <type>] [-n <name>] "
+        printf("usage: %s [-h] [-V] [-c] [-N] [-t <type>] [-n <name>] "
                "[-F <formatspec>] [-T <tag list>] [-f <flag list>] "
                "[-i <instanceID>] "
-               "[-g <guid>] [-l <length>] [-v <value>]\n\n", name );
+               "[-g <guid>] [-l <length>] "
+               "[ -r <readers list> ]"
+               "[ -w <writers list> ]"
+               "[-v <value>]\n\n", name );
         printf("-n : variable name\n");
         printf("-i : variable instance identifier\n");
         printf("-v : variable initial value\n");
@@ -412,6 +423,8 @@ static void usage( char *name )
         printf("-F : variable format specifier\n");
         printf("-t : variable type\n");
         printf("-T : variable tags\n");
+        printf("-r : readers list (UIDs or Names)\n");
+        printf("-w : writers list (UIDs or Names)\n");
         printf("-l : variable length\n");
         printf("\n");
     }
@@ -436,9 +449,33 @@ static void usage( char *name )
 static int MakeVar( MakeVarState *pState )
 {
     int result = EINVAL;
+    char typestr[BUFSIZ];
 
     if( pState != NULL )
     {
+        if ( pState->verbose == true )
+        {
+            strncpy( typestr, "unknown", sizeof(typestr) );
+            VARSERVER_TypeToTypeName( pState->variableInfo.var.type,
+                                      typestr,
+                                      sizeof(typestr) );
+
+            if ( pState->value != NULL )
+            {
+                printf( "Creating %s variable: %s with value %s\n",
+                        typestr,
+                        pState->variableInfo.name,
+                        pState->value );
+
+            }
+            else
+            {
+                printf( "Creating %s variable: %s\n",
+                         typestr,
+                         pState->variableInfo.name );
+            }
+        }
+
         /*! request the variable server to create the variable */
         result = VARSERVER_CreateVar( pState->hVarServer,
                                       &(pState->variableInfo) );

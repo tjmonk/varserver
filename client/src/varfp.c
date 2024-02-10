@@ -112,11 +112,8 @@ typedef struct _VarFP
     len
         length of the data buffer to be created
 
-@retval EOK the file backed shared memory was successfully created
-@retval ENOMEM memory allocation failed
-@retval EBADF cannot create FILE *
-@retval ENXIO cannot set length of shared memory block
-@retval EINVAL invalid arguments
+@retval pointer to the opaque VarFP object which was created
+@retval NULL if the VarFP object could not be created
 
 ==============================================================================*/
 VarFP *VARFP_Open( char *name, size_t len )
