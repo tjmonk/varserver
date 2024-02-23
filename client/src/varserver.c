@@ -488,7 +488,7 @@ int VARSERVER_GetWorkingBuffer( VARSERVER_HANDLE hVarServer,
         ( pBuf != NULL ) &&
         ( pLen != NULL ))
     {
-        *pBuf = &pVarClient->workbuf;
+        *pBuf = &(pVarClient->workbuf);
         *pLen = pVarClient->workbufsize;
 
         result = EOK;
@@ -599,6 +599,7 @@ int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,
     int rc;
     VarClient *pVarClient = ValidateHandle( hVarServer );
     void *pDst;
+    size_t len;
 
     if( ( pVarClient != NULL ) &&
         ( pVarInfo != NULL ) )
@@ -625,9 +626,18 @@ int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,
                 if ( ( pVarInfo->var.type == VARTYPE_STR ) &&
                      ( pVarInfo->var.val.str != NULL ) )
                 {
-                    /* copy the initial string value */
-                    strcpy( (char *)pDst, pVarInfo->var.val.str );
-                    pVarClient->variableInfo.var.val.str = (char *)pDst;
+                    /* get the length of the string value */
+                    len = strlen( pVarInfo->var.val.str);
+                    if ( len >= pVarInfo->var.len )
+                    {
+                        result = E2BIG;
+                    }
+                    else
+                    {
+                        /* copy the initial string value */
+                        strcpy( (char *)pDst, pVarInfo->var.val.str );
+                        pVarClient->variableInfo.var.val.str = (char *)pDst;
+                    }
                 }
                 else if ( ( pVarInfo->var.type == VARTYPE_BLOB ) &&
                           ( pVarInfo->var.val.blob != NULL ) )
@@ -3351,76 +3361,84 @@ static int var_PrintValue( int fd, VarInfo *pInfo, char *workbuf )
         ( pInfo != NULL ) &&
         ( workbuf != NULL ) )
     {
-        switch( pInfo->var.type )
+        if ( pInfo->flags & VARFLAG_PASSWORD )
         {
-            case VARTYPE_FLOAT:
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%f"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, pInfo->var.val.f );
-                result = EOK;
-                break;
+            dprintf(fd, "********" );
+            result = EOK;
+        }
+        else
+        {
+            switch( pInfo->var.type )
+            {
+                case VARTYPE_FLOAT:
+                    fmt = ( pInfo->formatspec[0] == 0 ) ? "%f"
+                                                        : pInfo->formatspec;
+                    dprintf(fd, fmt, pInfo->var.val.f );
+                    result = EOK;
+                    break;
 
-            case VARTYPE_BLOB:
-                dprintf( fd,
-                         "%s len=%"PRIu32">",
-                         "<object:",
-                         (uint32_t)(pInfo->var.len));
-                result = EOK;
-                break;
+                case VARTYPE_BLOB:
+                    dprintf( fd,
+                            "%s len=%"PRIu32">",
+                            "<object:",
+                            (uint32_t)(pInfo->var.len));
+                    result = EOK;
+                    break;
 
-            case VARTYPE_STR:
-                /* string variable values are transferred via the workbuf */
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%s"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, workbuf );
-                result = EOK;
-                break;
+                case VARTYPE_STR:
+                    /* string variable values are transferred via the workbuf */
+                    fmt = ( pInfo->formatspec[0] == 0 ) ? "%s"
+                                                        : pInfo->formatspec;
+                    dprintf(fd, fmt, workbuf );
+                    result = EOK;
+                    break;
 
-            case VARTYPE_UINT16:
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%u"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, pInfo->var.val.ui );
-                result = EOK;
-                break;
+                case VARTYPE_UINT16:
+                    fmt = ( pInfo->formatspec[0] == 0 ) ? "%u"
+                                                        : pInfo->formatspec;
+                    dprintf(fd, fmt, pInfo->var.val.ui );
+                    result = EOK;
+                    break;
 
-            case VARTYPE_INT16:
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%d"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, pInfo->var.val.i );
-                result = EOK;
-                break;
+                case VARTYPE_INT16:
+                    fmt = ( pInfo->formatspec[0] == 0 ) ? "%d"
+                                                        : pInfo->formatspec;
+                    dprintf(fd, fmt, pInfo->var.val.i );
+                    result = EOK;
+                    break;
 
-            case VARTYPE_UINT32:
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%lu"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, pInfo->var.val.ul );
-                result = EOK;
-                break;
+                case VARTYPE_UINT32:
+                    fmt = ( pInfo->formatspec[0] == 0 ) ? "%lu"
+                                                        : pInfo->formatspec;
+                    dprintf(fd, fmt, pInfo->var.val.ul );
+                    result = EOK;
+                    break;
 
-            case VARTYPE_INT32:
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%d"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, pInfo->var.val.l );
-                result = EOK;
-                break;
+                case VARTYPE_INT32:
+                    fmt = ( pInfo->formatspec[0] == 0 ) ? "%d"
+                                                        : pInfo->formatspec;
+                    dprintf(fd, fmt, pInfo->var.val.l );
+                    result = EOK;
+                    break;
 
-            case VARTYPE_UINT64:
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%llu"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, pInfo->var.val.ull );
-                result = EOK;
-                break;
+                case VARTYPE_UINT64:
+                    fmt = ( pInfo->formatspec[0] == 0 ) ? "%llu"
+                                                        : pInfo->formatspec;
+                    dprintf(fd, fmt, pInfo->var.val.ull );
+                    result = EOK;
+                    break;
 
-            case VARTYPE_INT64:
-                fmt = ( pInfo->formatspec[0] == 0 ) ? "%lld"
-                                                    : pInfo->formatspec;
-                dprintf(fd, fmt, pInfo->var.val.ll );
-                result = EOK;
-                break;
+                case VARTYPE_INT64:
+                    fmt = ( pInfo->formatspec[0] == 0 ) ? "%lld"
+                                                        : pInfo->formatspec;
+                    dprintf(fd, fmt, pInfo->var.val.ll );
+                    result = EOK;
+                    break;
 
-            default:
-                result = ENOTSUP;
-                break;
+                default:
+                    result = ENOTSUP;
+                    break;
+            }
         }
     }
 

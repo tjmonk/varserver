@@ -1145,12 +1145,20 @@ int VARLIST_PrintByHandle( pid_t clientPID,
                 /* get the variable TLV */
                 pVarInfo->var.len = pVarStorage->var.len;
                 pVarInfo->var.type = pVarStorage->var.type;
-                pVarInfo->var.val = pVarStorage->var.val;
+
+                /* returning the value if it is not a password */
+                if ( ! ( pVarStorage->flags & VARFLAG_PASSWORD ) )
+                {
+                    pVarInfo->var.val = pVarStorage->var.val;
+                }
 
                 /* get the format specifier */
                 memcpy( pVarInfo->formatspec,
                         pVarStorage->formatspec,
                         MAX_FORMATSPEC_LEN );
+
+                /* get the flags */
+                pVarInfo->flags = pVarStorage->flags;
 
                 if( pVarInfo->var.type == VARTYPE_STR )
                 {

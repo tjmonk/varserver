@@ -305,7 +305,7 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                         len = strtoul( optarg, NULL, 0);
                         if ( len > 0 )
                         {
-                            pState->variableInfo.var.len = len;
+                            pState->variableInfo.var.len = len+1;
                         }
                         else
                         {
@@ -414,7 +414,7 @@ static void usage( char *name )
                "[-g <guid>] [-l <length>] "
                "[ -r <readers list> ]"
                "[ -w <writers list> ]"
-               "[-v <value>]\n\n", name );
+               "[-v <value>] [<name>]\n\n", name );
         printf("-n : variable name\n");
         printf("-i : variable instance identifier\n");
         printf("-v : variable initial value\n");
@@ -426,6 +426,8 @@ static void usage( char *name )
         printf("-r : readers list (UIDs or Names)\n");
         printf("-w : writers list (UIDs or Names)\n");
         printf("-l : variable length\n");
+        printf("If final [<name>] argument is specified, it will override\n");
+        printf("the name specified with -n (if any)\n");
         printf("\n");
     }
 }
@@ -479,6 +481,21 @@ static int MakeVar( MakeVarState *pState )
         /*! request the variable server to create the variable */
         result = VARSERVER_CreateVar( pState->hVarServer,
                                       &(pState->variableInfo) );
+        if ( result == EOK )
+        {
+            if ( pState->variableInfo.hVar == VAR_INVALID )
+            {
+                result = EEXIST;
+            }
+        }
+
+        if ( result != EOK )
+        {
+            fprintf( stderr,
+                     "Failed to create variable: %s : %s\n",
+                     pState->variableInfo.name,
+                     strerror( result ) );
+        }
     }
 
     return result;
