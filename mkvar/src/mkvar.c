@@ -115,12 +115,6 @@ int main(int argc, char **argv)
 {
     int result = EINVAL;
     MakeVarState state;
-    float f;
-
-    f = 3.14159265359;
-    printf("f = %0.5f\n", f);
-    printf("f = %0.8f\n", f);
-    printf("f = %0.9f\n", f);
 
     /*! clear the state object */
     memset( &state, 0, sizeof( MakeVarState ) );
