@@ -3246,7 +3246,7 @@ static int varlist_SetStr( VarStorage *pVarStorage, VarInfo *pVarInfo )
         {
             /* we have a string, check its length */
             n = pVarInfo->var.len;
-            if( n < pVarStorage->var.len )
+            if( n <= pVarStorage->var.len )
             {
                 if ( memcmp( pVarStorage->var.val.str,
                             pVarInfo->var.val.str,
