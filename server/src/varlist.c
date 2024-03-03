@@ -1417,7 +1417,7 @@ int VARLIST_Set( pid_t clientPID,
             /* check if this variable is readonly */
             if ( pVarStorage->flags & VARFLAG_READONLY )
             {
-                return ENOTSUP;
+                return EACCES;
             }
 
             /* check if we have write permissions on this variable */

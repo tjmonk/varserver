@@ -405,59 +405,74 @@ static int varflags_Update( VarFlagsState *pState )
     VarQuery query;
     char setFlagsStr[BUFSIZ];
     char clrFlagsStr[BUFSIZ];
+    int rc;
 
-    memset( &query, 0, sizeof( VarQuery ) );
-
-    VARSERVER_FlagsToStr( pState->setflags, setFlagsStr, sizeof setFlagsStr );
-    VARSERVER_FlagsToStr( pState->clearflags, clrFlagsStr, sizeof clrFlagsStr );
-
-    query.type = pState->searchType;
-    query.instanceID = pState->instanceID;
-    query.match = pState->searchText;
-    query.flags = pState->flags;
-
-    result = VAR_GetFirst( pState->hVarServer, &query, NULL );
-    while ( result == EOK )
+    if ( pState != NULL )
     {
-        if ( pState->setflags != 0 )
+        /* set error return code assuming we find no matches */
+        result = ENOENT;
+
+        memset( &query, 0, sizeof( VarQuery ) );
+
+        VARSERVER_FlagsToStr( pState->setflags,
+                              setFlagsStr,
+                              sizeof setFlagsStr );
+
+        VARSERVER_FlagsToStr( pState->clearflags,
+                              clrFlagsStr,
+                              sizeof clrFlagsStr );
+
+        query.type = pState->searchType;
+        query.instanceID = pState->instanceID;
+        query.match = pState->searchText;
+        query.flags = pState->flags;
+
+        rc = VAR_GetFirst( pState->hVarServer, &query, NULL );
+        while ( rc == EOK )
         {
-            if ( pState->verbose )
+            if ( pState->setflags != 0 )
             {
-                printf( "Setting flags '%s' on var %s: ",
-                        setFlagsStr,
-                        query.name );
+                if ( pState->verbose )
+                {
+                    printf( "Setting flags '%s' on var %s: ",
+                            setFlagsStr,
+                            query.name );
+                }
+
+                result = VAR_SetFlags( pState->hVarServer,
+                                    query.hVar,
+                                    pState->setflags );
+
+                if ( pState->verbose )
+                {
+                    printf("%s\n", (result == EOK ) ? "OK" : "FAILED" );
+                }
+            }
+            else if ( pState->clearflags != 0 )
+            {
+                if ( pState->verbose )
+                {
+                    printf( "Clearing flags '%s' on var %s: ",
+                            clrFlagsStr,
+                            query.name );
+                }
+
+                result = VAR_ClearFlags( pState->hVarServer,
+                                        query.hVar,
+                                        pState->clearflags );
+
+                if ( pState->verbose )
+                {
+                    printf("%s\n", (result == EOK ) ? "OK" : "FAILED" );
+                }
+            }
+            else
+            {
+                result = ENOTSUP;
             }
 
-            result = VAR_SetFlags( pState->hVarServer,
-                                   query.hVar,
-                                   pState->setflags );
-
-            if ( pState->verbose )
-            {
-                printf("%s\n", (result == EOK ) ? "OK" : "FAILED" );
-            }
+            rc = VAR_GetNext( pState->hVarServer, &query, NULL );
         }
-
-        if ( pState->clearflags != 0 )
-        {
-            if ( pState->verbose )
-            {
-                printf( "Clearing flags '%s' on var %s: ",
-                        clrFlagsStr,
-                        query.name );
-            }
-
-            result = VAR_ClearFlags( pState->hVarServer,
-                                     query.hVar,
-                                     pState->clearflags );
-
-            if ( pState->verbose )
-            {
-                printf("%s\n", (result == EOK ) ? "OK" : "FAILED" );
-            }
-        }
-
-        result = VAR_GetNext( pState->hVarServer, &query, NULL );
     }
 
     return result;

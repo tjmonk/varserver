@@ -151,7 +151,29 @@ int main(int argc, char **argv)
                                        state.value );
             if( result != EOK )
             {
-                fprintf(stderr, "SETVAR: %s\n", strerror( result ) );
+                switch( result )
+                {
+                    case ENOENT:
+                        fprintf( stderr, "Variable not found\n" );
+                        break;
+
+                    case EACCES:
+                        fprintf( stderr, "writes not allowed\n" );
+                        break;
+
+                    case ENOTSUP:
+                        fprintf( stderr, "Operation not supported\n" );
+                        break;
+
+                    case E2BIG:
+                        fprintf( stderr, "Value exceeds max variable length\n");
+                        break;
+
+                    default:
+                        fprintf(stderr, "SETVAR: %s\n", strerror( result ) );
+                        break;
+
+                }
             }
             else
             {

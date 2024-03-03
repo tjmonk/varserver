@@ -598,8 +598,7 @@ int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,
     int result = EINVAL;
     int rc;
     VarClient *pVarClient = ValidateHandle( hVarServer );
-    void *pDst;
-    size_t len;
+    VarObject var;
 
     if( ( pVarClient != NULL ) &&
         ( pVarInfo != NULL ) )
@@ -607,47 +606,42 @@ int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,
         /* assume everything is ok until it is not */
         result = EOK;
 
+        /* copy the VarObject */
+        memcpy( &var, &pVarInfo->var, sizeof( VarObject ) );
+
         /* copy the variable information */
         memcpy( &pVarClient->variableInfo, pVarInfo, sizeof( VarInfo ) );
 
-        /* copy the blob/string initial value */
-        if( ( pVarInfo->var.type == VARTYPE_STR ) ||
-            ( pVarInfo->var.type == VARTYPE_BLOB ) )
+        /* strings have to be transferred via the working buffer */
+        if ( var.type == VARTYPE_STR )
         {
-            if ( pVarInfo->var.len > pVarClient->workbufsize )
+            if ( var.val.str != NULL )
             {
-                result = EMSGSIZE;
+                result = var_CopyStringVarObjectToWorkbuf( pVarClient, &var );
+            }
+            else if ( var.len < pVarClient->workbufsize )
+            {
+                memset( &pVarClient->workbuf, 0, var.len );
             }
             else
             {
-                pDst = (void *)&pVarClient->workbuf;
-                memset( pDst, 0, pVarInfo->var.len );
+                result = E2BIG;
+            }
+        }
 
-                if ( ( pVarInfo->var.type == VARTYPE_STR ) &&
-                     ( pVarInfo->var.val.str != NULL ) )
-                {
-                    /* get the length of the string value */
-                    len = strlen( pVarInfo->var.val.str);
-                    if ( len >= pVarInfo->var.len )
-                    {
-                        result = E2BIG;
-                    }
-                    else
-                    {
-                        /* copy the initial string value */
-                        strcpy( (char *)pDst, pVarInfo->var.val.str );
-                        pVarClient->variableInfo.var.val.str = (char *)pDst;
-                    }
-                }
-                else if ( ( pVarInfo->var.type == VARTYPE_BLOB ) &&
-                          ( pVarInfo->var.val.blob != NULL ) )
-                {
-                    /* copy the initial blob value */
-                    memcpy( pDst,
-                            pVarInfo->var.val.blob,
-                            pVarInfo->var.len );
-                    pVarClient->variableInfo.var.val.blob = pDst;
-                }
+        if ( var.type == VARTYPE_BLOB )
+        {
+            if ( var.val.blob != NULL )
+            {
+                result = var_CopyBlobVarObjectToWorkbuf( pVarClient, &var );
+            }
+            else if ( var.len <= pVarClient->workbufsize )
+            {
+                memset( &pVarClient->workbuf, 0, var.len );
+            }
+            else
+            {
+                result = E2BIG;
             }
         }
 

@@ -115,6 +115,12 @@ int main(int argc, char **argv)
 {
     int result = EINVAL;
     MakeVarState state;
+    float f;
+
+    f = 3.14159265359;
+    printf("f = %0.5f\n", f);
+    printf("f = %0.8f\n", f);
+    printf("f = %0.9f\n", f);
 
     /*! clear the state object */
     memset( &state, 0, sizeof( MakeVarState ) );
@@ -377,7 +383,26 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                                                  0 );
                 if ( rc != EOK )
                 {
-                    fprintf( stderr, "Cannot assign variable value\n" );
+                    fprintf( stderr, "Cannot assign variable value: " );
+                    switch ( rc )
+                    {
+                        case E2BIG:
+                            fprintf( stderr, "Value exceeds max length\n" );
+                            break;
+
+                        case ERANGE:
+                            fprintf( stderr, "Range Check failed\n" );
+                            break;
+
+                        case ENOTSUP:
+                            fprintf( stderr, "Type conversion not supported\n");
+                            break;
+
+                        default:
+                            fprintf( stderr, "%s\n", strerror( rc ) );
+                            break;
+                    }
+
                     errcount++;
                 }
             }
@@ -492,9 +517,19 @@ static int MakeVar( MakeVarState *pState )
         if ( result != EOK )
         {
             fprintf( stderr,
-                     "Failed to create variable: %s : %s\n",
-                     pState->variableInfo.name,
-                     strerror( result ) );
+                     "Failed to create variable: %s : ",
+                     pState->variableInfo.name );
+
+            switch( result )
+            {
+                case EEXIST:
+                    fprintf( stderr, "Variable already exists\n");
+                    break;
+
+                default:
+                    fprintf( stderr, "%s\n", strerror( result ) );
+                    break;
+            }
         }
     }
 
