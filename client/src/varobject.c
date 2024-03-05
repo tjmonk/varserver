@@ -60,6 +60,7 @@ SOFTWARE.
 #include <semaphore.h>
 #include <string.h>
 #include <strings.h>
+#include <stdbool.h>
 #include <inttypes.h>
 #include <varserver/varobject.h>
 
@@ -145,6 +146,8 @@ static int blobstr_to_var( char *str,
 static int varobject_CopyString( VarObject *pDst, VarObject *pSrc );
 
 static int varobject_CopyBlob( VarObject *pDst, VarObject *pSrc );
+
+static bool check_positive_integer( char *str );
 
 /*==============================================================================
         File scoped variables
@@ -1008,17 +1011,24 @@ static int uint32str_to_var( char *str,
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
     {
-        ul = strtoul( str, NULL, 0 );
-        if( errno == ERANGE )
+        if ( check_positive_integer( str ) )
         {
-            result = ERANGE;
+            ul = strtoul( str, NULL, 0 );
+            if( errno == ERANGE )
+            {
+                result = ERANGE;
+            }
+            else
+            {
+                pVarObject->len = sizeof( uint32_t );
+                pVarObject->type = VARTYPE_UINT32;
+                pVarObject->val.ul = ul;
+                result = EOK;
+            }
         }
         else
         {
-            pVarObject->len = sizeof( uint32_t );
-            pVarObject->type = VARTYPE_UINT32;
-            pVarObject->val.ul = ul;
-            result = EOK;
+            result = ERANGE;
         }
     }
 
@@ -1117,17 +1127,24 @@ static int uint64str_to_var( char *str,
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
     {
-        ull = strtoull( str, NULL, 0 );
-        if( errno == ERANGE )
+        if ( check_positive_integer( str ) )
         {
-            result = ERANGE;
+            ull = strtoull( str, NULL, 0 );
+            if( errno == ERANGE )
+            {
+                result = ERANGE;
+            }
+            else
+            {
+                pVarObject->len = sizeof( uint64_t );
+                pVarObject->type = VARTYPE_UINT64;
+                pVarObject->val.ull = ull;
+                result = EOK;
+            }
         }
         else
         {
-            pVarObject->len = sizeof( uint64_t );
-            pVarObject->type = VARTYPE_UINT64;
-            pVarObject->val.ull = ull;
-            result = EOK;
+            result = ERANGE;
         }
     }
 
@@ -1226,18 +1243,25 @@ static int uint16str_to_var( char *str,
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
     {
-        ul = strtoul( str, NULL, 0 );
-        if( errno == ERANGE )
+        if ( check_positive_integer( str ) )
         {
-            /* conversion out of range */
-            result = ERANGE;
-        }
-        else if( ul <= 65535 )
-        {
-            pVarObject->type = VARTYPE_UINT16;
-            pVarObject->val.ui = (uint16_t)(ul & 0xFFFF);
-            pVarObject->len = sizeof( uint16_t );
-            result = EOK;
+            ul = strtoul( str, NULL, 0 );
+            if( errno == ERANGE )
+            {
+                /* conversion out of range */
+                result = ERANGE;
+            }
+            else if( ul <= 65535 )
+            {
+                pVarObject->type = VARTYPE_UINT16;
+                pVarObject->val.ui = (uint16_t)(ul & 0xFFFF);
+                pVarObject->len = sizeof( uint16_t );
+                result = EOK;
+            }
+            else
+            {
+                result = ERANGE;
+            }
         }
         else
         {
@@ -1408,6 +1432,55 @@ int VAROBJECT_TypeToTypeName( VarType type, char *typeName, size_t len )
     }
 
     return result;
+}
+
+/*============================================================================*/
+/*  check_positive_integer                                                    */
+/*!
+    Check that the specified string is a positive integer
+
+    The check_positive_integer function checks all the characters of
+    the specified string and confirms that they are all numeric
+    or hex digits.
+
+    @param[in]
+        str
+            pointer to the string to evaluate
+
+    @retval true - the integer is hexadecimal or positive
+    @retval false - the integer is not hexadecimal or positive
+
+==============================================================================*/
+static bool check_positive_integer( char *str )
+{
+    char *p = str;
+    bool result = false;
+    char c;
+    size_t count = 0;
+    int(*fn)(int) = isdigit;
+
+    if ( p != NULL )
+    {
+        result = true;
+
+        if( ( p[0] == '0' ) && ( toupper(p[1]) == 'X') )
+        {
+            fn = isxdigit;
+            p = &p[2];
+        }
+
+        while ( ( c = *p++ ) != 0 )
+        {
+            count++;
+
+            if ( !fn(c) )
+            {
+                result = false;
+            }
+        }
+    }
+
+    return ( count == 0 ) ? false : result;
 }
 
 /*! @}
