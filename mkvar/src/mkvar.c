@@ -385,7 +385,7 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                             break;
 
                         case ERANGE:
-                            fprintf( stderr, "Range Check failed\n" );
+                            fprintf( stderr, "Type/Range Check failed\n" );
                             break;
 
                         case ENOTSUP:

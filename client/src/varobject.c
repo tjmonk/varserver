@@ -147,7 +147,7 @@ static int varobject_CopyString( VarObject *pDst, VarObject *pSrc );
 
 static int varobject_CopyBlob( VarObject *pDst, VarObject *pSrc );
 
-static bool check_positive_integer( char *str );
+static bool check_integer( char *str, bool allow_negative );
 
 /*==============================================================================
         File scoped variables
@@ -1011,7 +1011,7 @@ static int uint32str_to_var( char *str,
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
     {
-        if ( check_positive_integer( str ) )
+        if ( check_integer( str, false ) )
         {
             ul = strtoul( str, NULL, 0 );
             if( errno == ERANGE )
@@ -1064,7 +1064,7 @@ static int int32str_to_var( char *str,
                             uint32_t options )
 {
     int result = EINVAL;
-    int32_t l;
+    int64_t ll;
 
     /* options currently unused */
     (void)options;
@@ -1072,17 +1072,26 @@ static int int32str_to_var( char *str,
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
     {
-        l = strtol( str, NULL, 0 );
-        if( errno == ERANGE )
+        if ( check_integer( str, true ) )
         {
-            result = ERANGE;
+            ll = strtoll( str, NULL, 0 );
+            if ( ( errno == ERANGE ) ||
+                 ( ll < -2147483648 ) ||
+                 ( ll > 2147483647 ) )
+            {
+                result = ERANGE;
+            }
+            else
+            {
+                pVarObject->len = sizeof( int32_t );
+                pVarObject->type = VARTYPE_INT32;
+                pVarObject->val.l = (int32_t)ll;
+                result = EOK;
+            }
         }
         else
         {
-            pVarObject->len = sizeof( int32_t );
-            pVarObject->type = VARTYPE_INT32;
-            pVarObject->val.l = l;
-            result = EOK;
+            result = ERANGE;
         }
     }
 
@@ -1127,7 +1136,7 @@ static int uint64str_to_var( char *str,
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
     {
-        if ( check_positive_integer( str ) )
+        if ( check_integer( str, false ) )
         {
             ull = strtoull( str, NULL, 0 );
             if( errno == ERANGE )
@@ -1188,17 +1197,20 @@ static int int64str_to_var( char *str,
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
     {
-        ll = strtoll( str, NULL, 0 );
-        if( errno == ERANGE )
+        if ( check_integer( str, true ) )
         {
-            result = ERANGE;
-        }
-        else
-        {
-            pVarObject->len = sizeof( int64_t );
-            pVarObject->type = VARTYPE_INT64;
-            pVarObject->val.ll = ll;
-            result = EOK;
+            ll = strtoll( str, NULL, 0 );
+            if( errno == ERANGE )
+            {
+                result = ERANGE;
+            }
+            else
+            {
+                pVarObject->len = sizeof( int64_t );
+                pVarObject->type = VARTYPE_INT64;
+                pVarObject->val.ll = ll;
+                result = EOK;
+            }
         }
     }
 
@@ -1243,7 +1255,7 @@ static int uint16str_to_var( char *str,
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
     {
-        if ( check_positive_integer( str ) )
+        if ( check_integer( str, false ) )
         {
             ul = strtoul( str, NULL, 0 );
             if( errno == ERANGE )
@@ -1310,17 +1322,24 @@ static int int16str_to_var( char *str,
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
     {
-        l = strtol( str, NULL, 0 );
-        if ( ( errno == ERANGE ) || ( l < -32768 ) || ( l > 32767 ) )
+        if ( check_integer( str, true ) )
         {
-            /* conversion out of range */
-            result = ERANGE;
+            l = strtol( str, NULL, 0 );
+            if ( ( errno == ERANGE ) || ( l < -32768 ) || ( l > 32767 ) )
+            {
+                /* conversion out of range */
+                result = ERANGE;
+            }
+            else
+            {
+                pVarObject->type = VARTYPE_INT16;
+                pVarObject->val.i = (int16_t)l;
+                result = EOK;
+            }
         }
         else
         {
-            pVarObject->type = VARTYPE_INT16;
-            pVarObject->val.i = (int16_t)l;
-            result = EOK;
+            result = ERANGE;
         }
     }
 
@@ -1435,11 +1454,11 @@ int VAROBJECT_TypeToTypeName( VarType type, char *typeName, size_t len )
 }
 
 /*============================================================================*/
-/*  check_positive_integer                                                    */
+/*  check_integer                                                             */
 /*!
-    Check that the specified string is a positive integer
+    Check that the specified string is an integer
 
-    The check_positive_integer function checks all the characters of
+    The check_integer function checks all the characters of
     the specified string and confirms that they are all numeric
     or hex digits.
 
@@ -1447,11 +1466,15 @@ int VAROBJECT_TypeToTypeName( VarType type, char *typeName, size_t len )
         str
             pointer to the string to evaluate
 
+    @param[in]
+        allow_negative
+            flag to allow a negative number
+
     @retval true - the integer is hexadecimal or positive
     @retval false - the integer is not hexadecimal or positive
 
 ==============================================================================*/
-static bool check_positive_integer( char *str )
+static bool check_integer( char *str, bool allow_negative )
 {
     char *p = str;
     bool result = false;
@@ -1468,8 +1491,19 @@ static bool check_positive_integer( char *str )
             fn = isxdigit;
             p = &p[2];
         }
+        else if ( p[0] == '-' )
+        {
+            if ( allow_negative == true )
+            {
+                p = &p[1];
+            }
+            else
+            {
+                result = false;
+            }
+        }
 
-        while ( ( c = *p++ ) != 0 )
+        while ( ( result == true ) && ( ( c = *p++ ) != 0 ) )
         {
             count++;
 

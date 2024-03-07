@@ -180,6 +180,10 @@ int main(int argC, char *argV[])
 
             /* update the flags */
             result = varflags_Update( pState );
+            if ( result == ENOENT )
+            {
+                fprintf( stderr, "WARN: No variables affected\n" );
+            }
 
             if ( userChanged == true )
             {
@@ -442,6 +446,13 @@ static int varflags_Update( VarFlagsState *pState )
                 result = VAR_SetFlags( pState->hVarServer,
                                     query.hVar,
                                     pState->setflags );
+                if ( result != EOK )
+                {
+                    fprintf( stderr,
+                             "Error setting flags '%s' on var %s\n",
+                             setFlagsStr,
+                             query.name );
+                }
 
                 if ( pState->verbose )
                 {
@@ -460,6 +471,13 @@ static int varflags_Update( VarFlagsState *pState )
                 result = VAR_ClearFlags( pState->hVarServer,
                                         query.hVar,
                                         pState->clearflags );
+                if ( result != EOK )
+                {
+                    fprintf( stderr,
+                             "Error clearing flags '%s' on var %s\n",
+                             clrFlagsStr,
+                             query.name );
+                }
 
                 if ( pState->verbose )
                 {
