@@ -949,6 +949,7 @@ static int floatstr_to_var( char *str,
 {
     int result = EINVAL;
     float f;
+    char *str_end;
 
     /* options currently unused */
     (void)options;
@@ -956,8 +957,12 @@ static int floatstr_to_var( char *str,
     if( ( str != NULL ) &&
         ( pVarObject != NULL ) )
     {
-        f = strtof( str, NULL );
-        if( errno != ERANGE )
+        f = strtof( str, &str_end );
+        if ( str_end == str )
+        {
+            result = ERANGE;
+        }
+        else if( errno != ERANGE )
         {
             pVarObject->type = VARTYPE_FLOAT;
             pVarObject->len = sizeof( float );
@@ -1211,6 +1216,10 @@ static int int64str_to_var( char *str,
                 pVarObject->val.ll = ll;
                 result = EOK;
             }
+        }
+        else
+        {
+            result = ERANGE;
         }
     }
 
