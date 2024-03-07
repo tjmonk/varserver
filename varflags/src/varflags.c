@@ -413,7 +413,6 @@ static int varflags_Update( VarFlagsState *pState )
         query.flags = pState->flags;
 
         rc = VAR_GetFirst( pState->hVarServer, &query, NULL );
-        printf("rc =%d\n", rc);
         while ( rc == EOK )
         {
             if ( pState->setflags != 0 )
