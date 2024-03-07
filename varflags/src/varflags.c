@@ -95,6 +95,9 @@ typedef struct _varFlagsState
     /*! user name */
     char *username;
 
+    /*! number of variables updated */
+    size_t count;
+
     /*! verbose flag */
     bool verbose;
 
@@ -180,7 +183,7 @@ int main(int argC, char *argV[])
 
             /* update the flags */
             result = varflags_Update( pState );
-            if ( result == ENOENT )
+            if ( ( result == ENOENT ) || ( pState->count == 0 ) )
             {
                 fprintf( stderr, "WARN: No variables affected\n" );
             }
@@ -363,40 +366,18 @@ static int SetUser( VarFlagsState *pState )
 }
 
 /*============================================================================*/
-/*  VARQUERY_Search                                                           */
+/*  varflags_Update                                                           */
 /*!
-    Search for variables
+    Update flags on the selected variables
 
-    The VARQUERY_Search function searches for variables using the
-    specified criteria and outputs them to the specified output.
-
-    @param[in]
-        hVarServer
-            handle to the Variable Server to create variables for
+    The varflags_Update function iterates through the selected variables
+    and sets or clear the specified flags depending on the request
+    specified in the VarFlagsState object.
 
     @param[in]
-        searchType
-            a bitfield indicating the type of search to perform.
-            Contains one or more of the following OR'd together:
-                QUERY_REGEX or QUERY_MATCH
-                QUERY_FLAGS
-                QUERY_TAGS
-                QUERY_INSTANCEID
-
-    @param[in]
-        match
-            string to use for variable name matching.  This is used
-            if one of these search types is specified: QUERY_REGEX,
-            QUERY_MATCH, otherwise this parameter is ignored.
-
-    @param[in]
-        instanceID
-            used for instance ID matching if QUERY_INSTANCEID is specified,
-            otherwise it is ignored.
-
-    @param[in]
-        fd
-            output steam for variable data
+        pState
+            pointer to the VarFlagsState object containing the flags
+            and search criteria
 
     @retval EOK - variable search was successful
     @retval EINVAL - invalid arguments
@@ -446,7 +427,12 @@ static int varflags_Update( VarFlagsState *pState )
                 result = VAR_SetFlags( pState->hVarServer,
                                     query.hVar,
                                     pState->setflags );
-                if ( result != EOK )
+                if ( result == EOK )
+                {
+                    /* increment the count of affected variables */
+                    pState->count++;
+                }
+                else
                 {
                     fprintf( stderr,
                              "Error setting flags '%s' on var %s\n",
@@ -471,7 +457,12 @@ static int varflags_Update( VarFlagsState *pState )
                 result = VAR_ClearFlags( pState->hVarServer,
                                         query.hVar,
                                         pState->clearflags );
-                if ( result != EOK )
+                if ( result == EOK )
+                {
+                    /* increment the count of affected variables */
+                    pState->count++;
+                }
+                else
                 {
                     fprintf( stderr,
                              "Error clearing flags '%s' on var %s\n",
