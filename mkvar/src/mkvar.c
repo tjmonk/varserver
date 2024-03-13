@@ -234,7 +234,8 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                         }
                         else
                         {
-                            fprintf(stderr, "illegal variable name length\n");
+                            fprintf( stderr,
+                                     "ERR: illegal variable name length\n");
                             errcount++;
                         }
                         break;
@@ -258,7 +259,8 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                                                    &pState->variableInfo.flags);
                         if ( rc != EOK )
                         {
-                            fprintf( stderr, "error converting flags string\n");
+                            fprintf( stderr,
+                                     "ERR: error converting flags string\n");
                             errcount++;
                         }
                         break;
@@ -270,7 +272,7 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                         }
                         else
                         {
-                            fprintf( stderr, "Illegal format spec length\n");
+                            fprintf(stderr, "ERR: Illegal formatspec length\n");
                             errcount++;
                         }
                         break;
@@ -283,7 +285,7 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                         }
                         else
                         {
-                            fprintf( stderr, "Illegal tag spec length\n");
+                            fprintf( stderr, "ERR: Illegal tag spec length\n");
                             errcount++;
                         }
                         break;
@@ -296,7 +298,7 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                         }
                         else
                         {
-                            fprintf( stderr, "Illegal type\n");
+                            fprintf( stderr, "ERR: Illegal type\n");
                             errcount++;
                         }
                         break;
@@ -309,7 +311,7 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                         }
                         else
                         {
-                            fprintf(stderr, "Illegal length\n" );
+                            fprintf(stderr, "ERR: Illegal length\n" );
                             errcount++;
                         }
                         break;
@@ -322,7 +324,7 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                                     pVarInfo->permissions.read,
                                     &pVarInfo->permissions.nreads ) != EOK )
                         {
-                            fprintf( stderr, "Illegal read permissions\n" );
+                            fprintf( stderr, "ERR: Illegal read permissions\n");
                             errcount++;
                         }
                         break;
@@ -335,13 +337,13 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                                     pVarInfo->permissions.write,
                                     &pVarInfo->permissions.nwrites ) != EOK )
                         {
-                            fprintf( stderr, "Illegal write permissions\n" );
+                            fprintf(stderr, "ERR: Illegal write permissions\n");
                             errcount++;
                         }
                         break;
 
                     default:
-                        fprintf(stderr, "invalid option\n");
+                        fprintf(stderr, "ERR: invalid option\n");
                         errcount++;
                         break;
 
@@ -350,15 +352,23 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
 
             if( optind < argc )
             {
-                /* get the variable name */
-                if ( strlen( argv[optind] ) <= MAX_NAME_LEN )
+                if ( strlen( pState->variableInfo.name ) > 0 )
                 {
-                    strcpy( pState->variableInfo.name, argv[optind] );
+                    fprintf( stderr, "ERR: Name defined twice\n");
+                    errcount++;
                 }
                 else
                 {
-                    fprintf(stderr, "illegal variable name length\n");
-                    errcount++;
+                    /* get the variable name */
+                    if ( strlen( argv[optind] ) <= MAX_NAME_LEN )
+                    {
+                        strcpy( pState->variableInfo.name, argv[optind] );
+                    }
+                    else
+                    {
+                        fprintf(stderr, "ERR: illegal variable name length\n");
+                        errcount++;
+                    }
                 }
             }
         }
@@ -377,7 +387,7 @@ static int ProcessOptions( int argc, char **argv, MakeVarState *pState )
                                                  0 );
                 if ( rc != EOK )
                 {
-                    fprintf( stderr, "Cannot assign variable value: " );
+                    fprintf( stderr, "ERR: Cannot assign variable value: " );
                     switch ( rc )
                     {
                         case E2BIG:
@@ -427,7 +437,7 @@ static void usage( char *name )
 {
     if( name != NULL )
     {
-        printf("usage: %s [-h] [-V] [-c] [-N] [-t <type>] [-n <name>] "
+        printf("\nusage: %s [-h] [-V] [-c] [-N] [-t <type>] [-n <name>] "
                "[-F <formatspec>] [-T <tag list>] [-f <flag list>] "
                "[-i <instanceID>] "
                "[-g <guid>] [-l <length>] "
@@ -444,9 +454,9 @@ static void usage( char *name )
         printf("-T : variable tags\n");
         printf("-r : readers list (UIDs or Names)\n");
         printf("-w : writers list (UIDs or Names)\n");
-        printf("-l : variable length\n");
-        printf("If final [<name>] argument is specified, it will override\n");
-        printf("the name specified with -n (if any)\n");
+        printf("-l : variable length\n\n");
+        printf("Note: The name can either be specified using the -n argument ");
+        printf("or as the final argument on the command line - but not both\n");
         printf("\n");
     }
 }
