@@ -222,6 +222,7 @@ static void usage( char *cmdname )
         fprintf(stderr,
                 "usage: %s [-n name] [-v] [-h]\n"
                 " [-n name] : variable name search term\n"
+                " [-r regex] : variable name serach by a regular expression\n"
                 " [-f flagslist] : variable flags search term\n"
                 " [-i instanceID]: instance identifier search term\n"
                 " [-h] : display this help\n"
@@ -260,7 +261,7 @@ static int ProcessOptions( int argC,
 {
     int c;
     int result = EINVAL;
-    const char *options = "hvn:f:i:u:t:";
+    const char *options = "hvn:r:f:i:u:t:";
 
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
@@ -283,6 +284,11 @@ static int ProcessOptions( int argC,
                 case 'n':
                     pState->searchText = optarg;
                     pState->searchType |= QUERY_MATCH;
+                    break;
+
+                case 'r':
+                    pState->searchText = optarg;
+                    pState->searchType |= QUERY_REGEX;
                     break;
 
                 case 'f':
