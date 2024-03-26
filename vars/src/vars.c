@@ -307,6 +307,7 @@ static int ProcessOptions( int argC,
 
                 case 'h':
                     usage( argV[0] );
+                    exit(0);
                     break;
 
                 default:
