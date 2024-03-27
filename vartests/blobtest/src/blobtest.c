@@ -234,7 +234,10 @@ int main(int argc, char **argv)
     }
 
     /* close the variable server */
-    VARSERVER_Close( state.hVarServer );
+    if ( VARSERVER_Close( state.hVarServer ) == EOK )
+    {
+        state.hVarServer = NULL;
+    }
 
     /* clean up client resources */
     Cleanup( &state );
@@ -1295,7 +1298,10 @@ static void TerminationHandler( int signum, siginfo_t *info, void *ptr )
     (void)ptr;
 
     syslog( LOG_ERR, "Abnormal termination of blobtest\n" );
-    VARSERVER_Close( state.hVarServer );
+    if ( VARSERVER_Close( state.hVarServer ) == EOK )
+    {
+        state.hVarServer = NULL;
+    }
 
     Cleanup( &state );
 
