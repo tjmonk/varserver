@@ -158,37 +158,40 @@ int main(int argC, char *argV[])
         if ( pState->hVarServer != NULL )
         {
             /* Process Options */
-            ProcessOptions( argC, argV, pState );
-
-            if ( pState->username != NULL )
+            rc = ProcessOptions( argC, argV, pState );
+            if ( rc == 0 )
             {
-                rc = SetUser( pState );
-                if ( rc == EOK )
-                {
-                    userChanged = true;
-                }
-                else
-                {
-                    fprintf( stderr,
-                            "Failed to set user to: %s rc=%d (%s)\n",
-                            pState->username,
-                            rc,
-                            strerror(rc) );
-                }
-            }
 
-            /* make the query */
-            (void)VARQUERY_Search( pState->hVarServer,
-                                   pState->searchType,
-                                   pState->searchText,
-                                   pState->tagspec,
-                                   pState->instanceID,
-                                   pState->flags,
-                                   pState->fd );
+                if ( pState->username != NULL )
+                {
+                    rc = SetUser( pState );
+                    if ( rc == EOK )
+                    {
+                        userChanged = true;
+                    }
+                    else
+                    {
+                        fprintf( stderr,
+                                "Failed to set user to: %s rc=%d (%s)\n",
+                                pState->username,
+                                rc,
+                                strerror(rc) );
+                    }
+                }
 
-            if ( userChanged == true )
-            {
-                rc = setuid( uid );
+                /* make the query */
+                (void)VARQUERY_Search( pState->hVarServer,
+                                    pState->searchType,
+                                    pState->searchText,
+                                    pState->tagspec,
+                                    pState->instanceID,
+                                    pState->flags,
+                                    pState->fd );
+
+                if ( userChanged == true )
+                {
+                    rc = setuid( uid );
+                }
             }
 
             /* close the variable server */
@@ -222,7 +225,7 @@ static void usage( char *cmdname )
         fprintf(stderr,
                 "usage: %s [-n name] [-v] [-h]\n"
                 " [-n name] : variable name search term\n"
-                " [-r regex] : variable name serach by a regular expression\n"
+                " [-r regex] : variable name search by a regular expression\n"
                 " [-f flagslist] : variable flags search term\n"
                 " [-i instanceID]: instance identifier search term\n"
                 " [-h] : display this help\n"
@@ -252,7 +255,7 @@ static void usage( char *cmdname )
         pState
             pointer to the vars state
 
-    @return none
+    @return 0 if processing was successful, 1 otherwise
 
 ==============================================================================*/
 static int ProcessOptions( int argC,
@@ -260,14 +263,12 @@ static int ProcessOptions( int argC,
                            VarsState *pState )
 {
     int c;
-    int result = EINVAL;
+    int result = EOK;
     const char *options = "hvn:r:f:i:u:t:";
 
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
     {
-        result = EOK;
-
         while( ( c = getopt( argC, argV, options ) ) != -1 )
         {
             switch( c )
@@ -307,7 +308,7 @@ static int ProcessOptions( int argC,
 
                 case 'h':
                     usage( argV[0] );
-                    exit(0);
+                    result = EINVAL;
                     break;
 
                 default:
