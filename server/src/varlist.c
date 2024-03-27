@@ -58,6 +58,7 @@ SOFTWARE.
 #include <strings.h>
 #include <syslog.h>
 #include <ctype.h>
+#include <regex.h>
 #include <varserver/varclient.h>
 #include <varserver/varserver.h>
 #include <varserver/varobject.h>
@@ -4602,6 +4603,19 @@ static int varlist_Match( VarID *pVarID, SearchContext *ctx )
             if( searchtype & QUERY_MATCH )
             {
                 found &= (strcasestr(pVarID->name, ctx->query.match) != NULL );
+            }
+
+            /* regex matching */
+            if( searchtype & QUERY_REGEX )
+            {
+                regex_t regex;
+                regmatch_t match[1];
+
+                if( regcomp(&regex, ctx->query.match, REG_EXTENDED) == 0 )
+                {
+                    found &= (regexec(&regex, pVarID->name, 1, match, 0) == 0 );
+                    regfree(&regex);
+                }
             }
 
             /* instance ID matching */
