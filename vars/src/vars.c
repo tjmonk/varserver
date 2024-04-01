@@ -227,8 +227,8 @@ static void usage( char *cmdname )
                 " [-n name] : variable name search term\n"
                 " [-r regex] : variable name search by a regular expression\n"
                 " [-f flagslist] : variable flags search term\n"
+                " [-x]: negate flags search, use with -f\n"
                 " [-i instanceID]: instance identifier search term\n"
-                " [-x]: negative search\n"
                 " [-h] : display this help\n"
                 " [-v] : output values\n",
                 cmdname );
@@ -304,7 +304,7 @@ static int ProcessOptions( int argC,
                     break;
 
                 case 'x':
-                    pState->searchType |= QUERY_NEGATIVE;
+                    pState->searchType |= QUERY_NEGATE_FLAGS;
                     break;
 
                 case 'u':
