@@ -4645,6 +4645,11 @@ static int varlist_Match( VarID *pVarID, SearchContext *ctx )
 
                 found &= match;
             }
+
+            if (searchtype & QUERY_NEGATIVE)
+            {
+                found = !found;
+            }
         }
 
         result = ( found == true ) ? EOK : ENOENT;
