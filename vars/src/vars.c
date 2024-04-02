@@ -227,7 +227,7 @@ static void usage( char *cmdname )
                 " [-n name] : variable name search term\n"
                 " [-r regex] : variable name search by a regular expression\n"
                 " [-f flagslist] : variable flags search term\n"
-                " [-F]: negative variable flags search. Supercedes -f\n"
+                " [-F flagslist]: negative variable flags search. Supercedes -f\n"
                 " [-i instanceID]: instance identifier search term\n"
                 " [-h] : display this help\n"
                 " [-v] : output values\n",
