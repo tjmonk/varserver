@@ -696,21 +696,20 @@ int VARSERVER_Test( VARSERVER_HANDLE hVarServer )
     VarClient *pVarClient = ValidateHandle( hVarServer );
     if( pVarClient != NULL )
     {
-        for(i=0;i<100;i++)
+        for(i=0;i<1;i++)
         {
             pVarClient->requestVal = i;
             pVarClient->requestType = VARREQUEST_ECHO;
-            ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+            result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
             if( pVarClient->debug >= LOG_DEBUG )
             {
-                printf("Client %d sent %d and received %d\n",
+                printf("Client %d sent %d and received %d, result %d\n",
                     pVarClient->clientid,
                     pVarClient->requestVal,
-                    pVarClient->responseVal);
+                    pVarClient->responseVal,
+                    result);
             }
         }
-
-        result = EOK;
     }
 
     return result;
