@@ -59,6 +59,7 @@ SOFTWARE.
 #include <mqueue.h>
 #include <errno.h>
 #include <semaphore.h>
+#include <time.h>
 #include <string.h>
 #include <inttypes.h>
 #include <pwd.h>
@@ -176,8 +177,17 @@ int ClientRequest( VarClient *pVarClient, int signal )
             {
                 do
                 {
+                    result = clock_gettime(CLOCK_REALTIME, &pVarClient->ts);
+                    if( result == -1)
+                    {
+                        continue;
+                    }
+
+                    // Add 5 second timeout
+                    pVarClient->ts.tv_sec += 5;
+
                     pVarClient->blocked = 1;
-                    result = sem_wait( &pVarClient->sem );
+                    result = sem_timedwait( &pVarClient->sem, &pVarClient->ts );
                     if( result == EOK )
                     {
                         if( pVarClient->debug >= LOG_DEBUG )
@@ -192,7 +202,7 @@ int ClientRequest( VarClient *pVarClient, int signal )
                     }
                     pVarClient->blocked = 0;
                 }
-                while ( result != EOK );
+                while ( result != EOK && result != ETIMEDOUT );
             }
             else
             {
