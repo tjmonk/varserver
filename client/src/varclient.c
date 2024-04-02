@@ -125,8 +125,10 @@ VarClient *ValidateHandle( VARSERVER_HANDLE hVarServer )
     The ClientRequest function is used to send a client request from a
     client to the Variable Server.
 
-    This is a blocking call.  The client will wait until explicitly
-    released by the server.  If the server dies, the client will hang!
+    This is a blocking call with a fixed timeout of 5s. The client will wait
+    until explicitly released by the server or the timeout expires. If the
+    server dies, the call will exit with a timeout error code. If other
+    syncronization erros occur, a call will be retied.
 
     @param[in]
         pVarClient
