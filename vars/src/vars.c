@@ -227,7 +227,7 @@ static void usage( char *cmdname )
                 " [-n name] : variable name search term\n"
                 " [-r regex] : variable name search by a regular expression\n"
                 " [-f flagslist] : variable flags search term\n"
-                " [-x]: negate flags search, use with -f\n"
+                " [-F]: negative variable flags search. Supercedes -f\n"
                 " [-i instanceID]: instance identifier search term\n"
                 " [-h] : display this help\n"
                 " [-v] : output values\n",
@@ -265,7 +265,7 @@ static int ProcessOptions( int argC,
 {
     int c;
     int result = EOK;
-    const char *options = "hvxn:r:f:i:u:t:";
+    const char *options = "hvn:r:f:F:i:u:t:";
 
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
@@ -298,13 +298,14 @@ static int ProcessOptions( int argC,
                     VARSERVER_StrToFlags( optarg, &pState->flags );
                     break;
 
+                case 'F':
+                    pState->searchType |= QUERY_FLAGS | QUERY_NEGATE_FLAGS;
+                    VARSERVER_StrToFlags( optarg, &pState->flags );
+                    break;
+
                 case 't':
                     pState->searchType |= QUERY_TAGS;
                     pState->tagspec = optarg;
-                    break;
-
-                case 'x':
-                    pState->searchType |= QUERY_NEGATE_FLAGS;
                     break;
 
                 case 'u':
