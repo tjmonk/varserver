@@ -104,6 +104,9 @@ typedef uint32_t VAR_HANDLE;
 /*! query output value */
 #define QUERY_SHOWVALUE ( 1 << 5 )
 
+/*! negate query results for flags */
+#define QUERY_NEGATE_FLAGS ( 1 << 6 )
+
 /*! Variable flags */
 typedef enum _VarFlags
 {

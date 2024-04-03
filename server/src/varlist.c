@@ -4628,6 +4628,12 @@ static int varlist_Match( VarID *pVarID, SearchContext *ctx )
             if( searchtype & QUERY_FLAGS )
             {
                 match = (ctx->query.flags & pVarStorage->flags ) ? true : false;
+
+                if (searchtype & QUERY_NEGATE_FLAGS)
+                {
+                    match = !match;
+                }
+
                 found &= match;
             }
 
