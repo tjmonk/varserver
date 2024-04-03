@@ -3700,6 +3700,10 @@ static int NewClientSemaphore( VarClient *pVarClient )
     if( pVarClient != NULL )
     {
         sem_init( &pVarClient->sem, 1, 0 );
+
+        /* infinite timeout by default */
+        pVarClient->requestTimeout_ms = 0;
+
         result = EOK;
     }
 
@@ -3848,6 +3852,42 @@ int VAR_GetFromQueue( VARSERVER_HANDLE hVarServer,
         {
             result = errno;
         }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VAR_GetRequestTimeout                                                     */
+/*!
+    Set the request timeout value
+
+    The VAR_GetRequestTimeout function sets the current request timeout
+    value for the specified variable client. If the value is set to 0,
+    the client will wait indefinitely for a response from the server.
+
+    @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[out]
+        timeout_ms
+            timeout value in milliseconds to set
+
+    @retval EOK - the request timeout was successfully set
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+int VARSERVER_SetRequestTimeout( VARSERVER_HANDLE hVarServer,
+                                 uint32_t timeout_ms )
+{
+    int result = EINVAL;
+    VarClient *pVarClient = ValidateHandle( hVarServer );
+
+    if( pVarClient != NULL )
+    {
+        pVarClient->requestTimeout_ms = timeout_ms;
+        result = EOK;
     }
 
     return result;
