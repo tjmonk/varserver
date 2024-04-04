@@ -692,23 +692,21 @@ int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,
 int VARSERVER_Test( VARSERVER_HANDLE hVarServer )
 {
     int result = EINVAL;
-    int i;
+
     VarClient *pVarClient = ValidateHandle( hVarServer );
     if( pVarClient != NULL )
     {
-        for(i=0;i<1;i++)
+        /* use the handle as a cookie */
+        pVarClient->requestVal = (intptr_t)hVarServer;
+        pVarClient->requestType = VARREQUEST_ECHO;
+        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+        if( pVarClient->debug >= LOG_DEBUG )
         {
-            pVarClient->requestVal = i;
-            pVarClient->requestType = VARREQUEST_ECHO;
-            result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-            if( pVarClient->debug >= LOG_DEBUG )
-            {
-                printf("Client %d sent %d and received %d, result %d\n",
-                    pVarClient->clientid,
-                    pVarClient->requestVal,
-                    pVarClient->responseVal,
-                    result);
-            }
+            printf("Client %d sent %d and received %d, result %d\n",
+                pVarClient->clientid,
+                pVarClient->requestVal,
+                pVarClient->responseVal,
+                result);
         }
     }
 
