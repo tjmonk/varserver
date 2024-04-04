@@ -189,8 +189,8 @@ typedef struct _varClient
     /*! time structure used to set timeouts for semaphores */
     struct timespec ts;
 
-    /*! request timeout in milliseconds */
-    uint32_t requestTimeout_ms;
+    /*! request timeout in seconds */
+    uint32_t requestTimeout_s;
 
     /*! client message queue used to receive notifications */
     mqd_t notificationQ;

@@ -179,19 +179,22 @@ int ClientRequest( VarClient *pVarClient, int signal )
             {
                 do
                 {
-                    if ( pVarClient->requestTimeout_ms > 0) {
+                    if ( pVarClient->requestTimeout_s > 0)
+                    {
                         result = clock_gettime(CLOCK_REALTIME, &pVarClient->ts);
                         if( result == -1)
                         {
                             continue;
                         }
 
-                        // Add 5 second timeout
-                        pVarClient->ts.tv_sec += 5;
+                        /* add the timeout to the current time */
+                        pVarClient->ts.tv_sec += pVarClient->requestTimeout_s;
 
                         pVarClient->blocked = 1;
                         result = sem_timedwait( &pVarClient->sem, &pVarClient->ts );
-                    } else {
+                    }
+                    else
+                    {
                         pVarClient->blocked = 1;
                         result = sem_wait( &pVarClient->sem );
                     }

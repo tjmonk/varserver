@@ -243,7 +243,7 @@ int VAR_GetFromQueue( VARSERVER_HANDLE hVarServer,
                       size_t len );
 
 int VARSERVER_SetRequestTimeout( VARSERVER_HANDLE hVarServer,
-                                 uint32_t timeout_ms );
+                                 uint32_t timeout_s );
 
 int VARSERVER_Signalfd( int flags );
 

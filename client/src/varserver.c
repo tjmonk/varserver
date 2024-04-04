@@ -3702,7 +3702,7 @@ static int NewClientSemaphore( VarClient *pVarClient )
         sem_init( &pVarClient->sem, 1, 0 );
 
         /* infinite timeout by default */
-        pVarClient->requestTimeout_ms = 0;
+        pVarClient->requestTimeout_s = 0;
 
         result = EOK;
     }
@@ -3870,23 +3870,23 @@ int VAR_GetFromQueue( VARSERVER_HANDLE hVarServer,
         hVarServer
             handle to the variable server
 
-    @param[out]
-        timeout_ms
-            timeout value in milliseconds to set
+    @param[in]
+        timeout_s
+            timeout value in seconds to set
 
     @retval EOK - the request timeout was successfully set
     @retval EINVAL - invalid arguments
 
 ==============================================================================*/
 int VARSERVER_SetRequestTimeout( VARSERVER_HANDLE hVarServer,
-                                 uint32_t timeout_ms )
+                                 uint32_t timeout_s )
 {
     int result = EINVAL;
     VarClient *pVarClient = ValidateHandle( hVarServer );
 
     if( pVarClient != NULL )
     {
-        pVarClient->requestTimeout_ms = timeout_ms;
+        pVarClient->requestTimeout_s = timeout_s;
         result = EOK;
     }
 
