@@ -186,6 +186,12 @@ typedef struct _varClient
     /*! semaphore used to synchronize client and server */
     sem_t sem;
 
+    /*! time structure used to set timeouts for semaphores */
+    struct timespec ts;
+
+    /*! request timeout in seconds */
+    uint32_t requestTimeout_s;
+
     /*! client message queue used to receive notifications */
     mqd_t notificationQ;
 

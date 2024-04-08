@@ -59,6 +59,7 @@ SOFTWARE.
 #include <mqueue.h>
 #include <errno.h>
 #include <semaphore.h>
+#include <time.h>
 #include <string.h>
 #include <inttypes.h>
 #include <pwd.h>
@@ -124,8 +125,10 @@ VarClient *ValidateHandle( VARSERVER_HANDLE hVarServer )
     The ClientRequest function is used to send a client request from a
     client to the Variable Server.
 
-    This is a blocking call.  The client will wait until explicitly
-    released by the server.  If the server dies, the client will hang!
+    This is a blocking call with a fixed timeout of 5s. The client will wait
+    until explicitly released by the server or the timeout expires. If the
+    server dies, the call will exit with a timeout error code. If other
+    syncronization erros occur, a call will be retied.
 
     @param[in]
         pVarClient
@@ -176,8 +179,26 @@ int ClientRequest( VarClient *pVarClient, int signal )
             {
                 do
                 {
-                    pVarClient->blocked = 1;
-                    result = sem_wait( &pVarClient->sem );
+                    if ( pVarClient->requestTimeout_s > 0)
+                    {
+                        result = clock_gettime(CLOCK_REALTIME, &pVarClient->ts);
+                        if( result == -1)
+                        {
+                            continue;
+                        }
+
+                        /* add the timeout to the current time */
+                        pVarClient->ts.tv_sec += pVarClient->requestTimeout_s;
+
+                        pVarClient->blocked = 1;
+                        result = sem_timedwait( &pVarClient->sem, &pVarClient->ts );
+                    }
+                    else
+                    {
+                        pVarClient->blocked = 1;
+                        result = sem_wait( &pVarClient->sem );
+                    }
+
                     if( result == EOK )
                     {
                         if( pVarClient->debug >= LOG_DEBUG )
@@ -192,7 +213,7 @@ int ClientRequest( VarClient *pVarClient, int signal )
                     }
                     pVarClient->blocked = 0;
                 }
-                while ( result != EOK );
+                while ( result != EOK && result != ETIMEDOUT );
             }
             else
             {

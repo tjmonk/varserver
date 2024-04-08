@@ -692,25 +692,22 @@ int VARSERVER_CreateVar( VARSERVER_HANDLE hVarServer,
 int VARSERVER_Test( VARSERVER_HANDLE hVarServer )
 {
     int result = EINVAL;
-    int i;
+
     VarClient *pVarClient = ValidateHandle( hVarServer );
     if( pVarClient != NULL )
     {
-        for(i=0;i<100;i++)
+        /* use the handle as a cookie */
+        pVarClient->requestVal = (intptr_t)hVarServer;
+        pVarClient->requestType = VARREQUEST_ECHO;
+        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+        if( pVarClient->debug >= LOG_DEBUG )
         {
-            pVarClient->requestVal = i;
-            pVarClient->requestType = VARREQUEST_ECHO;
-            ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
-            if( pVarClient->debug >= LOG_DEBUG )
-            {
-                printf("Client %d sent %d and received %d\n",
-                    pVarClient->clientid,
-                    pVarClient->requestVal,
-                    pVarClient->responseVal);
-            }
+            printf("Client %d sent %d and received %d, result %d\n",
+                pVarClient->clientid,
+                pVarClient->requestVal,
+                pVarClient->responseVal,
+                result);
         }
-
-        result = EOK;
     }
 
     return result;
@@ -3701,6 +3698,10 @@ static int NewClientSemaphore( VarClient *pVarClient )
     if( pVarClient != NULL )
     {
         sem_init( &pVarClient->sem, 1, 0 );
+
+        /* infinite timeout by default */
+        pVarClient->requestTimeout_s = 0;
+
         result = EOK;
     }
 
@@ -3849,6 +3850,42 @@ int VAR_GetFromQueue( VARSERVER_HANDLE hVarServer,
         {
             result = errno;
         }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VAR_GetRequestTimeout                                                     */
+/*!
+    Set the request timeout value
+
+    The VAR_GetRequestTimeout function sets the current request timeout
+    value for the specified variable client. If the value is set to 0,
+    the client will wait indefinitely for a response from the server.
+
+    @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[in]
+        timeout_s
+            timeout value in seconds to set
+
+    @retval EOK - the request timeout was successfully set
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+int VARSERVER_SetRequestTimeout( VARSERVER_HANDLE hVarServer,
+                                 uint32_t timeout_s )
+{
+    int result = EINVAL;
+    VarClient *pVarClient = ValidateHandle( hVarServer );
+
+    if( pVarClient != NULL )
+    {
+        pVarClient->requestTimeout_s = timeout_s;
+        result = EOK;
     }
 
     return result;
