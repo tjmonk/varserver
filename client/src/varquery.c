@@ -80,6 +80,9 @@ static int varquery_AddCacheUnique( VARSERVER_HANDLE hVarServer,
                                     VAR_HANDLE hVar,
                                     void *arg );
 
+static int varquery_PrintType( int fd, VarType type );
+
+
 /*==============================================================================
         Function definitions
 ==============================================================================*/
@@ -167,6 +170,13 @@ int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
         else
         {
             dprintf(fd, "[%d]%s", query.instanceID, query.name );
+        }
+
+        if ( searchType & QUERY_SHOWTYPE )
+        {
+            dprintf(fd, "(" );
+            varquery_PrintType( fd, query.vartype );
+            dprintf(fd, ")" );
         }
 
         if( searchType & QUERY_SHOWVALUE )
@@ -436,6 +446,88 @@ static int varquery_AddCacheUnique( VARSERVER_HANDLE hVarServer,
          ( pVarCache != NULL ) )
     {
         result = VARCACHE_AddUnique( pVarCache, hVar );
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  varquery_PrintType                                                        */
+/*!
+    Print the variable type to the specified file descriptor
+
+    The varquery_PrintType function prints the variable type to the
+    specified file descriptor.
+
+    @param[in]
+        fd
+            file descriptor to print the type to
+
+    @param[in]
+        type
+            variable type to print
+
+    @retval EOK - type print was successful
+    @retval ENOTSUP - type is not supported
+
+==============================================================================*/
+static int varquery_PrintType( int fd, VarType type )
+{
+    int result = EINVAL;
+
+    if ( fd >= 0 )
+    {
+        switch( type )
+        {
+            case VARTYPE_FLOAT:
+                dprintf(fd, "float");
+                result = EOK;
+                break;
+
+            case VARTYPE_BLOB:
+                dprintf(fd, "blob");
+                result = EOK;
+                break;
+
+            case VARTYPE_STR:
+                dprintf(fd, "string");
+                result = EOK;
+                break;
+
+            case VARTYPE_UINT16:
+                dprintf(fd, "uint16");
+                result = EOK;
+                break;
+
+            case VARTYPE_INT16:
+                dprintf(fd, "int16");
+                result = EOK;
+                break;
+
+            case VARTYPE_UINT32:
+                dprintf(fd, "uint32");
+                result = EOK;
+                break;
+
+            case VARTYPE_INT32:
+                dprintf(fd, "int32");
+                result = EOK;
+                break;
+
+            case VARTYPE_UINT64:
+                dprintf(fd, "uint64");
+                result = EOK;
+                break;
+
+            case VARTYPE_INT64:
+                dprintf(fd, "int64");
+                result = EOK;
+                break;
+
+            default:
+                result = ENOTSUP;
+                break;
+        }
     }
 
     return result;
