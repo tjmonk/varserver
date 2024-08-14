@@ -231,7 +231,7 @@ static void usage( char *cmdname )
                 " [-i instanceID]: instance identifier search term\n"
                 " [-h] : display this help\n"
                 " [-v] : output values\n"
-                " [-x] : output type\n",
+                " [-T] : output type\n",
                 cmdname );
     }
 }
@@ -266,7 +266,7 @@ static int ProcessOptions( int argC,
 {
     int c;
     int result = EOK;
-    const char *options = "hvxn:r:f:F:i:u:t:";
+    const char *options = "hvTn:r:f:F:i:u:t:";
 
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
@@ -284,7 +284,7 @@ static int ProcessOptions( int argC,
                     pState->searchType |= QUERY_SHOWVALUE;
                     break;
 
-                case 'x':
+                case 'T':
                     pState->searchType |= QUERY_SHOWTYPE;
                     break;
 
