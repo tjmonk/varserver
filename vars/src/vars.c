@@ -230,7 +230,8 @@ static void usage( char *cmdname )
                 " [-F flagslist]: negative variable flags search. Supercedes -f\n"
                 " [-i instanceID]: instance identifier search term\n"
                 " [-h] : display this help\n"
-                " [-v] : output values\n",
+                " [-v] : output values\n"
+                " [-T] : output type\n",
                 cmdname );
     }
 }
@@ -265,7 +266,7 @@ static int ProcessOptions( int argC,
 {
     int c;
     int result = EOK;
-    const char *options = "hvn:r:f:F:i:u:t:";
+    const char *options = "hvTn:r:f:F:i:u:t:";
 
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
@@ -281,6 +282,10 @@ static int ProcessOptions( int argC,
 
                 case 'v':
                     pState->searchType |= QUERY_SHOWVALUE;
+                    break;
+
+                case 'T':
+                    pState->searchType |= QUERY_SHOWTYPE;
                     break;
 
                 case 'n':

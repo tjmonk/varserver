@@ -2937,6 +2937,9 @@ int VAR_GetFirst( VARSERVER_HANDLE hVarServer,
                 /* get the instanceID */
                 query->instanceID = pVarClient->variableInfo.instanceID;
 
+                /* get the variable data type */
+                query->vartype = pVarClient->variableInfo.var.type;
+
                 /* get the handle of the variable we found */
                 query->hVar = pVarClient->variableInfo.hVar;
 
@@ -3013,6 +3016,9 @@ int VAR_GetNext( VARSERVER_HANDLE hVarServer,
 
                 /* get the instance ID */
                 query->instanceID = pVarClient->variableInfo.instanceID;
+
+                /* get the variable data type */
+                query->vartype = pVarClient->variableInfo.var.type;
 
                 /* get the handle of the variable we found */
                 query->hVar = pVarClient->variableInfo.hVar;

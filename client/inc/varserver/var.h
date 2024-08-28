@@ -104,8 +104,11 @@ typedef uint32_t VAR_HANDLE;
 /*! query output value */
 #define QUERY_SHOWVALUE ( 1 << 5 )
 
+/*! query output value */
+#define QUERY_SHOWTYPE ( 1 << 6 )
+
 /*! negate query results for flags */
-#define QUERY_NEGATE_FLAGS ( 1 << 6 )
+#define QUERY_NEGATE_FLAGS ( 1 << 7 )
 
 /*! Variable flags */
 typedef enum _VarFlags
@@ -243,6 +246,9 @@ typedef struct _VarQuery
 
     /*! instance ID match */
     uint32_t instanceID;
+
+    /*! variable data type */
+    VarType vartype;
 
     /*! search match string */
     char *match;
