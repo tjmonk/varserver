@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
+find_package(Threads REQUIRED)
+
 include(GNUInstallDirs)
 
 project(getvar
@@ -17,8 +19,6 @@ target_include_directories( ${PROJECT_NAME}
 )
 
 target_link_libraries( ${PROJECT_NAME}
-	${CMAKE_THREAD_LIBS_INIT}
-	rt
 	varserver
 )
 

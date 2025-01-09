@@ -6,6 +6,8 @@ project(varserver
 	DESCRIPTION "Variable Server Interface Functions"
 )
 
+find_package(Threads REQUIRED)
+
 include(GNUInstallDirs)
 
 #add the library
@@ -26,7 +28,10 @@ set_target_properties( ${PROJECT_NAME} PROPERTIES
 	SOVERSION 1
 )
 
-target_link_libraries( ${PROJECT_NAME} rt )
+target_link_libraries( ${PROJECT_NAME} PUBLIC
+    ${CMAKE_THREAD_LIBS_INIT}
+    rt
+)
 
 set(VARSERVER_HEADERS
     inc/varserver/varclient.h
