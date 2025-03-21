@@ -114,6 +114,7 @@ static const char *flagNames[] =
     "audit",
     "password",
     "alias",
+    "metric",
     NULL
 };
 

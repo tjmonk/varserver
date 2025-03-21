@@ -141,7 +141,10 @@ typedef enum _VarFlags
     VARFLAG_PASSWORD = 128,
 
     /*! variable has aliases */
-    VARFLAG_ALIAS = 256
+    VARFLAG_ALIAS = 256,
+
+    /*! variable is a metric/counter */
+    VARFLAG_METRIC = 512
 
 } VarFlags;
 

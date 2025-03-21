@@ -247,6 +247,9 @@ static bool varlist_CheckReadPermissions( VarInfo *pVarInfo,
 static bool varlist_CheckWritePermissions( VarInfo *pVarInfo,
                                            VarID *pVarStorage );
 
+static int varlist_HandleMetric( VarInfo *pVarInfo,
+                                 VarStorage *pVarStorage );
+
 static int varlist_Audit( pid_t clientPID,
                           VarID *pVarID,
                           VarInfo *pVarInfo );
@@ -1430,6 +1433,13 @@ int VARLIST_Set( pid_t clientPID,
 
             /* get the storage reference identifier */
             pVarInfo->storageRef = pVarStorage->storageRef;
+
+            /* handle metric counter operations */
+            rc = varlist_HandleMetric( pVarInfo, pVarStorage );
+            if ( rc != EOK )
+            {
+                return rc;
+            }
 
             /* handle trigger notifications */
             rc = varlist_HandleTrigger( clientPID, pVarStorage, hVar );
@@ -4996,6 +5006,73 @@ static bool varlist_CheckWritePermissions( VarInfo *pVarInfo,
     }
 
     return access;
+}
+
+/*============================================================================*/
+/*  varlist_HandleMetric                                                      */
+/*!
+    Handle writes to metric type variables
+
+    The varlist_HandleMetric function handles a write to a variable that
+    has the "metric" flag set.  If the value to be written is zero, the
+    metric is cleared to zero.  If the value to be written is non-zero,
+    the metric is incremented.  Only unsigned integer type variables support
+    metric operations, all others will return ENOTSUP
+
+    @param[in]
+        pVarInfo
+            pointer to the VarInfo request
+
+    @param[in]
+        pVarStorage
+            pointer to the variable storage information
+
+    @retval EOK Ok to proceed
+    @retval EINVAL invalid arguments
+    @retval ENOTSUP metric operations not supported on this variable
+
+==============================================================================*/
+static int varlist_HandleMetric( VarInfo *pVarInfo,
+                                 VarStorage *pVarStorage )
+{
+    int result = EINVAL;
+
+    if ( ( pVarInfo != NULL ) && ( pVarStorage != NULL ) )
+    {
+        result = EOK;
+
+        if ( pVarStorage->flags & VARFLAG_METRIC )
+        {
+            switch( pVarStorage->var.type )
+            {
+                case VARTYPE_UINT16:
+                    if ( pVarInfo->var.val.ui != 0 )
+                    {
+                        pVarInfo->var.val.ui = pVarStorage->var.val.ui + 1;
+                    }
+                    break;
+
+                case VARTYPE_UINT32:
+                    if ( pVarInfo->var.val.ul != 0 )
+                    {
+                        pVarInfo->var.val.ul = pVarStorage->var.val.ul + 1;
+                    }
+                    break;
+
+                case VARTYPE_UINT64:
+                    if ( pVarInfo->var.val.ull != 0 )
+                    {
+                        pVarInfo->var.val.ull = pVarStorage->var.val.ull + 1;
+                    }
+                    break;
+
+                default:
+                    break;
+            }
+        }
+    }
+
+    return result;
 }
 
 /*============================================================================*/
