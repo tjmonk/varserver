@@ -173,7 +173,6 @@ int TRANSACTION_New( pid_t clientPID,
             pTransaction->pInfo = pData;
             pTransaction->hVar = hVar;
             pTransaction->transactionID = ++TransactionCounter;
-
             *pHandle = pTransaction->transactionID;
 
             /* insert the Transaction on the head of the
@@ -307,7 +306,7 @@ void *TRANSACTION_FindByRequestor( pid_t requestor, VAR_HANDLE *hVar )
 void *TRANSACTION_Remove( uint32_t transactionID )
 {
     Transaction *pTransaction = transactionList;
-    Transaction *pPrevTransaction = transactionList;
+    Transaction *pPrevTransaction = NULL;
     void *pTransactionInfo = NULL;
 
     while( pTransaction != NULL )
@@ -319,7 +318,7 @@ void *TRANSACTION_Remove( uint32_t transactionID )
 
             /* remove the transaction from the transaction list
                and put it into the free list */
-            if( pPrevTransaction == transactionList )
+            if( pPrevTransaction == NULL )
             {
                 /* remove the transaction from the head of
                    the transaction list */

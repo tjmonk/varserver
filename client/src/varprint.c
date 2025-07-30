@@ -62,6 +62,7 @@ SOFTWARE.
 #include <ctype.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -114,35 +115,41 @@ int VARPRINT_GetFileDescriptor( int sock,
 {
     int result = EINVAL;
     int conn;
+    fd_set readfds;
+    struct timeval timeout;
+    int sel;
 
-    while ( 1 )
+    /* set up the maximum time to wait for the file descriptor */
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 200000;
+
+    FD_ZERO(&readfds);
+    FD_SET(sock, &readfds);
+
+    /* wait for a connection from a reomote peer or timeout if
+       we don't receive one */
+    sel = select( sock + 1, &readfds, NULL, NULL, &timeout );
+    if ( sel > 0 && FD_ISSET(sock, &readfds))
     {
-        /* wait for a connection from a reomote peer */
+        /* accept the connection  */
         conn = accept(sock, NULL, 0);
         if( conn != -1 )
         {
             /* receive the file descriptor */
             result = varprint_ReceiveFd( conn, fd );
-            if( result == EOK )
-            {
-                /* close the connection after the credentials are sent */
-                close( conn );
 
-                /* indicate success */
-                result = EOK;
-                break;
-            }
-            else
-            {
-                /* failed to send credentials */
-                break;
-            }
+            /* close the connection after the credentials are sent */
+            close( conn );
         }
         else
         {
             result = errno;
-            break;
         }
+    }
+    else if ( sel == 0 )
+    {
+        /* timeout occurred */
+        result = ETIMEDOUT;
     }
 
     return result;
