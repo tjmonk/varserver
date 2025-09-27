@@ -435,9 +435,21 @@ int main(int argc, char **argv)
 void RegisterHandler(void(*f)(int sig, siginfo_t *info, void *ucontext))
 {
     struct sigaction siga;
+    sigset_t mask;
 
     siga.sa_sigaction = f;
     siga.sa_flags = SA_SIGINFO;
+
+    /* Initialize the mask to zero */
+    sigemptyset(&mask);
+
+    /* Add all signals handled by varserver to the mask */
+    sigaddset(&mask, SIG_NEWCLIENT);
+    sigaddset(&mask, SIG_CLIENT_REQUEST);
+    sigaddset(&mask, SIG_TIMER);
+    sigaddset(&mask, SIGINT);
+
+    siga.sa_mask = mask;
 
     /* register the handler function with the real-time signals */
     for (int sig = 1; sig <= SIGRTMAX; ++sig)
