@@ -70,6 +70,7 @@ SOFTWARE.
 #include "stats.h"
 #include "hash.h"
 #include "server.h"
+#include "gc.h"
 
 /*==============================================================================
         Private definitions
@@ -386,6 +387,7 @@ int main(int argc, char **argv)
 
     /* initialize the varserver statistics */
     InitStats();
+    GC_Initialize();
 
     /* register the real-time signal handler */
     RegisterHandler(handler);
@@ -445,6 +447,7 @@ void RegisterHandler(void(*f)(int sig, siginfo_t *info, void *ucontext))
     sigaddset(&mask, SIG_NEWCLIENT);
     sigaddset(&mask, SIG_CLIENT_REQUEST);
     sigaddset(&mask, SIG_STATS_TIMER);
+    sigaddset(&mask, SIG_GC_TIMER);
     sigaddset(&mask, SIGINT);
 
     siga.sa_mask = mask;
@@ -502,6 +505,10 @@ void handler(int sig, siginfo_t *info, void *ucontext)
     else if ( sig == SIG_STATS_TIMER )
     {
         STATS_Process();
+    }
+    else if ( sig == SIG_GC_TIMER )
+    {
+        GC_Process( VarClients, MAX_VAR_CLIENTS );
     }
     else if ( sig == SIGINT )
     {
