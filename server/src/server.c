@@ -78,8 +78,6 @@ SOFTWARE.
 /*! Maximum number of clients */
 #define MAX_VAR_CLIENTS                 ( 4096 )
 
-/*! Timer Signal */
-#define SIG_TIMER                       ( SIGRTMIN + 5 )
 
 /*==============================================================================
         Private types
@@ -446,7 +444,7 @@ void RegisterHandler(void(*f)(int sig, siginfo_t *info, void *ucontext))
     /* Add all signals handled by varserver to the mask */
     sigaddset(&mask, SIG_NEWCLIENT);
     sigaddset(&mask, SIG_CLIENT_REQUEST);
-    sigaddset(&mask, SIG_TIMER);
+    sigaddset(&mask, SIG_STATS_TIMER);
     sigaddset(&mask, SIGINT);
 
     siga.sa_mask = mask;
@@ -501,7 +499,7 @@ void handler(int sig, siginfo_t *info, void *ucontext)
     {
         ProcessRequest( info );
     }
-    else if ( sig == SIG_TIMER )
+    else if ( sig == SIG_STATS_TIMER )
     {
         STATS_Process();
     }

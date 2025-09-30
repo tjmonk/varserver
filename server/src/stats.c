@@ -201,7 +201,7 @@ static void CreateStatsTimer( int timeoutms )
 {
     struct sigevent te;
     struct itimerspec its;
-    int sigNo = SIGRTMIN+5;
+    int sigNo = SIG_STATS_TIMER;
     long secs;
     long msecs;
     timer_t timerID;
