@@ -2017,6 +2017,7 @@ static int InitStats( void )
     size_t i;
     char *pMetricName;
     uint64_t *pMetric;
+    uint64_t *pGCCleaned;
 
     /* initialize an empty stats object */
     STATS_Initialize();
@@ -2052,6 +2053,10 @@ static int InitStats( void )
             RequestHandlers[i].pMetric = pMetric;
         }
     }
+
+    /* GC cleaned counter metric */
+    pGCCleaned = MakeMetric("/varserver/stats/gc_cleaned");
+    STATS_SetGCCleanedPtr(pGCCleaned);
 
     return EOK;
 }

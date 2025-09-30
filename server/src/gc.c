@@ -37,6 +37,7 @@ SOFTWARE.
 #include <sys/mman.h>
 #include <fcntl.h>
 #include "gc.h"
+#include "stats.h"
 
 /*==============================================================================
         Private function declarations
@@ -87,6 +88,7 @@ void GC_Process( VarClient **table, size_t max_clients )
 
             table[i] = NULL;
             fprintf(stderr, "varserver: GC removed stale client pid=%d slot=%zu\n", client_pid, i);
+            STATS_IncrementGCCleaned();
         }
     }
 }

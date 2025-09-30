@@ -52,5 +52,7 @@ void STATS_IncrementRequestCount( void );
 void STATS_Process( void );
 void STATS_SetRequestsPerSecPtr( uint64_t *p );
 void STATS_SetTotalRequestsPtr( uint64_t *p );
+void STATS_SetGCCleanedPtr( uint64_t *p );
+void STATS_IncrementGCCleaned( void );
 
 #endif
