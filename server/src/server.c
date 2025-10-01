@@ -156,6 +156,8 @@ void handler(int sig, siginfo_t *info, void *ucontext);
 /*! variable clients */
 static VarClient *VarClients[MAX_VAR_CLIENTS+1] = {0};
 static VAR_HANDLE hClientInfo = VAR_INVALID;
+/* enable/disable garbage collector via -g; default disabled */
+static int g_enableGC = 0;
 
 /*! Request Handlers - these must appear in the exact same order
     as the request enumerations so they can be looked up directly
@@ -374,10 +376,28 @@ static RequestHandler RequestHandlers[] =
 int main(int argc, char **argv)
 {
     ServerInfo *pServerInfo = NULL;
+    int opt;
 
-    /* argc and argv are unused */
-    (void)argc;
-    (void)argv;
+    /* process command line options */
+    while ( (opt = getopt(argc, argv, "hg")) != -1 )
+    {
+        switch (opt)
+        {
+            case 'g':
+                g_enableGC = 1;
+                break;
+            case 'h':
+                fprintf(stderr,
+                        "usage: %s [-h] [-g]\n"
+                        "  -h : display this help\n"
+                        "  -g : enable garbage collector (default: disabled)\n",
+                        argv[0]);
+                return 0;
+            default:
+                fprintf(stderr, "Try '%s -h' for help.\n", argv[0]);
+                return 1;
+        }
+    }
 
     /* get the user id of the user running varserver */
     VARLIST_SetUser();
@@ -387,7 +407,10 @@ int main(int argc, char **argv)
 
     /* initialize the varserver statistics */
     InitStats();
-    GC_Initialize();
+    if ( g_enableGC )
+    {
+        GC_Initialize();
+    }
 
     /* register the real-time signal handler */
     RegisterHandler(handler);
