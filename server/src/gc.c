@@ -57,40 +57,58 @@ void GC_Initialize(void)
 /* Determine if a PID is alive: kill(pid,0) returns 0 if exists or -1 with ESRCH if not */
 static int pid_is_alive(pid_t pid)
 {
-    if (pid <= 0) return 0;
-    if (kill(pid, 0) == 0) return 1;
-    return (errno == EPERM); /* exists but no permission */
+    int alive = 0;
+
+    if (pid > 0)
+    {
+        if (kill(pid, 0) == 0)
+        {
+            alive = 1;
+        }
+        else if (errno == EPERM)
+        {
+            /* process exists but we lack permission */
+            alive = 1;
+        }
+    }
+
+    return alive;
 }
 
 void GC_Process( VarClient **table, size_t max_clients )
 {
     size_t i;
-    if (!table || max_clients == 0) return;
 
-    for ( i = 1; i < max_clients; ++i )
+    if (table && (max_clients > 0))
     {
-        VarClient *p = table[i];
-        if (!p) continue;
-
-        const pid_t client_pid = p->client_pid;
-
-        if (!pid_is_alive(client_pid))
+        for ( i = 1; i < max_clients; ++i )
         {
-            /* stale entry: remove shared object and clear table slot */
-            char clientname[64];
-            snprintf(clientname, sizeof(clientname), "/varclient_%d", client_pid);
+            VarClient *p = table[i];
+            if (p)
+            {
+                const pid_t client_pid = p->client_pid;
 
-            /* Attempt to unlink shared memory object */
-            shm_unlink(clientname);
+                if (!pid_is_alive(client_pid))
+                {
+                    /* stale entry: remove shared object and clear table slot */
+                    char clientname[64];
+                    snprintf(clientname, sizeof(clientname), "/varclient_%d", client_pid);
 
-            /* Unmap the client mapping if this process mapped it */
-            munmap(p, sizeof(VarClient));
+                    /* Attempt to unlink shared memory object */
+                    shm_unlink(clientname);
 
-            table[i] = NULL;
-            fprintf(stderr, "varserver: GC removed stale client pid=%d slot=%zu\n", client_pid, i);
-            STATS_IncrementGCCleaned();
+                    /* Unmap the client mapping if this process mapped it */
+                    munmap(p, sizeof(VarClient));
+
+                    table[i] = NULL;
+                    fprintf(stderr, "varserver: GC removed stale client pid=%d slot=%zu\n", client_pid, i);
+                    STATS_IncrementGCCleaned();
+                }
+            }
         }
     }
+
+    return;
 }
 
 /*============================================================================*/
