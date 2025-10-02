@@ -42,7 +42,7 @@ SOFTWARE.
 /*==============================================================================
         Private function declarations
 ==============================================================================*/
-static void CreateGCTimer( int timeoutms );
+static void CreateGCTimer(int timeoutms);
 
 /*==============================================================================
         Public function definitions
@@ -51,10 +51,12 @@ static void CreateGCTimer( int timeoutms );
 void GC_Initialize(void)
 {
     /* 10 seconds */
-    CreateGCTimer( 10000 );
+    CreateGCTimer(10000);
 }
 
-/* Determine if a PID is alive: kill(pid,0) returns 0 if exists or -1 with ESRCH if not */
+/* Determine if a PID is alive: kill(pid,0)
+ * returns 0 if exists or -1 with ESRCH if not
+ */
 static int pid_is_alive(pid_t pid)
 {
     int alive = 0;
@@ -75,13 +77,13 @@ static int pid_is_alive(pid_t pid)
     return alive;
 }
 
-void GC_Process( VarClient **table, size_t max_clients )
+void GC_Process(VarClient **table, size_t max_clients)
 {
     size_t i;
 
     if (table && (max_clients > 0))
     {
-        for ( i = 1; i < max_clients; ++i )
+        for (i = 1; i < max_clients; ++i)
         {
             VarClient *p = table[i];
             if (p)
@@ -92,7 +94,8 @@ void GC_Process( VarClient **table, size_t max_clients )
                 {
                     /* stale entry: remove shared object and clear table slot */
                     char clientname[64];
-                    snprintf(clientname, sizeof(clientname), "/varclient_%d", client_pid);
+                    snprintf(clientname, sizeof(clientname),
+                             "/varclient_%d", client_pid);
 
                     /* Attempt to unlink shared memory object */
                     shm_unlink(clientname);
@@ -101,7 +104,9 @@ void GC_Process( VarClient **table, size_t max_clients )
                     munmap(p, sizeof(VarClient));
 
                     table[i] = NULL;
-                    fprintf(stderr, "varserver: GC removed stale client pid=%d slot=%zu\n", client_pid, i);
+                    fprintf(stderr, "varserver: GC removed stale client "
+                                    "pid=%d slot=%zu\n",
+                            client_pid, i);
                     STATS_IncrementGCCleaned();
                 }
             }
@@ -121,7 +126,7 @@ void GC_Process( VarClient **table, size_t max_clients )
             timer interval in milliseconds
 
 ==============================================================================*/
-static void CreateGCTimer( int timeoutms )
+static void CreateGCTimer(int timeoutms)
 {
     struct sigevent te;
     struct itimerspec its;
