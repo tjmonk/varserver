@@ -23,6 +23,7 @@ add_executable( ${PROJECT_NAME}
     src/varlist.c
     src/stats.c
     src/hash.c
+    src/gc.c
 )
 
 target_include_directories( ${PROJECT_NAME}

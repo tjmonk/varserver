@@ -1,7 +1,7 @@
 /*============================================================================
 MIT License
 
-Copyright (c) 2023 Trevor Monk
+Copyright (c) 2025
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,37 +22,32 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ============================================================================*/
 
-#ifndef STATS_H
-#define STATS_H
+#ifndef GC_H
+#define GC_H
 
 /*============================================================================
         Includes
 ============================================================================*/
 
-#include <stdint.h>
-#include <sys/types.h>
-#include <unistd.h>
+#include <signal.h>
+#include <stddef.h>
+#include <varserver/varclient.h>
 
 /*============================================================================
         Public definitions
 ============================================================================*/
-/*! Timer Signal */
-#define SIG_STATS_TIMER                 ( SIGRTMIN + 5 )
 
-/*============================================================================
-        File Scoped Variables
-============================================================================*/
+/*! Timer Signal used by GC */
+#define SIG_GC_TIMER ( SIGRTMIN + 6 )
 
 /*============================================================================
         Public function declarations
 ============================================================================*/
 
-void STATS_Initialize( void );
-void STATS_IncrementRequestCount( void );
-void STATS_Process( void );
-void STATS_SetRequestsPerSecPtr( uint64_t *p );
-void STATS_SetTotalRequestsPtr( uint64_t *p );
-void STATS_SetGCCleanedPtr( uint64_t *p );
-void STATS_IncrementGCCleaned( void );
+/* Initialize GC timer (10s interval) */
+void GC_Initialize(void);
 
-#endif
+/* Run GC over the client table */
+void GC_Process( VarClient **table, size_t max_clients );
+
+#endif /* GC_H */

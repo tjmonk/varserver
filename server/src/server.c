@@ -70,6 +70,7 @@ SOFTWARE.
 #include "stats.h"
 #include "hash.h"
 #include "server.h"
+#include "gc.h"
 
 /*==============================================================================
         Private definitions
@@ -78,8 +79,6 @@ SOFTWARE.
 /*! Maximum number of clients */
 #define MAX_VAR_CLIENTS                 ( 4096 )
 
-/*! Timer Signal */
-#define SIG_TIMER                       ( SIGRTMIN + 5 )
 
 /*==============================================================================
         Private types
@@ -157,6 +156,8 @@ void handler(int sig, siginfo_t *info, void *ucontext);
 /*! variable clients */
 static VarClient *VarClients[MAX_VAR_CLIENTS+1] = {0};
 static VAR_HANDLE hClientInfo = VAR_INVALID;
+/* enable/disable garbage collector via -g; default disabled */
+static int g_enableGC = 0;
 
 /*! Request Handlers - these must appear in the exact same order
     as the request enumerations so they can be looked up directly
@@ -375,10 +376,28 @@ static RequestHandler RequestHandlers[] =
 int main(int argc, char **argv)
 {
     ServerInfo *pServerInfo = NULL;
+    int opt;
 
-    /* argc and argv are unused */
-    (void)argc;
-    (void)argv;
+    /* process command line options */
+    while ( (opt = getopt(argc, argv, "hg")) != -1 )
+    {
+        switch (opt)
+        {
+            case 'g':
+                g_enableGC = 1;
+                break;
+            case 'h':
+                fprintf(stderr,
+                        "usage: %s [-h] [-g]\n"
+                        "  -h : display this help\n"
+                        "  -g : enable garbage collector (default: disabled)\n",
+                        argv[0]);
+                return 0;
+            default:
+                fprintf(stderr, "Try '%s -h' for help.\n", argv[0]);
+                return 1;
+        }
+    }
 
     /* get the user id of the user running varserver */
     VARLIST_SetUser();
@@ -388,6 +407,10 @@ int main(int argc, char **argv)
 
     /* initialize the varserver statistics */
     InitStats();
+    if ( g_enableGC )
+    {
+        GC_Initialize();
+    }
 
     /* register the real-time signal handler */
     RegisterHandler(handler);
@@ -446,7 +469,8 @@ void RegisterHandler(void(*f)(int sig, siginfo_t *info, void *ucontext))
     /* Add all signals handled by varserver to the mask */
     sigaddset(&mask, SIG_NEWCLIENT);
     sigaddset(&mask, SIG_CLIENT_REQUEST);
-    sigaddset(&mask, SIG_TIMER);
+    sigaddset(&mask, SIG_STATS_TIMER);
+    sigaddset(&mask, SIG_GC_TIMER);
     sigaddset(&mask, SIGINT);
 
     siga.sa_mask = mask;
@@ -501,9 +525,13 @@ void handler(int sig, siginfo_t *info, void *ucontext)
     {
         ProcessRequest( info );
     }
-    else if ( sig == SIG_TIMER )
+    else if ( sig == SIG_STATS_TIMER )
     {
         STATS_Process();
+    }
+    else if ( sig == SIG_GC_TIMER )
+    {
+        GC_Process( VarClients, MAX_VAR_CLIENTS );
     }
     else if ( sig == SIGINT )
     {
@@ -2012,6 +2040,7 @@ static int InitStats( void )
     size_t i;
     char *pMetricName;
     uint64_t *pMetric;
+    uint64_t *pGCCleaned;
 
     /* initialize an empty stats object */
     STATS_Initialize();
@@ -2047,6 +2076,10 @@ static int InitStats( void )
             RequestHandlers[i].pMetric = pMetric;
         }
     }
+
+    /* GC cleaned counter metric */
+    pGCCleaned = MakeMetric("/varserver/stats/gc_cleaned");
+    STATS_SetGCCleanedPtr(pGCCleaned);
 
     return EOK;
 }

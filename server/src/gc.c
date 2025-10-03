@@ -1,0 +1,193 @@
+/*==============================================================================
+MIT License
+
+Copyright (c) 2025
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+==============================================================================*/
+
+/*==============================================================================
+        Includes
+==============================================================================*/
+
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <errno.h>
+#include <string.h>
+#include <time.h>
+#include <signal.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include "gc.h"
+#include "stats.h"
+
+/*==============================================================================
+        Private function declarations
+==============================================================================*/
+static int pid_is_alive(pid_t pid);
+static void CreateGCTimer(int timeoutms);
+
+/*==============================================================================
+        Public function definitions
+==============================================================================*/
+
+/*============================================================================*/
+/*  Determine if a PID is alive                                               */
+/*!
+    This function uses the kill() system call with a signal of 0 to check
+    for the existence of the process. If the process exists, the call
+    will succeed and return 1. If the process does not exist, it will
+    return 0.
+
+    @param[in] pid
+        The process ID to check
+    @retval 1 if the process is alive, 0 if not
+
+==============================================================================*/
+static int pid_is_alive(pid_t pid)
+{
+    int alive = 0;
+
+    if (pid > 0)
+    {
+        if (kill(pid, 0) == 0)
+        {
+            alive = 1;
+        }
+        else if (errno == EPERM)
+        {
+            /* process exists but we lack permission */
+            alive = 1;
+        }
+    }
+
+    return alive;
+}
+
+/*============================================================================*/
+/*  CreateGCTimer                                                             */
+/*!
+    Create a repeating GC timer
+
+    @param[in]
+        timeoutms
+            timer interval in milliseconds
+
+==============================================================================*/
+static void CreateGCTimer(int timeoutms)
+{
+    struct sigevent te;
+    struct itimerspec its;
+    long secs;
+    long msecs;
+    timer_t timerID;
+
+    secs = timeoutms / 1000;
+    msecs = timeoutms % 1000;
+
+    /* Set and enable alarm */
+    te.sigev_notify = SIGEV_SIGNAL;
+    te.sigev_signo = SIG_GC_TIMER;
+    te.sigev_value.sival_int = 1;
+    timer_create(CLOCK_REALTIME, &te, &timerID);
+
+    its.it_interval.tv_sec = secs;
+    its.it_interval.tv_nsec = msecs * 1000000L;
+    its.it_value.tv_sec = secs;
+    its.it_value.tv_nsec = msecs * 1000000L;
+    timer_settime(timerID, 0, &its, NULL);
+}
+
+/*============================================================================*/
+/*  Garbage Collection Initialization                                         */
+/*!
+    Initialize the GC timer
+
+    The GC_Initialize function initializes the garbage collection timer
+    which triggers the GC_Process function every 10 seconds.
+
+    @retval none
+
+==============================================================================*/
+void GC_Initialize(void)
+{
+    /* 10 seconds */
+    CreateGCTimer(10000);
+}
+
+/*============================================================================*/
+/*  Garbage Collection Process                                                */
+/*!
+    The GC_Process function runs the garbage collector over the client table
+
+    The GC_Process function scans the variable server client table and
+    removes any stale entries. A stale entry is one where the client process
+    no longer exists.
+
+    @param[in]
+        table
+            pointer to the variable server client table
+
+    @param[in]
+        max_clients
+            maximum number of clients supported by the variable server
+
+    @retval none
+
+==============================================================================*/
+void GC_Process(VarClient **table, size_t max_clients)
+{
+    size_t i;
+
+    if (table && (max_clients > 0))
+    {
+        for (i = 1; i < max_clients; ++i)
+        {
+            VarClient *p = table[i];
+            if (p)
+            {
+                const pid_t client_pid = p->client_pid;
+
+                if (!pid_is_alive(client_pid))
+                {
+                    /* stale entry: remove shared object and clear table slot */
+                    char clientname[64];
+                    snprintf(clientname, sizeof(clientname),
+                             "/varclient_%d", client_pid);
+
+                    /* Attempt to unlink shared memory object */
+                    shm_unlink(clientname);
+
+                    /* Unmap the client mapping if this process mapped it */
+                    munmap(p, sizeof(VarClient));
+
+                    table[i] = NULL;
+                    fprintf(stderr, "varserver: GC removed stale client "
+                                    "pid=%d slot=%zu\n",
+                            client_pid, i);
+                    STATS_IncrementGCCleaned();
+                }
+            }
+        }
+    }
+
+    return;
+}

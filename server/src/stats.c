@@ -73,6 +73,9 @@ typedef struct _RequestStats
     /*! pointer to the VarObject containing the totalRequestCount */
     uint64_t *pTotalRequests;
 
+    /*! pointer to the VarObject containing the GC cleaned count */
+    uint64_t *pGCCleaned;
+
 } RequestStats;
 
 /*==============================================================================
@@ -165,6 +168,38 @@ void STATS_SetTotalRequestsPtr( uint64_t *p )
 }
 
 /*============================================================================*/
+/*  STATS_SetGCCleanedPtr                                                     */
+/*!
+    Set the pointer to the GC cleaned statistics
+
+    The STATS_SetGCCleanedPtr function sets the pointer to the total number of
+    dead clients cleaned up by the garbage collector.
+
+    @param[in]
+        p
+            pointer to the storage for the GC cleaned statistic
+
+==============================================================================*/
+void STATS_SetGCCleanedPtr( uint64_t *p )
+{
+    stats.pGCCleaned = p;
+}
+
+/*============================================================================*/
+/*  STATS_IncrementGCCleaned                                                  */
+/*!
+    Increment the GC cleaned counter
+
+==============================================================================*/
+void STATS_IncrementGCCleaned( void )
+{
+    if ( stats.pGCCleaned != NULL )
+    {
+        (*stats.pGCCleaned)++;
+    }
+}
+
+/*============================================================================*/
 /*  STATS_Process                                                             */
 /*!
     Process the statistics
@@ -201,7 +236,7 @@ static void CreateStatsTimer( int timeoutms )
 {
     struct sigevent te;
     struct itimerspec its;
-    int sigNo = SIGRTMIN+5;
+    int sigNo = SIG_STATS_TIMER;
     long secs;
     long msecs;
     timer_t timerID;
