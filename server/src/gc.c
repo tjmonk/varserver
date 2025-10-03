@@ -49,15 +49,19 @@ static void CreateGCTimer(int timeoutms);
         Public function definitions
 ==============================================================================*/
 
-void GC_Initialize(void)
-{
-    /* 10 seconds */
-    CreateGCTimer(10000);
-}
+/*============================================================================*/
+/*  Determine if a PID is alive                                               */
+/*!
+    This function uses the kill() system call with a signal of 0 to check
+    for the existence of the process. If the process exists, the call
+    will succeed and return 1. If the process does not exist, it will
+    return 0.
 
-/* Determine if a PID is alive: kill(pid,0)
- * returns 0 if exists or -1 with ESRCH if not
- */
+    @param[in] pid
+        The process ID to check
+    @retval 1 if the process is alive, 0 if not
+
+==============================================================================*/
 static int pid_is_alive(pid_t pid)
 {
     int alive = 0;
@@ -78,6 +82,77 @@ static int pid_is_alive(pid_t pid)
     return alive;
 }
 
+/*============================================================================*/
+/*  CreateGCTimer                                                             */
+/*!
+    Create a repeating GC timer
+
+    @param[in]
+        timeoutms
+            timer interval in milliseconds
+
+==============================================================================*/
+static void CreateGCTimer(int timeoutms)
+{
+    struct sigevent te;
+    struct itimerspec its;
+    long secs;
+    long msecs;
+    timer_t timerID;
+
+    secs = timeoutms / 1000;
+    msecs = timeoutms % 1000;
+
+    /* Set and enable alarm */
+    te.sigev_notify = SIGEV_SIGNAL;
+    te.sigev_signo = SIG_GC_TIMER;
+    te.sigev_value.sival_int = 1;
+    timer_create(CLOCK_REALTIME, &te, &timerID);
+
+    its.it_interval.tv_sec = secs;
+    its.it_interval.tv_nsec = msecs * 1000000L;
+    its.it_value.tv_sec = secs;
+    its.it_value.tv_nsec = msecs * 1000000L;
+    timer_settime(timerID, 0, &its, NULL);
+}
+
+/*============================================================================*/
+/*  Garbage Collection Initialization                                         */
+/*!
+    Initialize the GC timer
+
+    The GC_Initialize function initializes the garbage collection timer
+    which triggers the GC_Process function every 10 seconds.
+
+    @retval none
+
+==============================================================================*/
+void GC_Initialize(void)
+{
+    /* 10 seconds */
+    CreateGCTimer(10000);
+}
+
+/*============================================================================*/
+/*  Garbage Collection Process                                                */
+/*!
+    The GC_Process function runs the garbage collector over the client table
+
+    The GC_Process function scans the variable server client table and
+    removes any stale entries. A stale entry is one where the client process
+    no longer exists.
+
+    @param[in]
+        table
+            pointer to the variable server client table
+
+    @param[in]
+        max_clients
+            maximum number of clients supported by the variable server
+
+    @retval none
+
+==============================================================================*/
 void GC_Process(VarClient **table, size_t max_clients)
 {
     size_t i;
@@ -115,38 +190,4 @@ void GC_Process(VarClient **table, size_t max_clients)
     }
 
     return;
-}
-
-/*============================================================================*/
-/*  CreateGCTimer                                                             */
-/*!
-    Create a repeating GC timer
-
-    @param[in]
-        timeoutms
-            timer interval in milliseconds
-
-==============================================================================*/
-static void CreateGCTimer(int timeoutms)
-{
-    struct sigevent te;
-    struct itimerspec its;
-    long secs;
-    long msecs;
-    timer_t timerID;
-
-    secs = timeoutms / 1000;
-    msecs = timeoutms % 1000;
-
-    /* Set and enable alarm */
-    te.sigev_notify = SIGEV_SIGNAL;
-    te.sigev_signo = SIG_GC_TIMER;
-    te.sigev_value.sival_int = 1;
-    timer_create(CLOCK_REALTIME, &te, &timerID);
-
-    its.it_interval.tv_sec = secs;
-    its.it_interval.tv_nsec = msecs * 1000000L;
-    its.it_value.tv_sec = secs;
-    its.it_value.tv_nsec = msecs * 1000000L;
-    timer_settime(timerID, 0, &its, NULL);
 }
