@@ -3078,6 +3078,56 @@ int VAR_Notify( VARSERVER_HANDLE hVarServer,
         pVarClient->requestType = VARREQUEST_NOTIFY;
         pVarClient->variableInfo.hVar = hVar;
         pVarClient->variableInfo.notificationType = notificationType;
+        pVarClient->variableInfo.flags = 0;
+
+        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  VAR_NotifyNotSelf                                                         */
+/*!
+    Register a notification for a specific variable
+
+    The VAR_Notify function requests a notification for an action
+    on the specified variable but will suppress the notification
+    if it would be sent to the client originating the notifcation
+    signal.
+
+    @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[in]
+        hVar
+            handle to the variable to be notified on
+
+    @param[in]
+        notification
+            the type of notification requested
+
+
+    @retval EOK - the notification request was registered successfully
+    @retval EINVAL - invalid arguments
+
+==============================================================================*/
+int VAR_NotifyNotSelf( VARSERVER_HANDLE hVarServer,
+                       VAR_HANDLE hVar,
+                       NotificationType notificationType )
+{
+    int result = EINVAL;
+    VarClient *pVarClient = ValidateHandle( hVarServer );
+
+    if( pVarClient != NULL )
+    {
+        pVarClient->requestType = VARREQUEST_NOTIFY;
+        pVarClient->variableInfo.hVar = hVar;
+        pVarClient->variableInfo.notificationType = notificationType;
+
+        /* set flag to suppress self-notification */
+        pVarClient->variableInfo.flags = NOTIFY_FLAG_NO_SELF;
 
         result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
     }

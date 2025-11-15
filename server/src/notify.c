@@ -111,6 +111,10 @@ static mqd_t notify_GetQueue( pid_t pid );
         pid
             process id of the client to be notified
 
+    @param[in]
+        flags
+            notification customization flags
+
     @retval EOK the notification was successfully added
     @retval ENOTSUP the notification is not supported
     @retval EINVAL invalid arguments
@@ -119,7 +123,8 @@ static mqd_t notify_GetQueue( pid_t pid );
 int NOTIFY_Add( Notification **ppNotification,
                 NotificationType type,
                 VAR_HANDLE hVar,
-                pid_t pid )
+                pid_t pid,
+                uint32_t flags )
 {
     int result = EINVAL;
     Notification *pNotification;
@@ -183,6 +188,7 @@ int NOTIFY_Add( Notification **ppNotification,
                 pNotification->pid = pid;
                 pNotification->type = type;
                 pNotification->hVar = hVar;
+                pNotification->flags = flags;
 
                 /* notification successfully registered */
                 result = EOK;
@@ -431,11 +437,20 @@ int NOTIFY_Signal( pid_t pid,
                         break;
 
                     case NOTIFY_MODIFIED:
-                        /* override handle so the client receiving the
-                        notification gets the handle they requested and
-                        not a different one in case of aliasing */
-                        handleToSend = pNotification->hVar;
-                        sig = SIGRTMIN+6;
+                        if ( ( pNotification->flags & NOTIFY_FLAG_NO_SELF ) &&
+                             ( pNotification->pid == pid ) )
+                        {
+                            /* don't send MODIFIED signal to self */
+                            sig = -1;
+                        }
+                        else
+                        {
+                            /* override handle so the client receiving the
+                            notification gets the handle they requested and
+                            not a different one in case of aliasing */
+                            handleToSend = pNotification->hVar;
+                            sig = SIGRTMIN+6;
+                        }
                         break;
 
                     case NOTIFY_CALC:

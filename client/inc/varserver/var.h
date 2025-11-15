@@ -83,6 +83,9 @@ SOFTWARE.
 /*! invalid variable handle */
 #define VAR_INVALID     ( 0 )
 
+/*! Notification customization flags */
+#define NOTIFY_FLAG_NO_SELF ( 1 << 0 )
+
 /*! handle to a variable stored in the variable server */
 typedef uint32_t VAR_HANDLE;
 

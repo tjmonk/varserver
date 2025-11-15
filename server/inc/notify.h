@@ -88,6 +88,9 @@ typedef struct _Notification
     /*! message queue signal notification is pending */
     bool pending;
 
+    /*! notification flags */
+    uint32_t flags;
+
     /*! the variable handle associated with the notification request */
     VAR_HANDLE hVar;
 
@@ -120,7 +123,8 @@ Notification *NOTIFY_Find( Notification *pNotification,
 int NOTIFY_Add( Notification **ppNotification,
                 NotificationType type,
                 VAR_HANDLE hVar,
-                pid_t pid );
+                pid_t pid,
+                uint32_t flags );
 
 int NOTIFY_Cancel( Notification **ppNotification,
                    NotificationType type,

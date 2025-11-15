@@ -3749,9 +3749,13 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
     NotificationType notifyType;
     VarID *pVarID;
     VAR_HANDLE hVar = VAR_INVALID;
+    uint32_t flags;
 
     if( pVarInfo != NULL )
     {
+        /* get modification flags */
+        flags = pVarInfo->flags;
+
         pVarID = varlist_GetVarID( pVarInfo );
         if ( pVarID != NULL )
         {
@@ -3775,7 +3779,8 @@ int VARLIST_RequestNotify( VarInfo *pVarInfo, pid_t pid )
             result = NOTIFY_Add( &pVarStorage->pNotifications,
                                  notifyType,
                                  hVar,
-                                 pid );
+                                 pid,
+                                 flags );
             if( result == EOK )
             {
                 if( notifyType == NOTIFY_MODIFIED )
