@@ -207,6 +207,7 @@ static int varlist_SetFloat( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int varlist_SetStr( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int varlist_SetBlob( VarStorage *pVarStorage, VarInfo *pVarInfo );
 static int varlist_Calc( VarClient *pVarClient, void *arg );
+static int varlist_CalcError( VarClient *pVarClient, void *arg );
 
 static int varlist_SendNotifications( pid_t clientPID,
                                       VarStorage *pVarStorage,
@@ -234,6 +235,12 @@ static int varlist_CopyVarInfoBlobToClient( VarClient *pVarClient,
                                             VarInfo *pVarInfo );
 static int varlist_CopyVarInfoStringToClient( VarClient *pVarClient,
                                               VarInfo *pVarInfo );
+
+static int varlist_CopyVarStorageBlobToClient( VarClient *pVarClient,
+                                               VarStorage *pVarStorage );
+
+static int varlist_CopyVarStorageStringToClient( VarClient *pVarClient,
+                                                 VarStorage *pVarStorage );
 
 static void *varlist_GetNotificationPayload( VAR_HANDLE hVar,
                                              VarStorage *pVarStorage,
@@ -1590,6 +1597,97 @@ int VARLIST_Set( pid_t clientPID,
 }
 
 /*============================================================================*/
+/*  VARLIST_CalcResponse                                                      */
+/*!
+    Handle a CALC response from a client
+
+    The VARLIST_CalcResponse function handles a CALC response from a client.
+    It is used to unblock the requesting client and pass an error message
+    when the calc cannot be completed successfully.
+
+    @param[in]
+        clientPID
+            the process ID of the responding client
+
+    @param[in]
+        pVarInfo
+            Pointer to the variable definition containing the handle
+            of the variable containing the notification list
+            of the clients to notify.
+
+    @param[in]
+        clientInfo
+            opaque pointer to the client VarClient object
+
+    @retval EOK the calc response was successfully handled
+    @retval ENOENT the variable does not exist
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+int VARLIST_CalcResponse( pid_t clientPID,
+                          VarInfo *pVarInfo,
+                          void *clientInfo )
+{
+    int result = EINVAL;
+    VarID *pVarID;
+    VarStorage *pVarStorage = NULL;
+
+    if( ( pVarInfo != NULL ) &&
+        ( clientInfo != NULL ) )
+    {
+        /* get the variable handle and storage */
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
+        {
+            pVarStorage = pVarID->pVarStorage;
+        }
+
+        /* check if the variable is found and is not read-only */
+        if ( ( pVarStorage != NULL ) &&
+             ( varlist_CheckReadPermissions( pVarInfo, pVarID ) ) )
+        {
+            /* check if the requesting client has access to send the
+               calc response */
+            if ( ( pVarStorage->flags & VARFLAG_READONLY ) ||
+                 ( varlist_CheckWritePermissions(pVarInfo, pVarID) == false ) ||
+                 ( NOTIFY_Find( pVarStorage->pNotifications,
+                                NOTIFY_CALC,
+                                clientPID ) == NULL ) )
+            {
+                /* indicate the responding client does not have access
+                   to the variable */
+                result = EACCES;
+            }
+            else
+            {
+                /* check for any CALC blocked clients on the variable */
+                if( pVarStorage->notifyMask & NOTIFY_MASK_HAS_CALC_BLOCK )
+                {
+                    /* unblock the CALC blocked clients */
+                    UnblockClients( pVarStorage->storageRef,
+                                    NOTIFY_CALC,
+                                    varlist_CalcError,
+                                    clientInfo );
+
+                    /* indicate we no longer have CALC blocked clients */
+                    pVarStorage->notifyMask &= ~NOTIFY_MASK_HAS_CALC_BLOCK;
+                }
+
+                /* success */
+                result = EOK;
+            }
+        }
+        else
+        {
+            /* the requested variable does not exist */
+            result = ENOENT;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
 /*  varlist_Audit                                                             */
 /*!
     Create a variable change audit log
@@ -2085,6 +2183,94 @@ static int varlist_Calc( VarClient *pVarClient, void *arg )
 }
 
 /*============================================================================*/
+/*  varlist_CalcError                                                         */
+/*!
+    Function to be applied while unblocking CALC blocked clients
+
+    The varlist_CalcError function is applied during unblocking of CALC blocked
+    clients when an error has occurred during the CALC processing.
+    It updates the clients variable object from the stale data in the
+    varstorage.
+
+    @param[in,out]
+        pVarClient
+            Pointer to the VarClient to receive the error
+
+    @param[in]
+        arg
+            opaque pointer to the source client
+
+    @retval EOK the error was successfully delivered
+    @retval EINVAL invalid arguments
+
+==============================================================================*/
+static int varlist_CalcError( VarClient *pVarClient, void *arg )
+{
+    int result = EINVAL;
+    VarClient *pRespondingClient = (VarClient *)arg;
+    VarType varType;
+    size_t len;
+    VarID *pVarID;
+    VarStorage *pVarStorage = NULL;
+    VarInfo *pVarInfo;
+
+    if( ( pVarClient != NULL ) &&
+        ( pRespondingClient != NULL ) )
+    {
+        pVarClient->responseVal = pRespondingClient->responseVal;
+
+        pVarInfo = &pRespondingClient->variableInfo;
+
+        pVarID = varlist_GetVarID( pVarInfo );
+        if ( pVarID != NULL )
+        {
+            pVarStorage = pVarID->pVarStorage;
+        }
+
+        if ( pVarStorage != NULL )
+        {
+            /* get the storage reference identifier */
+            pVarInfo->storageRef = pVarStorage->storageRef;
+
+            /* copy the format specifier */
+            memcpy( pVarClient->variableInfo.formatspec,
+                    pVarStorage->formatspec,
+                    MAX_FORMATSPEC_LEN );
+
+            /* copy the variable type from the varstore */
+            varType = pVarStorage->var.type;
+            pVarClient->variableInfo.var.type = varType;
+
+            /* copy the variable length from the varstore */
+            len = pVarStorage->var.len;
+            pVarClient->variableInfo.var.len = len;
+
+            if( varType == VARTYPE_STR )
+            {
+                /* copy old string from varstorage */
+                result = varlist_CopyVarStorageStringToClient( pVarClient,
+                                                               pVarStorage );
+            }
+            else if ( varType == VARTYPE_BLOB )
+            {
+                /* copy old blob from varstorage */
+                result = varlist_CopyVarStorageBlobToClient( pVarClient,
+                                                             pVarStorage );
+            }
+            else
+            {
+                /* copy the source VarObject to the VarClient */
+                pVarClient->variableInfo.var.val = pVarStorage->var.val;
+
+                result = EOK;
+            }
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
 /*  varlist_CopyVarInfoBlobToClient                                           */
 /*!
     Copy a VarInfo blob into the client's working buffer
@@ -2199,6 +2385,141 @@ static int varlist_CopyVarInfoStringToClient( VarClient *pVarClient,
             {
                 /* copy the variable value into the client's working buffer */
                 strcpy( &pVarClient->workbuf, pVarInfo->var.val.str );
+
+                result = EOK;
+
+            }
+            else
+            {
+                /* no source string to copy */
+                result = ENOENT;
+            }
+        }
+        else
+        {
+            /* source string is too big to fit in the client's buffer */
+            result = E2BIG;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  varlist_CopyVarStorageBlobToClient                                        */
+/*!
+    Copy a VarStorage blob into the client's working buffer
+
+    The varlist_CopyVarStorageBlobToClient function copies the VarStorage
+    object var pointed to by the pVarStorage argument into the working buffer
+    of the client pointed to by pVarClient
+
+    Blobs are copied directly into the client's working buffer
+
+    @param[in,out]
+        pVarClient
+            Pointer to the VarClient containing the working buffer to receive
+            the blob data
+
+    @param[in]
+        pVarStorage
+            pointer to the VarStorage object containing the blob to copy
+
+    @retval EOK the blob was successfully copied
+    @retval EINVAL invalid arguments
+    @retval ENOENT no blob data contained in the source VarStorage object
+    @retval E2BIG the blob in the source VarObject will not fit in the
+            client's working buffer
+
+==============================================================================*/
+static int varlist_CopyVarStorageBlobToClient( VarClient *pVarClient,
+                                               VarStorage *pVarStorage )
+{
+    int result = EINVAL;
+    size_t destlen;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pVarStorage != NULL ) )
+    {
+        /* get the destination blob size */
+        destlen = pVarClient->variableInfo.var.len;
+
+        /* check that the blob will fit */
+        if( ( pVarStorage->var.len <= destlen ) &&
+            ( destlen <= pVarClient->workbufsize ) )
+        {
+            if( pVarStorage->var.val.blob != NULL )
+            {
+                /* copy the blob value into the client's working buffer */
+                memcpy( &pVarClient->workbuf,
+                        pVarStorage->var.val.blob,
+                        pVarStorage->var.len );
+
+                result = EOK;
+            }
+            else
+            {
+                /* no source blob to copy */
+                result = ENOENT;
+            }
+        }
+        else
+        {
+            /* source blob is too big to fit in the client's buffer */
+            result = E2BIG;
+        }
+    }
+
+    return result;
+}
+
+/*============================================================================*/
+/*  varlist_CopyVarStorageStringToClient                                      */
+/*!
+    Copy a Var Storage string into the client's working buffer
+
+    The varlist_CopyVarStorageStringToClient function copies the VarStorage
+    var object data into the working buffer of the client pointed to
+    by pVarClient
+
+    Strings are copied directly into the client's working buffer
+
+    @param[in,out]
+        pVarClient
+            Pointer to the VarClient containing the working buffer to receive
+            the string data
+
+    @param[in]
+        pVarInfo
+            pointer to the VarInfo object containing the string to copy
+
+    @retval EOK the string was successfully copied
+    @retval EINVAL invalid arguments
+    @retval ENOENT no string data contained in the source VarStorage object
+    @retval E2BIG the string in the source VarObject will not fit in the
+            client's working buffer
+
+==============================================================================*/
+static int varlist_CopyVarStorageStringToClient( VarClient *pVarClient,
+                                                 VarStorage *pVarStorage )
+{
+    int result = EINVAL;
+    size_t destlen;
+
+    if ( ( pVarClient != NULL ) &&
+         ( pVarStorage != NULL ) )
+    {
+        /* get the destination blob size */
+        destlen = pVarClient->variableInfo.var.len;
+
+        /* check that the blob will fit */
+        if( ( pVarStorage->var.len <= destlen ) &&
+            ( destlen <= pVarClient->workbufsize ) )
+        {
+            if( pVarStorage->var.val.str != NULL )
+            {
+                /* copy the variable value into the client's working buffer */
+                strcpy( &pVarClient->workbuf, pVarStorage->var.val.str );
 
                 result = EOK;
 

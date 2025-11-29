@@ -1887,6 +1887,57 @@ int VAR_SendValidationResponse( VARSERVER_HANDLE hVarServer,
 }
 
 /*============================================================================*/
+/*  VAR_SendCalcResponse                                                      */
+/*!
+    Send a Calc response
+
+    The VAR_SendCalcResponse function sends a calc response to indicate
+    that a requested variable value cannot or failed to be calculated.
+    for the specified validation variable.  This allows the responding
+    client to unblock the requesting client if for example the data is
+    unavailable or an error occurred during calculation.  In this case
+    the variable value will not be updated but the requesting client
+    will be unblocked.  For successful calculations, this function
+    should not be called and instead the VAR_Set function should be used.
+
+    @param[in]
+        hVarServer
+            handle to the variable server
+
+    @param[in]
+        hVar
+            handle to the variable being calculated
+
+    @param[in]
+        response
+            an error response to return to the client, eg EBUSY, EIO, etc.
+
+    @retval EOK - the calc response was successfully delivered to the client
+    @retval EINVAL - invalid arguments
+    @retval other error indicating the calc response could not be delivered
+
+==============================================================================*/
+int VAR_SendCalcResponse( VARSERVER_HANDLE hVarServer,
+                          VAR_HANDLE hVar,
+                          int response  )
+{
+    int result = EINVAL;
+    VarClient *pVarClient = ValidateHandle( hVarServer );
+
+    if( pVarClient != NULL )
+    {
+        pVarClient->requestType = VARREQUEST_SEND_CALC_RESPONSE;
+        pVarClient->variableInfo.hVar = hVar;
+        pVarClient->requestVal = hVar;
+        pVarClient->responseVal = response;
+
+        result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
+    }
+
+    return result;
+}
+
+/*============================================================================*/
 /*  var_GetVarObject                                                          */
 /*!
     Get a variable object from the variable client
@@ -2927,9 +2978,11 @@ int VAR_GetFirst( VARSERVER_HANDLE hVarServer,
         result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
         if( result == EOK )
         {
-            query->context = pVarClient->responseVal;
+            query->context = pVarClient->searchContext;
             if( query->context > 0 )
             {
+                query->result = pVarClient->responseVal;
+
                 /* get the name of the variable we found */
                 memcpy( query->name,
                         pVarClient->variableInfo.name,
@@ -3007,8 +3060,10 @@ int VAR_GetNext( VARSERVER_HANDLE hVarServer,
         result = ClientRequest( pVarClient, SIG_CLIENT_REQUEST );
         if( result == EOK )
         {
-            query->context = pVarClient->responseVal;
-            if( query->context > 0 )
+            query->result = pVarClient->responseVal;
+
+            query->context = pVarClient->searchContext;
+            if ( query->context > 0 )
             {
                 /* get the name of the variable we found */
                 memcpy( query->name,

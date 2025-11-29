@@ -221,6 +221,10 @@ int VAR_SendValidationResponse( VARSERVER_HANDLE hVarServer,
                                 uint32_t id,
                                 int response  );
 
+int VAR_SendCalcResponse( VARSERVER_HANDLE hVarServer,
+                          VAR_HANDLE hVar,
+                          int response  );
+
 int VAR_OpenPrintSession( VARSERVER_HANDLE hVarServer,
                          uint32_t id,
                          VAR_HANDLE *hVar,

@@ -270,6 +270,9 @@ typedef struct _VarQuery
 
     /*! OUT: Variable handle */
     VAR_HANDLE hVar;
+
+    /*! query result */
+    int result;
 } VarQuery;
 
 #endif

@@ -66,6 +66,10 @@ int VARLIST_Set( pid_t clientPID,
                  bool *validationInProgress,
                  void *clientInfo );
 
+int VARLIST_CalcResponse( pid_t clientPID,
+                          VarInfo *pVarInfo,
+                          void *clientInfo );
+
 int VARLIST_GetType( VarInfo *pVarInfo );
 int VARLIST_GetName( VarInfo *pVarInfo );
 int VARLIST_GetLength( VarInfo *pVarInfo );

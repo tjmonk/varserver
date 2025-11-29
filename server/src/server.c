@@ -133,6 +133,7 @@ static int ProcessVarRequestNotify( VarClient *pVarClient );
 static int ProcessVarRequestNotifyCancel( VarClient *pVarClient );
 static int ProcessValidationRequest( VarClient *pVarClient );
 static int ProcessValidationResponse( VarClient *pVarClient );
+static int ProcessCalcResponse( VarClient *pVarClient );
 static int ProcessVarRequestOpenPrintSession( VarClient *pVarClient );
 static int ProcessVarRequestClosePrintSession( VarClient *pVarClient );
 static int ProcessVarRequestGetFirst( VarClient *pVarClient );
@@ -346,7 +347,15 @@ static RequestHandler RequestHandlers[] =
         ProcessVarRequestClearFlags,
         "/varserver/stats/clear_flags",
         NULL
-    }
+    },
+    {
+        VARREQUEST_SEND_CALC_RESPONSE,
+        "CALC_RESPONSE",
+        ProcessCalcResponse,
+        "/varserver/stats/calc_response",
+        NULL
+    },
+
 };
 
 /*==============================================================================
@@ -1735,6 +1744,8 @@ static int ProcessVarRequestGet( VarClient *pVarClient )
                                       &pVarClient->variableInfo,
                                       &pVarClient->workbuf,
                                       pVarClient->workbufsize );
+
+        pVarClient->responseVal = result;
         if( result == EINPROGRESS )
         {
             /* add the client to the blocked clients list */
@@ -1777,7 +1788,7 @@ static int ProcessVarRequestGetFirst( VarClient *pVarClient )
                                    &pVarClient->variableInfo,
                                    &pVarClient->workbuf,
                                    pVarClient->workbufsize,
-                                   &pVarClient->responseVal);
+                                   &pVarClient->searchContext);
         if( result == EINPROGRESS )
         {
             /* add the client to the blocked clients list */
@@ -1820,7 +1831,7 @@ static int ProcessVarRequestGetNext( VarClient *pVarClient )
                                   &pVarClient->variableInfo,
                                   &pVarClient->workbuf,
                                   pVarClient->workbufsize,
-                                  &pVarClient->responseVal );
+                                  &pVarClient->searchContext );
         if( result == EINPROGRESS )
         {
             /* add the client to the blocked clients list */
@@ -2015,6 +2026,41 @@ static int ProcessValidationResponse( VarClient *pVarClient )
             /* unblock the client */
             UnblockClient( pSetClient );
         }
+    }
+
+    return result;
+
+}
+
+/*============================================================================*/
+/*  ProcessCalcResponse                                                       */
+/*!
+    Process a Calc Response from a client
+
+    The ProcessCalcResponse function handles a rejected calculation.
+    It unblocks the client which requested the calculation and returns
+    an error message.
+
+    @param[in]
+        pVarClient
+            Pointer to the client data structure
+
+    @retval EOK the calc response was successfully handled
+    @retval EINVAL the client is invalid
+    @retval ENOTSUP the client is the wrong version
+
+==============================================================================*/
+static int ProcessCalcResponse( VarClient *pVarClient )
+{
+    int result = EINVAL;
+
+    /* validated the client object */
+    result = ValidateClient( pVarClient );
+    if( result == EOK )
+    {
+        result = VARLIST_CalcResponse( pVarClient->client_pid,
+                                       &pVarClient->variableInfo,
+                                       (void *)pVarClient );
     }
 
     return result;

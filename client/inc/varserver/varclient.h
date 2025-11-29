@@ -158,6 +158,9 @@ typedef enum _varRequest
     /*! Set variable flags */
     VARREQUEST_CLEAR_FLAGS,
 
+    /*! Send a CALC Response */
+    VARREQUEST_SEND_CALC_RESPONSE,
+
     /*! End request type marker */
     VARREQUEST_END_MARKER
 
@@ -234,6 +237,9 @@ typedef struct _varClient
 
     /*! response value */
     int responseVal;
+
+    /*! search context */
+    int searchContext;
 
     /*! indicates a request is already in progress */
     bool validationInProgress;
