@@ -229,6 +229,7 @@ static void usage( char *cmdname )
                 " [-f flagslist] : variable flags search term\n"
                 " [-F flagslist]: negative variable flags search. Supercedes -f\n"
                 " [-i instanceID]: instance identifier search term\n"
+                " [-N] : normalize variable names to snake_case (no leading _)\n"
                 " [-h] : display this help\n"
                 " [-v] : output values\n"
                 " [-T] : output type\n",
@@ -266,7 +267,7 @@ static int ProcessOptions( int argC,
 {
     int c;
     int result = EOK;
-    const char *options = "hvTn:r:f:F:i:u:t:";
+    const char *options = "hvTn:r:f:F:i:u:t:N";
 
     if( ( pState != NULL ) &&
         ( argV != NULL ) )
@@ -291,6 +292,10 @@ static int ProcessOptions( int argC,
                 case 'n':
                     pState->searchText = optarg;
                     pState->searchType |= QUERY_MATCH;
+                    break;
+
+                case 'N':
+                    pState->searchType |= QUERY_NORMALIZE;
                     break;
 
                 case 'r':

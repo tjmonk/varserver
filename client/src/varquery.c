@@ -82,6 +82,10 @@ static int varquery_AddCacheUnique( VARSERVER_HANDLE hVarServer,
 
 static int varquery_PrintType( int fd, VarType type );
 
+static void varquery_NormalizeName( const char *name,
+                                    char *out,
+                                    size_t outlen );
+
 
 /*==============================================================================
         Function definitions
@@ -107,6 +111,7 @@ static int varquery_PrintType( int fd, VarType type );
                 QUERY_FLAGS
                 QUERY_TAGS
                 QUERY_INSTANCEID
+                QUERY_NORMALIZE
 
     @param[in]
         match
@@ -143,6 +148,8 @@ int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
     int result = EINVAL;
     VarQuery query;
     size_t len;
+    const char *nameToPrint;
+    char normalized[MAX_NAME_LEN + 1];
 
     memset( &query, 0, sizeof( VarQuery ) );
 
@@ -163,13 +170,20 @@ int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
     result = VAR_GetFirst( hVarServer, &query, NULL );
     while ( result == EOK )
     {
+        nameToPrint = query.name;
+        if ( searchType & QUERY_NORMALIZE )
+        {
+            varquery_NormalizeName( query.name, normalized, sizeof(normalized) );
+            nameToPrint = normalized;
+        }
+
         if ( query.instanceID == 0 )
         {
-            dprintf(fd, "%s", query.name );
+            dprintf(fd, "%s", nameToPrint );
         }
         else
         {
-            dprintf(fd, "[%d]%s", query.instanceID, query.name );
+            dprintf(fd, "[%d]%s", query.instanceID, nameToPrint );
         }
 
         if ( searchType & QUERY_SHOWTYPE )
@@ -191,6 +205,65 @@ int VARQUERY_Search( VARSERVER_HANDLE hVarServer,
     }
 
     return result;
+}
+
+/*============================================================================*/
+/*  varquery_NormalizeName                                                    */
+/*!
+    Convert a variable name to snake_case for query output
+
+    Skip leading non-alphanumeric characters. Then convert uppercase to
+    lowercase and replace any symbol (non-alphanumeric) with an underscore.
+
+    @param[in]
+        name
+            source variable name
+
+    @param[out]
+        out
+            buffer to receive normalized name
+
+    @param[in]
+        outlen
+            size of out buffer
+
+==============================================================================*/
+static void varquery_NormalizeName( const char *name,
+                                    char *out,
+                                    size_t outlen )
+{
+    size_t i = 0;
+    const char *p;
+
+    if ( name == NULL || out == NULL || outlen == 0 )
+    {
+        return;
+    }
+
+    /* skip leading non-alphanumeric characters */
+    for ( p = name; *p != '\0' && !isalnum( (unsigned char)*p ); p++ )
+    {
+        /* nothing */
+    }
+
+    while ( *p != '\0' && i < outlen - 1 )
+    {
+        if ( isupper( (unsigned char)*p ) )
+        {
+            out[i++] = (char)tolower( (unsigned char)*p );
+        }
+        else if ( isalnum( (unsigned char)*p ) )
+        {
+            out[i++] = *p;
+        }
+        else
+        {
+            out[i++] = '_';
+        }
+        p++;
+    }
+
+    out[i] = '\0';
 }
 
 /*============================================================================*/

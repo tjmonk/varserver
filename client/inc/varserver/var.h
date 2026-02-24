@@ -113,6 +113,9 @@ typedef uint32_t VAR_HANDLE;
 /*! negate query results for flags */
 #define QUERY_NEGATE_FLAGS ( 1 << 7 )
 
+/*! normalize variable names to snake_case in query output */
+#define QUERY_NORMALIZE ( 1 << 8 )
+
 /*! Variable flags */
 typedef enum _VarFlags
 {
