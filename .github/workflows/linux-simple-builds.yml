@@ -7,24 +7,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - name: Prepare environment
-        # change this to test with different toolchains
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y g++-10
+      # Optional: use a specific compiler (e.g. g++-10). Omit to use default
+      # and save ~1–2 min per run.
+      # - name: Install compiler
+      #   run: |
+      #     sudo apt-get update
+      #     sudo apt-get install -y g++-10
 
-      - name: Configure build
-        working-directory: ${{runner.workspace}}
-        env:
-          CXX: g++-10
-        # Note: $GITHUB_WORKSPACE is distinct from ${{runner.workspace}}.
-        #       This is important
-        run: |
-          cmake -Bbuild -H$GITHUB_WORKSPACE
-    
-      - name: Build everything
-        working-directory: ${{runner.workspace}}/build
-        run: cmake --build .
-    
+      - name: Configure
+        run: cmake -B build -S .
+
+      - name: Build
+        run: cmake --build build --parallel
